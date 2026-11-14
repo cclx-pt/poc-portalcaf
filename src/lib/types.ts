@@ -211,3 +211,13 @@ export interface Fecho {
   por: string;
   em: string;
 }
+
+/** Domingo em que não é esperada assistência (ex.: culto conjunto, retiro). */
+export interface ExcecaoAssistencia {
+  id: string;
+  data: string; // AAAA-MM-DD, um domingo
+  ambito: 'cclx' | string; // 'cclx' = toda a organização; senão, o id da comunidade
+  motivo: string;
+  criadoPor: string;
+  criadoEm: string;
+}
