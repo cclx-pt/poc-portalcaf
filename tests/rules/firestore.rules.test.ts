@@ -45,6 +45,16 @@ beforeEach(async () => {
   });
 });
 
+describe('exceções de assistência', () => {
+  it('qualquer utilizador ativo lê; só Master e CAF escrevem', async () => {
+    await assertSucceeds(getDoc(doc(as(LEITOR), 'assistencia_excecoes', '2026-12-27_cclx')));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'assistencia_excecoes', '2026-12-27_cclx')));
+    await assertFails(setDoc(doc(as(TES_CDR), 'assistencia_excecoes', '2026-12-27_cclx'), { data: '2026-12-27', ambito: 'cclx' }));
+    await assertSucceeds(setDoc(doc(as(CAF), 'assistencia_excecoes', '2026-12-27_cclx'), { data: '2026-12-27', ambito: 'cclx' }));
+    await assertSucceeds(setDoc(doc(as(MASTER), 'assistencia_excecoes', '2026-12-20_almada'), { data: '2026-12-20', ambito: 'almada' }));
+  });
+});
+
 describe('página pública', () => {
   it('qualquer pessoa lê o resumo público do site (CCLX)', async () => {
     await assertSucceeds(getDoc(doc(env.unauthenticatedContext().firestore(), 'publico', '2026')));

@@ -35,6 +35,8 @@ const RESUMOS = [
 
 vi.mock('../../src/lib/db', () => ({
   listarResumos: () => sync(RESUMOS),
+  listarExcecoes: () => sync([{ id: '2026-03-22_cclx', data: '2026-03-22', ambito: 'cclx', motivo: 'Culto conjunto', criadoPor: 'caf@x.pt', criadoEm: '' }]),
+  gravarExcecao: vi.fn(), apagarExcecao: vi.fn(), auditar: vi.fn(),
   listarCategorias: () => sync([]),
   listarLotes: (_a: unknown, origem: string) => sync(LOTES[origem] ?? []),
   listarComunidades: () => sync([{ id: 'almada', nome: 'Almada', ordem: 1 }, { id: 'porto', nome: 'Porto', ordem: 2 }]),
@@ -59,6 +61,10 @@ describe('páginas', () => {
     expect(html).toContain('março');
     expect(html).toContain('>999<'); // na lista de registos
     expect(html).toContain('Só contam os registos de domingo');
+    expect(html).toContain('Domingos sem registo');
+    expect(html).toContain('Culto conjunto');
+    expect(html).toContain('15/03/2026'); // domingo em falta em Almada
+    expect(html).not.toContain('22/03/2026 ·'); // exceção da CCLX: não está em falta
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/assistencia.html', html);
   });
   it('Entradas: junta contribuições e depósitos', async () => {
