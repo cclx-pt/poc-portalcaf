@@ -18,7 +18,20 @@ const LOTES: Record<string, Lote[]> = {
 };
 
 vi.mock('../../src/auth/AuthProvider', () => ({ useAuth: () => ({ acesso: { email: 'm@x.pt', papel: 'master' }, pode: () => true, temNivel: () => true }) }));
+const mesR = (m: number, x: Record<string, unknown> = {}) => ({
+  mes: m, contribuir: 0, coletas: 0, transferencias: 0, quotaBolsa: 0, entradas: 0, custosFixos: 0, despesas: 0, saidas: 0, saldo: 0,
+  adultosMedia: null, entradasPorCategoria: {}, despesasPorCategoria: {}, custosRubricas: {}, n: { contribuir: 0, coletas: 0, transferencias: 0, despesas: 0 },
+  rubricas: { entrada: {}, saida: {} }, geralEntradas: 0, geralSaidas: 0, pesoGeral: null, adultosMedia12m: null, cedidoGeral: { entradas: 0, custosFixos: 0, despesas: 0 }, ...x,
+});
+const resumoR = (c: string, m3: Record<string, unknown>) => ({ id: `2026_${c}`, ano: 2026, comunidadeId: c, calculadoEm: '', calculadoPor: '', meses: Array.from({ length: 12 }, (_, i) => mesR(i + 1, i === 2 ? m3 : {})) });
+const RESUMOS = [
+  resumoR('almada', { entradas: 1000, saidas: 400, adultosMedia: 50, entradasPorCategoria: { Dízimos: 1000 }, rubricas: { entrada: { Dízimos: { local: 1000, geral: 0 } }, saida: { Instalações: { local: 100, geral: 200 }, 'Outros custos de funcionamento': { local: 100, geral: 0 } } } }),
+  resumoR('porto', { entradas: 300, saidas: 500, adultosMedia: 0, rubricas: { entrada: { Ofertas: { local: 300, geral: 0 } }, saida: { Instalações: { local: 400, geral: 100 } } } }),
+];
+
 vi.mock('../../src/lib/db', () => ({
+  listarResumos: () => sync(RESUMOS),
+  listarCategorias: () => sync([]),
   listarLotes: (_a: unknown, origem: string) => sync(LOTES[origem] ?? []),
   listarComunidades: () => sync([{ id: 'almada', nome: 'Almada', ordem: 1 }, { id: 'porto', nome: 'Porto', ordem: 2 }]),
   lerEstadoSync: () => sync(null),
@@ -51,5 +64,17 @@ describe('páginas', () => {
     expect(html).toContain('Bolsa geral (sem comunidade)');
     expect(html).toContain('Depósito de coletas');
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/entradas.html', html);
+  });
+
+  it('Demonstração de resultados: rubricas, total CCLX e resultado', async () => {
+    const { default: DR } = await import('../../src/pages/DemonstracaoResultados');
+    const html = renderToString(<DR />);
+    expect(html).toContain('RESULTADO');
+    expect(html).toContain('1.300,00 €'); // total de rendimentos CCLX
+    expect(html).toContain('900,00 €'); // total de gastos CCLX
+    expect(html).toContain('400,00 €'); // resultado CCLX
+    expect(html).toContain('-200,00 €'); // resultado do Porto
+    expect(html).not.toContain('Vencimentos e encargos</');
+    if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/dr.html', html);
   });
 });
