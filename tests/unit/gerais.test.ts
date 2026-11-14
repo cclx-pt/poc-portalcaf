@@ -14,9 +14,11 @@ const cat = (nome: string, tipo: Categoria['tipo'], ambito: 'local' | 'geral', n
   ({ id: nome, nome, tipo, atividade: '', nivel, ambito });
 const CATS = [cat('Renda', 'saida', 'geral'), cat('Material', 'saida', 'local'), cat('Vencimentos', 'saida', 'geral', 'confidencial'), cat('Dízimos', 'entrada', 'local')];
 let seq = 0;
+/** Primeiro domingo do mês (as médias de assistência só contam domingos). */
+const domingo = (ano: number, mes: number) => { const d = new Date(Date.UTC(ano, mes - 1, 1)); d.setUTCDate(1 + ((7 - d.getUTCDay()) % 7)); return d.toISOString().slice(0, 10); };
 const lote = (origem: Lote['origem'], comunidadeId: string, ano: number, mes: number, regs: { valor: number; categoria?: string }[]): Lote => ({
   id: `${origem}_${ano}_${mes}_${comunidadeId}_${++seq}`, origem, ano, mes, periodo: `${ano}-${String(mes).padStart(2, '0')}`, comunidadeId,
-  registos: regs.map((r, i) => ({ id: `${seq}-${i}`, data: `${ano}-${String(mes).padStart(2, '0')}-10`, valor: r.valor, categoria: r.categoria ?? 'Dízimos' })),
+  registos: regs.map((r, i) => ({ id: `${seq}-${i}`, data: domingo(ano, mes), valor: r.valor, categoria: r.categoria ?? 'Dízimos' })),
   total: 0, n: regs.length, atualizadoEm: '', atualizadoPor: '',
 });
 const base = (x: Partial<DadosCalculo>): DadosCalculo => ({
@@ -38,6 +40,18 @@ describe('repartição dos gerais', () => {
     expect(mes(rs, 'almada', 3).rubricas.saida['Instalações'].geral).toBe(200);
     expect(mes(rs, 'almada', 3).pesoGeral).toBeCloseTo(2 / 3);
     expect(mes(rs, 'almada', 3).adultosMedia12m).toBe(100);
+  });
+
+  it('só os registos de domingo contam para as médias e os pesos', () => {
+    const sabado: Lote = { ...lote('assistencia', 'porto', 2026, 3, [{ valor: 1000 }]) };
+    sabado.registos = sabado.registos.map((r) => ({ ...r, data: '2026-03-07' })); // sábado
+    const rs = calcularResumos(base({
+      despesas: [lote('despesas', 'sede', 2026, 3, [{ valor: 300, categoria: 'Renda' }])],
+      assistencia: [lote('assistencia', 'almada', 2026, 3, [{ valor: 100 }]), lote('assistencia', 'porto', 2026, 3, [{ valor: 50 }]), sabado],
+    }));
+    expect(mes(rs, 'porto', 3).adultosMedia).toBe(50);
+    expect(mes(rs, 'porto', 3).adultosMedia12m).toBe(50);
+    expect(mes(rs, 'porto', 3).geralSaidas).toBe(100);
   });
 
   it('janeiro usa a assistência do ano anterior', () => {

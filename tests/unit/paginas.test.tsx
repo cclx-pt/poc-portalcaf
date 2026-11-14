@@ -12,8 +12,12 @@ const LOTES: Record<string, Lote[]> = {
   contribuir: [lote('contribuir', 'almada', 3, [{ valor: 50, pessoaRef: 'Contribuinte #A1' }, { valor: 20, pessoaRef: 'Contribuinte #B2', categoria: 'Oferta' }]), lote('contribuir', 'bolsa-geral', 4, [{ valor: 100 }])],
   depositos: [lote('depositos', 'almada', 3, [{ valor: 230.5, categoria: 'Coletas em dinheiro' }])],
   assistencia: [
-    lote('assistencia', 'almada', 3, [{ valor: 120, evento: 'Culto', extra: { jump: 8, criancas: 20, connects: 5 } }, { valor: 100, evento: 'Culto', extra: { jump: 6, criancas: 15 } }]),
-    lote('assistencia', 'porto', 4, [{ valor: 40, evento: 'Culto' }]),
+    lote('assistencia', 'almada', 3, [
+      { data: '2026-03-01', valor: 120, evento: 'Culto', extra: { jump: 8, criancas: 20, connects: 5 } },
+      { data: '2026-03-08', valor: 100, evento: 'Culto', extra: { jump: 6, criancas: 15 } },
+      { data: '2026-03-07', valor: 999, evento: 'Retiro' }, // sábado: aparece na lista, não conta
+    ]),
+    lote('assistencia', 'porto', 4, [{ data: '2026-04-05', valor: 40, evento: 'Culto' }]),
   ],
 };
 
@@ -30,7 +34,10 @@ const RESUMOS = [
 ];
 
 vi.mock('../../src/lib/db', () => ({
-  listarResumos: () => sync(RESUMOS),
+  listarResumos: (_a: unknown, ano: number) => sync(ano === 2026 ? RESUMOS : []),
+  listarCustosFixos: () => sync([{ id: 'ss', comunidadeId: 'almada', rubrica: 'Segurança Social', valorMensal: 1, inicio: '2026-01', fim: null, nivel: 'privado', notas: 'Valor pendente de confirmação.' }]),
+  listarExcecoes: () => sync([{ id: '2026-03-22_cclx', data: '2026-03-22', ambito: 'cclx', motivo: 'Culto conjunto', criadoPor: 'caf@x.pt', criadoEm: '' }]),
+  gravarExcecao: vi.fn(), apagarExcecao: vi.fn(), auditar: vi.fn(),
   listarCategorias: () => sync([]),
   listarLotes: (_a: unknown, origem: string) => sync(LOTES[origem] ?? []),
   listarComunidades: () => sync([{ id: 'almada', nome: 'Almada', ordem: 1 }, { id: 'porto', nome: 'Porto', ordem: 2 }]),
@@ -53,6 +60,12 @@ describe('páginas', () => {
     expect(html).toContain('>130,0<'); // média mensal (260/2 meses)
     expect(html).toContain('>314<'); // total de pessoas (149+121+40)
     expect(html).toContain('março');
+    expect(html).toContain('>999<'); // na lista de registos
+    expect(html).toContain('Só contam os registos de domingo');
+    expect(html).toContain('Domingos sem registo');
+    expect(html).toContain('Culto conjunto');
+    expect(html).toContain('15/03/2026'); // domingo em falta em Almada
+    expect(html).not.toContain('22/03/2026 ·'); // exceção da CCLX: não está em falta
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/assistencia.html', html);
   });
   it('Entradas: junta contribuições e depósitos', async () => {
@@ -90,5 +103,20 @@ describe('páginas', () => {
     expect(html).not.toContain('NaN');
     expect(html).toContain('-200 €'); // mapa de calor: resultado do Porto em março
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/comparacao.html', html);
+  });
+
+  it('Relatório custos x entradas: resumo, tabelas e notas', async () => {
+    const { default: Relatorio } = await import('../../src/pages/Relatorio');
+    const html = renderToString(<Relatorio />);
+    expect(html).toContain('RELATÓRIO FINANCEIRO · CCLX');
+    expect(html).toContain('Custos x entradas e assistência');
+    expect(html).toContain('Resumo anual');
+    expect(html).toContain('Mês a mês');
+    expect(html).toContain('Pendente de confirmação');
+    expect(html).toContain('1.300,00 €'); // entradas do ano (março)
+    expect(html).not.toContain('NaN');
+    expect(html).not.toContain('Infinity');
+    expect(html).not.toContain('Vencimentos e encargos');
+    if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/relatorio.html', html);
   });
 });

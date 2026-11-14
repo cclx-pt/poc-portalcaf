@@ -3,8 +3,10 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros } from '../components/ui';
 import { Importar } from '../components/Importar';
 import { SyncEstado } from '../components/SyncEstado';
-import { listarComunidades, listarLotes } from '../lib/db';
+import { apagarExcecao, auditar, gravarExcecao, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
 import { MESES, MESES_CURTOS, num } from '../lib/format';
+import { domingosEmFalta, eDomingo } from '../lib/domingos';
+import type { ExcecaoAssistencia } from '../lib/types';
 
 /** Grupos de idade do Registo de Presenças. Só pessoas: nunca símbolo de moeda. */
 const GRUPOS = [
@@ -37,6 +39,29 @@ export default function Assistencia() {
   const lotes = useCarregar(() => listarLotes(acesso!, 'assistencia', ano, false), [ano, acesso?.email]);
   const coms = useCarregar(listarComunidades, []);
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
+  const excecoes = useCarregar(listarExcecoes, []);
+  const podeEditar = pode('aprovar'); // Master e CAF
+  const hojeIso = new Date().toISOString().slice(0, 10);
+  const [nova, setNova] = useState({ data: '', ambito: 'cclx', motivo: '' });
+  const [msgExc, setMsgExc] = useState<string | null>(null);
+  async function guardarExcecao() {
+    setMsgExc(null);
+    try {
+      if (!eDomingo(nova.data)) throw new Error('A data tem de ser um domingo.');
+      if (!nova.motivo.trim()) throw new Error('Indique o motivo.');
+      const e: ExcecaoAssistencia = { id: `${nova.data}_${nova.ambito}`, data: nova.data, ambito: nova.ambito, motivo: nova.motivo.trim(), criadoPor: acesso!.email, criadoEm: new Date().toISOString() };
+      await gravarExcecao(e);
+      await auditar(acesso!.email, 'exceção de assistência', `${e.data} · ${e.ambito === 'cclx' ? 'Toda a CCLX' : nomes.get(e.ambito) ?? e.ambito} · ${e.motivo}`);
+      setNova({ data: '', ambito: 'cclx', motivo: '' });
+      await excecoes.recarregar();
+    } catch (err) { setMsgExc(err instanceof Error ? err.message : String(err)); }
+  }
+  async function removerExcecao(e: ExcecaoAssistencia) {
+    if (!confirm(`Apagar a exceção de ${dataPt(e.data)}?`)) return;
+    await apagarExcecao(e.id);
+    await auditar(acesso!.email, 'apagar exceção de assistência', `${e.data} · ${e.ambito}`);
+    await excecoes.recarregar();
+  }
 
   const todas: Linha[] = useMemo(() => (lotes.dados ?? [])
     .filter((l) => comunidade === 'todas' || l.comunidadeId === comunidade)
@@ -51,7 +76,10 @@ export default function Assistencia() {
   const porMes = Array.from({ length: 12 }, () => vazio());
   const ano_ = vazio();
   const porCom = new Map<string, Agregado>();
-  for (const l of linhas) {
+  // A métrica é a celebração de domingo: só os registos de domingo entram nos totais e médias.
+  const domingos = linhas.filter((l) => eDomingo(l.data));
+  const foraDeDomingo = linhas.length - domingos.length;
+  for (const l of domingos) {
     somar(porMes[l.mes - 1], l);
     somar(ano_, l);
     if (!porCom.has(l.comunidadeId)) porCom.set(l.comunidadeId, vazio());
@@ -64,6 +92,12 @@ export default function Assistencia() {
     rotulo: MESES_CURTOS[i],
     ...Object.fromEntries(GRUPOS.map((g) => [g.key, m.n ? Math.round((m.soma[g.key] / m.n) * 10) / 10 : 0])),
   }));
+
+  const falta = domingosEmFalta({
+    ano, hoje: hojeIso, comunidades: (coms.dados ?? []).filter((c) => (c.ativo ?? true) && (comunidade === 'todas' || c.id === comunidade)),
+    assistencia: lotes.dados ?? [], excecoes: excecoes.dados ?? [],
+  });
+  const excAno = (excecoes.dados ?? []).filter((e) => e.data.startsWith(String(ano)));
 
   return (
     <>
@@ -101,7 +135,7 @@ export default function Assistencia() {
 
         <div className="sec">
           <h2>Mapa mensal</h2>
-          <p className="muted small">Total = soma das presenças registadas no mês. Média = total a dividir pelo número de registos. Máx. = maior número de jovens e adultos num só registo.</p>
+          <p className="muted small">Só contam os registos de domingo (celebrações){foraDeDomingo ? `; ${foraDeDomingo} registo(s) noutros dias aparecem na lista mas não entram nas contas` : ''}. Total = soma das presenças registadas no mês. Média = total a dividir pelo número de registos. Máx. = maior número de jovens e adultos num só registo.</p>
           <div className="tabela"><table>
             <thead>
               <tr>
@@ -162,14 +196,64 @@ export default function Assistencia() {
         <div className="sec">
           <h2>Registos ({linhas.length > 500 ? 'últimos 500 de ' : ''}{linhas.length})</h2>
           <div className="tabela"><table>
-            <thead><tr><th>Data</th><th>Comunidade</th><th>Evento</th>{GRUPOS.map((g) => <th key={g.key} className="num">{g.nome}</th>)}<th className="num">Total</th></tr></thead>
+            <thead><tr><th>Data</th><th>Dia</th><th>Comunidade</th><th>Evento</th>{GRUPOS.map((g) => <th key={g.key} className="num">{g.nome}</th>)}<th className="num">Total</th></tr></thead>
             <tbody>{linhas.slice(0, 500).map((l, i) => (
-              <tr key={i}><td>{dataPt(l.data)}</td><td>{nomes.get(l.comunidadeId) ?? l.comunidadeId}</td><td>{l.evento}</td>
+              <tr key={i} className={eDomingo(l.data) ? '' : 'muted'}><td>{dataPt(l.data)}</td><td>{eDomingo(l.data) ? 'domingo' : 'outro dia (não conta)'}</td><td>{nomes.get(l.comunidadeId) ?? l.comunidadeId}</td><td>{l.evento}</td>
                 {GRUPOS.map((g) => <td key={g.key} className="num">{num(l[g.key])}</td>)}<td className="num">{num(l.total)}</td></tr>
             ))}</tbody>
           </table></div>
         </div>
       </>}
+      <div className="sec">
+        <h2>Domingos sem registo</h2>
+        <p className="muted small">Domingos até hoje sem nenhum registo no Registo de Presenças, por comunidade ativa. Não contam os domingos do quadro de exceções.</p>
+        {falta.length ? <>
+          <div className="tabela"><table>
+            <thead><tr><th>Comunidade</th><th className="num">Domingos esperados</th><th className="num">Com registo</th><th className="num">Em falta</th><th className="num">Cobertura</th><th>Domingos em falta</th></tr></thead>
+            <tbody>{falta.map((f) => (
+              <tr key={f.comunidadeId}>
+                <td>{nomes.get(f.comunidadeId) ?? f.comunidadeId}</td>
+                <td className="num">{num(f.esperados)}</td><td className="num">{num(f.comRegisto)}</td>
+                <td className={'num' + (f.emFalta.length ? ' neg' : '')}>{num(f.emFalta.length)}</td>
+                <td className="num">{f.esperados ? `${num((f.comRegisto / f.esperados) * 100, 1)}%` : '—'}</td>
+                <td className="small">{f.emFalta.length ? f.emFalta.map(dataPt).join(' · ') : '—'}</td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        </> : <p className="muted">Sem domingos esperados neste período.</p>}
+      </div>
+
+      <div className="sec">
+        <h2>Domingos sem assistência esperada (exceções)</h2>
+        <p className="muted small">Por exemplo: culto conjunto, retiro ou encerramento. Podem valer para toda a CCLX ou só para uma comunidade.</p>
+        {podeEditar && (
+          <div className="filtros" style={{ alignItems: 'flex-end', marginBottom: 10 }}>
+            <label className="campo">Domingo<input type="date" value={nova.data} onChange={(e) => setNova({ ...nova, data: e.target.value })} /></label>
+            <label className="campo">Âmbito
+              <select value={nova.ambito} onChange={(e) => setNova({ ...nova, ambito: e.target.value })}>
+                <option value="cclx">Toda a CCLX</option>
+                {(coms.dados ?? []).filter((c) => !c.especial).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </label>
+            <label className="campo">Motivo<input value={nova.motivo} onChange={(e) => setNova({ ...nova, motivo: e.target.value })} style={{ width: 240 }} /></label>
+            <button onClick={() => void guardarExcecao()} disabled={!nova.data}>Acrescentar</button>
+          </div>
+        )}
+        {msgExc && <div className="aviso">{msgExc}</div>}
+        {excAno.length ? (
+          <div className="tabela"><table>
+            <thead><tr><th>Domingo</th><th>Âmbito</th><th>Motivo</th><th>Registado por</th>{podeEditar && <th />}</tr></thead>
+            <tbody>{excAno.map((e) => (
+              <tr key={e.id}>
+                <td>{dataPt(e.data)}</td><td>{e.ambito === 'cclx' ? 'Toda a CCLX' : nomes.get(e.ambito) ?? e.ambito}</td><td>{e.motivo}</td>
+                <td className="small muted">{e.criadoPor}</td>
+                {podeEditar && <td><button className="link" onClick={() => void removerExcecao(e)}>Apagar</button></td>}
+              </tr>
+            ))}</tbody>
+          </table></div>
+        ) : <p className="muted">Sem exceções em {ano}.</p>}
+      </div>
+
       {importar && <Importar origem="assistencia" onFechar={() => setImportar(false)} onFeito={() => void lotes.recarregar()} />}
     </>
   );

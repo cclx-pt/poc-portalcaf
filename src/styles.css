@@ -87,3 +87,22 @@ label.campo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; 
   .side .grupo, .side .rodape { display: none; }
   .main { padding: 16px; }
 }
+
+/* Relatório custos x entradas */
+.duas-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.so-imprimir { display: none; }
+@media (max-width: 820px) { .duas-colunas { grid-template-columns: 1fr; } }
+@media print {
+  @page { size: A4; margin: 14mm; }
+  html, body, .app, .main { background: #fff !important; }
+  .side, .topo, .nao-imprimir, footer { display: none !important; }
+  .duas-colunas { grid-template-columns: 1fr 1fr !important; }
+  .app { display: block; }
+  .main { padding: 0; }
+  .so-imprimir { display: block; }
+  .card { break-inside: avoid; border: 1px solid #e6e6e6; }
+  .tabela { overflow: visible; }
+  .tabela table { font-size: 10px; }
+  .quebra-antes { break-before: page; }
+  .cards { grid-template-columns: repeat(5, 1fr); }
+}

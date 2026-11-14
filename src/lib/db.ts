@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import type {
-  BancoLote, Categoria, Comunidade, Conta, CustoFixo, Fecho, Lote, Nivel, Orcamento, Origem, Perfil, Publico, PublicoSite, Resumo,
+  BancoLote, Categoria, Comunidade, Conta, CustoFixo, Fecho, Lote, Nivel, Orcamento, Origem, Perfil, Publico, PublicoSite, Resumo, ExcecaoAssistencia,
 } from './types';
 import { NIVEIS, nivelNum } from './types';
 
@@ -112,6 +112,11 @@ export async function lerPublicoSites(ano: number): Promise<Publico | null> {
   const s = await getDoc(doc(db, 'publico_sites', String(ano)));
   return s.exists() ? (s.data() as Publico) : null;
 }
+
+// ---------- exceções de assistência ----------
+export const listarExcecoes = async () => (await lista<ExcecaoAssistencia>('assistencia_excecoes')).sort((a, b) => a.data.localeCompare(b.data));
+export const gravarExcecao = (e: ExcecaoAssistencia) => setDoc(doc(db, 'assistencia_excecoes', e.id), e);
+export const apagarExcecao = (id: string) => deleteDoc(doc(db, 'assistencia_excecoes', id));
 
 // ---------- orçamento ----------
 export async function lerOrcamento(ano: number): Promise<Orcamento | null> {

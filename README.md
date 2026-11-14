@@ -26,6 +26,8 @@ Prova de conceito (PoC) funcional, com a identidade visual CAF (preto, branco e 
 - **Repartição dos gerais:** no recálculo dos resumos, os valores em categorias gerais saem da comunidade onde foram registados e repartem-se pelas comunidades ativas conforme a **média de jovens e adultos dos últimos 12 meses** (inclui o ano anterior). Sem assistência em nenhuma comunidade, ficam em "Gerais por repartir". A bolsa geral mantém a regra do mesmo mês. O total CCLX não muda.
 - **Privacidade:** categorias confidenciais (Vencimentos, Segurança Social) entram agregadas em "Outros custos de funcionamento".
 - **Páginas:** *Demonstração de resultados* (colunas por comunidade + CCLX, ou por mês; separar local/gerais; detalhe por categoria; Excel) e *Comparação entre comunidades* (autossuficiência, défice coberto, valores por pessoa, barras, quadrantes e mapa de calor).
+- **Relatório custos x entradas** (Análise): por comunidade ou CCLX, ano atual vs anterior, com assistência, mês a mês, custos fixos por rubrica, pressupostos e notas; botão *Imprimir / PDF*.
+- **Assistência:** as médias só contam os registos de **domingo** (celebrações). Mapa de **domingos sem registo** por comunidade e quadro de **exceções** (toda a CCLX ou uma comunidade; editável por Master e CAF).
 - Desenho e plano: [`docs/superpowers/specs`](docs/superpowers/specs) e [`docs/superpowers/plans`](docs/superpowers/plans).
 
 ## Login
