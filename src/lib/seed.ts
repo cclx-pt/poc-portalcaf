@@ -1,3 +1,4 @@
+import { rubricaInicial } from './rubricas';
 import type { Categoria, Comunidade, Conta, CustoFixo } from './types';
 
 /** Comunidades da CCLX. O Barreiro existiu até 31/10/2026 e unificou-se com a Moita a 01/11/2026. */
@@ -40,7 +41,7 @@ export const CONTAS: Conta[] = [
 
 const c = (nome: string, tipo: Categoria['tipo'], atividade: string, nivel: Categoria['nivel'] = 'privado'): Categoria => ({
   id: `${tipo}-${nome.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-  nome, tipo, atividade, nivel, snc: '', origem: 'portal',
+  nome, tipo, atividade, nivel, snc: '', origem: 'portal', rubrica: rubricaInicial(nome, tipo), ambito: 'local',
 });
 
 /** Categorias iniciais por atividade. As contas SNC-ESNL ficam por preencher com o contabilista. */

@@ -48,6 +48,10 @@ export interface Categoria {
   snc?: string;
   origem?: string; // jotform, portal
   ativo?: boolean;
+  /** Rubrica da demonstração de resultados (ver lib/rubricas.ts). */
+  rubrica?: string;
+  /** local: fica na comunidade; geral: reparte-se pela média de jovens e adultos dos últimos 12 meses. */
+  ambito?: 'local' | 'geral';
 }
 
 /** Um registo individual dentro de um lote mensal. */
