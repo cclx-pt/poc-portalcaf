@@ -39,15 +39,20 @@ export default function Configuracao() {
   const [syncVersao, setSyncVersao] = useState(0);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [aSincronizar, setASincronizar] = useState(false);
-  async function forcarSync() {
-    if (!confirm('Sincronizar agora com o Jotform? Só são integradas as submissões novas desde a última sincronização.')) return;
+  async function forcarSync(modo: 'incremental' | 'completo' = 'incremental') {
+    const pergunta = modo === 'completo'
+      ? 'Reler tudo do Jotform desde 01/01/2025?\n\nOs lotes dos meses abertos são substituídos: sai o que deixou de cumprir as regras (ex.: contribuições com o campo Pago em branco) e o que foi apagado no Jotform. Meses fechados não mudam. Pode demorar alguns minutos.'
+      : 'Sincronizar agora com o Jotform? Só são integradas as submissões novas desde a última sincronização.';
+    if (!confirm(pergunta)) return;
     setASincronizar(true); setSyncMsg('A iniciar…');
     try {
-      const e = await sincronizarAgora(acesso!, setSyncMsg);
+      const e = await sincronizarAgora(acesso!, setSyncMsg, modo);
       const novos = Object.values(e.resultado).reduce((s, r) => s + r.novos, 0);
-      setSyncMsg(e.ok
-        ? (novos ? `Concluído: ${novos} registo${novos === 1 ? '' : 's'} novo${novos === 1 ? '' : 's'} integrado${novos === 1 ? '' : 's'}; resumos recalculados.` : 'Concluído: não havia submissões novas.')
-        : `Terminou com erros: ${e.erros.join('; ')}`);
+      const naoPagas = e.resultado.contribuir?.naoPagas ?? 0;
+      const removidos = Object.values(e.resultado).reduce((s, r) => s + r.removidos, 0);
+      if (!e.ok) setSyncMsg(`Terminou com erros: ${e.erros.join('; ')}`);
+      else if (modo === 'completo') setSyncMsg(`Releitura concluída: ${novos} registos integrados, ${naoPagas} contribuições por pagar excluídas, ${removidos} lote(s) removidos; resumos recalculados.`);
+      else setSyncMsg(novos ? `Concluído: ${novos} registo${novos === 1 ? '' : 's'} novo${novos === 1 ? '' : 's'} integrado${novos === 1 ? '' : 's'}; resumos recalculados.` : 'Concluído: não havia submissões novas.');
     } catch (e) { setSyncMsg(mensagemErro(e)); }
     finally { setASincronizar(false); setSyncVersao((v) => v + 1); }
   }
@@ -225,7 +230,8 @@ export default function Configuracao() {
         <SyncEstado detalhe versao={syncVersao} />
         {acesso?.papel === 'master' ? (
           <div className="linha" style={{ alignItems: 'center' }}>
-            <button onClick={forcarSync} disabled={aSincronizar}>{aSincronizar ? 'A sincronizar…' : 'Sincronizar agora'}</button>
+            <button onClick={() => void forcarSync()} disabled={aSincronizar}>{aSincronizar ? 'A sincronizar…' : 'Sincronizar agora'}</button>
+            <button className="sec" onClick={() => void forcarSync('completo')} disabled={aSincronizar} title="Relê tudo desde 01/01/2025 e substitui os meses abertos">Reler tudo</button>
             <span className="small">{syncMsg ?? 'Força uma sincronização já, sem esperar pela próxima automática. Só integra dados novos.'}</span>
           </div>
         ) : <p className="muted">A sincronização forçada é feita pelo Master (é o único que acede à chave do Jotform).</p>}
