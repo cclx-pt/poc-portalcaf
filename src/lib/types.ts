@@ -138,7 +138,20 @@ export interface ResumoMes {
   despesasPorCategoria: Record<string, number>;
   custosRubricas: Record<string, number>; // só rubricas não confidenciais
   n: { contribuir: number; coletas: number; transferencias: number; despesas: number };
+  /** Demonstração de resultados por rubrica: local (registado aqui, inclui quota da bolsa) e geral (parte recebida dos gerais). */
+  rubricas: { entrada: Record<string, ParteRubrica>; saida: Record<string, ParteRubrica> };
+  /** Parte recebida dos custos e proveitos gerais. */
+  geralEntradas: number;
+  geralSaidas: number;
+  /** Peso desta comunidade na repartição dos gerais neste mês (0 a 1). */
+  pesoGeral: number | null;
+  /** Média de jovens e adultos por registo nos 12 meses até este mês. */
+  adultosMedia12m: number | null;
+  /** O que foi registado aqui em categorias gerais e saiu para a repartição. */
+  cedidoGeral: { entradas: number; custosFixos: number; despesas: number };
 }
+
+export interface ParteRubrica { local: number; geral: number }
 
 export interface Resumo {
   id: string;
