@@ -77,4 +77,18 @@ describe('páginas', () => {
     expect(html).not.toContain('Vencimentos e encargos</');
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/dr.html', html);
   });
+
+  it('Comparação entre comunidades: indicadores e linha CCLX', async () => {
+    const { default: Comparacao } = await import('../../src/pages/Comparacao');
+    const html = renderToString(<Comparacao />);
+    expect(html).toContain('Comparação entre comunidades');
+    expect(html).toContain('>CCLX<');
+    expect(html).toContain('250,0%'); // autossuficiência de Almada (1000 / 400)
+    expect(html).toContain('20,00 €'); // entradas por pessoa em Almada (1000 / 50)
+    expect(html).toContain('200,00 €'); // défice coberto no Porto
+    expect(html).not.toContain('Infinity');
+    expect(html).not.toContain('NaN');
+    expect(html).toContain('-200 €'); // mapa de calor: resultado do Porto em março
+    if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/comparacao.html', html);
+  });
 });

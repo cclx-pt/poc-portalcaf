@@ -29,6 +29,7 @@ export default function Layout() {
         {temNivel('privado') && <>
           <div className="grupo">Análise</div>
           <NavLink to="/analise/resultados">Demonstração de resultados</NavLink>
+          <NavLink to="/analise/comparacao">Comparação entre comunidades</NavLink>
         </>}
         {pode('bancos') && <><div className="grupo">Tesouraria</div><NavLink to="/bancos">Bancos e bolsa geral</NavLink></>}
         {temNivel('privado') && <NavLink to="/custos-fixos">Custos fixos</NavLink>}
