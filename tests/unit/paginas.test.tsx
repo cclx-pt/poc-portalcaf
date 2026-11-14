@@ -83,10 +83,12 @@ describe('páginas', () => {
     const { default: DR } = await import('../../src/pages/DemonstracaoResultados');
     const html = renderToString(<DR />);
     expect(html).toContain('RESULTADO');
-    expect(html).toContain('1.300,00 €'); // total de rendimentos CCLX
-    expect(html).toContain('900,00 €'); // total de gastos CCLX
-    expect(html).toContain('400,00 €'); // resultado CCLX
-    expect(html).toContain('-200,00 €'); // resultado do Porto
+    expect(html).toContain('>1.300,00<'); // total de rendimentos CCLX (sem € nas células)
+    expect(html).toContain('>900,00<'); // total de gastos CCLX
+    expect(html).toContain('>400,00<'); // resultado CCLX
+    expect(html).toContain('>(200,00)<'); // resultado do Porto, entre parênteses
+    expect(html).toContain('Valores em euros');
+    expect(html).toContain('total-geral'); // linha do resultado com regra dupla
     expect(html).not.toContain('Vencimentos e encargos</');
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/dr.html', html);
   });
@@ -97,11 +99,12 @@ describe('páginas', () => {
     expect(html).toContain('Comparação entre comunidades');
     expect(html).toContain('>CCLX<');
     expect(html).toContain('250,0%'); // autossuficiência de Almada (1000 / 400)
-    expect(html).toContain('20,00 €'); // entradas por pessoa em Almada (1000 / 50)
-    expect(html).toContain('200,00 €'); // défice coberto no Porto
+    expect(html).toContain('>20,00<'); // entradas por pessoa em Almada (1000 / 50), € no cabeçalho
+    expect(html).toContain('>200,00<'); // défice coberto no Porto
+    expect(html).toContain('(€)');
     expect(html).not.toContain('Infinity');
     expect(html).not.toContain('NaN');
-    expect(html).toContain('-200 €'); // mapa de calor: resultado do Porto em março
+    expect(html).toContain('−200 €'); // mapa de calor: resultado do Porto em março
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/comparacao.html', html);
   });
 
@@ -113,7 +116,8 @@ describe('páginas', () => {
     expect(html).toContain('Resumo anual');
     expect(html).toContain('Mês a mês');
     expect(html).toContain('Pendente de confirmação');
-    expect(html).toContain('1.300,00 €'); // entradas do ano (março)
+    expect(html).toContain('1.300,00 €'); // entradas do ano (indicador, com €)
+    expect(html).toContain('Entradas (€)'); // tabela mês a mês: € no cabeçalho
     expect(html).not.toContain('NaN');
     expect(html).not.toContain('Infinity');
     expect(html).not.toContain('Vencimentos e encargos');

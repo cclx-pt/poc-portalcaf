@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros } from '../components/ui';
 import { SyncEstado } from '../components/SyncEstado';
 import { listarComunidades, listarLotes } from '../lib/db';
-import { eur, MESES, MESES_CURTOS, norm, num, parseNumero, pct, r2 } from '../lib/format';
+import { dec, eur, MESES, MESES_CURTOS, norm, num, parseNumero, pct, r2, XLSX_EUR } from '../lib/format';
 import type { Registo } from '../lib/types';
 
 type OrigemEntrada = 'contribuir' | 'depositos';
@@ -89,7 +89,7 @@ export default function EntradasConjunto() {
       { header: 'Descrição', key: 'desc', width: 30 }, { header: 'ID Jotform', key: 'id', width: 22 }, { header: 'Valor (€)', key: 'valor', width: 12 },
     ];
     for (const l of linhas) ws.addRow({ data: dataPt(l.data), origem: ROTULO[l.origem], com: nomeC(l.comunidadeId), cat: l.categoria, pessoa: conf ? l.pessoa ?? '' : l.pessoaRef ?? '', nif: l.nif ?? '', email: l.email ?? '', desc: l.descricao ?? '', id: l.id, valor: l.valor });
-    ws.getColumn('valor').numFmt = '#,##0.00 €';
+    ws.getColumn('valor').numFmt = XLSX_EUR;
     ws.getRow(1).font = { bold: true, name: 'Montserrat' };
     const buf = await wb.xlsx.writeBuffer();
     const a = document.createElement('a');
@@ -163,11 +163,11 @@ export default function EntradasConjunto() {
             </label>
           </div>
           <div className="tabela"><table>
-            <thead><tr><th>{{ mes: 'Mês', comunidade: 'Comunidade', categoria: 'Categoria', pessoa: 'Contribuinte' }[agrupar]}</th><th className="num">Registos</th><th className="num">Contribuições</th><th className="num">Depósitos</th><th className="num">Total</th><th className="num">% do total</th></tr></thead>
+            <thead><tr><th>{{ mes: 'Mês', comunidade: 'Comunidade', categoria: 'Categoria', pessoa: 'Contribuinte' }[agrupar]}</th><th className="num">Registos</th><th className="num">Contribuições (€)</th><th className="num">Depósitos (€)</th><th className="num">Total (€)</th><th className="num">% do total</th></tr></thead>
             <tbody>{resumo.slice(0, 300).map((r) => (
-              <tr key={r.k}><td>{rotulo(r.k)}</td><td className="num">{num(r.n)}</td><td className="num">{eur(r.c)}</td><td className="num">{eur(r.d)}</td><td className="num">{eur(r.t)}</td><td className="num">{pct(total ? r.t / total : null)}</td></tr>
+              <tr key={r.k}><td>{rotulo(r.k)}</td><td className="num">{num(r.n)}</td><td className="num">{dec(r.c)}</td><td className="num">{dec(r.d)}</td><td className="num">{dec(r.t)}</td><td className="num">{pct(total ? r.t / total : null)}</td></tr>
             ))}</tbody>
-            <tfoot><tr><th>Total</th><th className="num">{num(linhas.length)}</th><th className="num">{eur(tc)}</th><th className="num">{eur(td)}</th><th className="num">{eur(total)}</th><th className="num">100,0%</th></tr></tfoot>
+            <tfoot><tr className="total-geral"><th>Total</th><th className="num">{num(linhas.length)}</th><th className="num">{dec(tc)}</th><th className="num">{dec(td)}</th><th className="num">{dec(total)}</th><th className="num">100,0%</th></tr></tfoot>
           </table></div>
           {resumo.length > 300 && <p className="muted small">Mostrados os primeiros 300 de {resumo.length} grupos. A exportação inclui todos os registos.</p>}
         </div>
@@ -178,14 +178,14 @@ export default function EntradasConjunto() {
             <button className="sec" onClick={() => void exportar()}>Exportar para Excel</button>
           </div>
           <div className="tabela"><table>
-            <thead><tr><th>Data</th><th>Origem</th><th>Comunidade</th><th>Categoria</th><th>{conf ? 'Pessoa' : 'Pseudónimo'}</th>{conf && <th>Contacto</th>}<th className="num">Valor</th></tr></thead>
+            <thead><tr><th>Data</th><th>Origem</th><th>Comunidade</th><th>Categoria</th><th>{conf ? 'Pessoa' : 'Pseudónimo'}</th>{conf && <th>Contacto</th>}<th className="num">Valor (€)</th></tr></thead>
             <tbody>{linhas.slice(0, 500).map((l) => (
               <tr key={l.origem + l.id}>
                 <td>{dataPt(l.data)}</td><td>{ROTULO[l.origem]}</td><td>{nomeC(l.comunidadeId)}</td>
                 <td>{l.categoria}{l.descricao ? <span className="muted small"> · {l.descricao}</span> : null}</td>
                 <td>{conf ? l.pessoa ?? '' : l.pessoaRef ?? ''}</td>
                 {conf && <td className="small">{[l.nif && `NIF ${l.nif}`, l.email, l.telefone].filter(Boolean).join(' · ')}</td>}
-                <td className="num">{eur(l.valor)}</td>
+                <td className="num">{dec(l.valor)}</td>
               </tr>
             ))}</tbody>
           </table></div>

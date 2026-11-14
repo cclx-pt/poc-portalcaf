@@ -63,7 +63,7 @@ export default function Exportacao() {
         w.getRow(1).font = { name: 'Montserrat', bold: true, color: { argb: 'FFFFFFFF' } };
         w.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
         w.eachRow((row, i) => { if (i > 1) row.font = { name: 'Montserrat' }; });
-        w.columns.forEach((col) => { if (/€/.test(String(col.header))) col.numFmt = '#,##0.00 "€"'; });
+        w.columns.forEach((col) => { if (/€/.test(String(col.header))) col.numFmt = '#,##0.00 "€";(#,##0.00 "€")'; });
       }
       const buf = await wb.xlsx.writeBuffer();
       const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));

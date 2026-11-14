@@ -33,7 +33,14 @@ export function mensagemErro(e: unknown) {
 }
 
 export function Estado({ aCarregar, erro, vazio }: { aCarregar: boolean; erro: string | null; vazio?: boolean }) {
-  if (aCarregar) return <p className="muted">A carregar…</p>;
+  // Espaço reservado com a forma dos indicadores e da tabela, para a página não saltar ao chegar os dados.
+  if (aCarregar) return (
+    <div className="esqueleto" aria-busy="true" aria-live="polite">
+      <span className="muted">A carregar…</span>
+      <div className="blocos">{[0, 1, 2, 3].map((i) => <div key={i} className="bloco" />)}</div>
+      {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="linha-e" />)}
+    </div>
+  );
   if (erro) return <div className="aviso">{erro}</div>;
   if (vazio) return <p className="muted">Sem dados para este período.</p>;
   return null;
@@ -100,5 +107,21 @@ export function Rodape() {
       <b>CONSELHO ADMINISTRATIVO E FINANCEIRO • CCLX</b>
       <span>Portal CAF · PoC · Valores em euros (€), com duas casas decimais</span>
     </div>
+  );
+}
+
+// ---------- frescura dos dados ----------
+/**
+ * Linha comum às páginas de análise: até quando vão os valores, quando foram calculados os resumos
+ * e quando foi a última sincronização com o Jotform.
+ */
+export function Frescura({ calculadoEm, ate, ano }: { calculadoEm?: string; ate: number; ano: number }) {
+  const sync = useCarregar(async () => (await import('../lib/db')).lerEstadoSync(), []);
+  const dt = (s?: string) => (s ? new Date(s).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' }) : '—');
+  const MES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  return (
+    <p className="frescura">
+      Valores {ate ? `até ${MES[ate - 1]} de ${ano}` : `de ${ano}`} · resumos calculados em {dt(calculadoEm)} · última sincronização com o Jotform: {dt(sync.dados?.fim)} · fonte: Jotform e tabela de custos fixos
+    </p>
   );
 }

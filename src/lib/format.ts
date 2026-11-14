@@ -2,16 +2,27 @@
 function grupo(v: number, casas: number) {
   const [int, dec] = Math.abs(v).toFixed(casas).split('.');
   const milhares = int.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return (v < 0 && Number(Math.abs(v).toFixed(casas)) !== 0 ? '-' : '') + milhares + (dec ? ',' + dec : '');
+  // Sinal de menos tipográfico (U+2212): mesma largura dos algarismos, mais visível que o hífen.
+  return (v < 0 && Number(Math.abs(v).toFixed(casas)) !== 0 ? '−' : '') + milhares + (dec ? ',' + dec : '');
 }
 
 /** Valores sempre em euros, com duas casas decimais. */
 export const eur = (v: number | null | undefined) => (v == null || Number.isNaN(v) ? '—' : `${grupo(v, 2)} €`);
 export const eurK = (v: number) => `${grupo(v, 0)} €`;
+/** Valor em euros sem símbolo, para tabelas densas com "(€)" no cabeçalho. "—" = sem dados. */
+export const dec = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '—' : grupo(v, 2));
+/** Formato contabilístico: negativos entre parênteses, sem símbolo (o cabeçalho indica €). */
+export const eurContab = (v: number | null | undefined) => {
+  if (v == null || !Number.isFinite(v)) return '—';
+  const s = grupo(Math.abs(v), 2);
+  return v < 0 && Number(Math.abs(v).toFixed(2)) !== 0 ? `(${s})` : s;
+};
+/** Formato de número do Excel: negativos entre parênteses. */
+export const XLSX_EUR = '#,##0.00 €;(#,##0.00 €)';
 /** Números sem moeda (ex.: pessoas). Por defeito sem casas decimais. */
 export const num = (v: number | null | undefined, casas = 0) => (v == null || !Number.isFinite(v) ? '—' : grupo(v, casas));
 export const pct = (v: number | null | undefined) =>
-  v == null || !Number.isFinite(v) ? '—' : `${(v * 100).toLocaleString('pt-PT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+  v == null || !Number.isFinite(v) ? '—' : `${grupo(v * 100, 1)}%`;
 
 export const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 export const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -23,7 +34,7 @@ export const r2 = (v: number) => Math.round(v * 100) / 100;
 export function parseNumero(raw: unknown): number {
   if (typeof raw === 'number') return raw;
   if (raw == null) return NaN;
-  let s = String(raw).trim().replace(/\s|€|EUR/gi, '');
+  let s = String(raw).trim().replace(/−/g, '-').replace(/\s|€|EUR/gi, '');
   if (!s) return NaN;
   let neg = false;
   if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }

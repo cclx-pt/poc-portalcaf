@@ -115,7 +115,7 @@ export default function Orcamento() {
               <tr key={i}>
                 <td>{nomes.get(l.comunidadeId) ?? l.comunidadeId}</td><td>{GRUPO_LABEL[l.grupo]}</td><td>{l.categoria}</td>
                 <td className="num">{pode('aprovar')
-                  ? <input type="number" step="0.01" value={l.anual} style={{ width: 120 }} onChange={(e) => setLinhas(linhas.map((x, k) => (k === i ? { ...x, anual: Number(e.target.value) } : x)))} />
+                  ? <input type="number" inputMode="decimal" step="0.01" value={l.anual} style={{ width: 120 }} onChange={(e) => setLinhas(linhas.map((x, k) => (k === i ? { ...x, anual: Number(e.target.value) } : x)))} />
                   : eur(l.anual)}</td>
                 <td className="num">{eur(p)}</td><td className="num">{eur(rl)}</td>
                 <td className={'num' + (d != null && Math.abs(d) > 0.1 ? ' neg' : '')}>{d == null ? '—' : pct(d)}</td>

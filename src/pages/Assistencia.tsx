@@ -166,7 +166,7 @@ export default function Assistencia() {
               ))}
             </tbody>
             <tfoot>
-              <tr>
+              <tr className="total-geral">
                 <th>Total do ano</th><th className="num">{num(ano_.n)}</th>
                 <th className="num">{num(ano_.soma.adultos)}</th><th className="num">{m1(media(ano_, 'adultos'))}</th><th className="num">{num(ano_.max)}</th>
                 {(['jump', 'criancas', 'connects', 'total'] as const).map((k) => <FragCel key={k} total={ano_.soma[k]} media={media(ano_, k)} cab />)}

@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros, mensagemErro } from '../components/ui';
+import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros, mensagemErro, Frescura } from '../components/ui';
 import { listarComunidades, listarResumos } from '../lib/db';
 import { recalcularAno } from '../lib/recalcular';
-import { somarMeses, partesMes, GERAIS_POR_REPARTIR } from '../lib/resumos';
-import { eur, MESES_CURTOS, pct } from '../lib/format';
+import { somarMeses, partesMes, GERAIS_POR_REPARTIR, mesesDecorridos } from '../lib/resumos';
+import { dec, eur, MESES_CURTOS, pct, hoje } from '../lib/format';
 import Publico from './Publico';
 
 export default function Painel() {
@@ -50,6 +50,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
         </div>
         {podeRecalcular && <button disabled={ocupado} onClick={recalcular}>{ocupado ? 'A recalcular…' : 'Recalcular resumos'}</button>}
       </div>
+      <Frescura ano={ano} ate={mesesDecorridos(ano, hoje())} calculadoEm={calculado} />
       {msg && <div className="nota">{msg}</div>}
       <Estado aCarregar={r.aCarregar} erro={r.erro} vazio={!todos.length} />
       {!!todos.length && <>
@@ -81,19 +82,19 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
             <h2>Por comunidade</h2>
             <div className="tabela">
               <table>
-                <thead><tr><th>Comunidade</th><th className="num">Entradas</th><th className="num">Custos fixos</th><th className="num">Despesas</th><th className="num">Parte dos gerais</th><th className="num">Saldo</th><th className="num">Cobertura</th></tr></thead>
+                <thead><tr><th>Comunidade</th><th className="num">Entradas (€)</th><th className="num">Custos fixos (€)</th><th className="num">Despesas (€)</th><th className="num">Parte dos gerais (€)</th><th className="num">Saldo (€)</th><th className="num">Cobertura</th></tr></thead>
                 <tbody>
                   {todos.filter((x) => x.comunidadeId !== 'bolsa-geral')
                     .sort((a, b) => (comunidades.dados?.find((c) => c.id === a.comunidadeId)?.ordem ?? 50) - (comunidades.dados?.find((c) => c.id === b.comunidadeId)?.ordem ?? 50))
                     .map((x) => { const t = partesMes(somarMeses(x.meses)); return (
                       <tr key={x.id}>
                         <td>{x.comunidadeId === GERAIS_POR_REPARTIR ? 'Gerais por repartir' : nomes.get(x.comunidadeId) ?? x.comunidadeId}</td>
-                        <td className="num">{eur(t.entradas)}</td><td className="num">{eur(t.custosFixos)}</td><td className="num">{eur(t.despesas)}</td><td className="num">{t.gerais ? eur(t.gerais) : '—'}</td>
-                        <td className={'num' + (t.saldo < 0 ? ' neg' : '')}>{eur(t.saldo)}</td>
+                        <td className="num">{dec(t.entradas)}</td><td className="num">{dec(t.custosFixos)}</td><td className="num">{dec(t.despesas)}</td><td className="num">{dec(t.gerais)}</td>
+                        <td className={'num' + (t.saldo < 0 ? ' neg' : '')}>{dec(t.saldo)}</td>
                         <td className="num">{t.custosFixos ? pct(t.entradas / t.custosFixos) : '—'}</td>
                       </tr>); })}
                 </tbody>
-                <tfoot><tr><td>Total</td><td className="num">{eur(tot.entradas)}</td><td className="num">{eur(p.custosFixos)}</td><td className="num">{eur(p.despesas)}</td><td className="num">{p.gerais ? eur(p.gerais) : '—'}</td><td className="num">{eur(tot.saldo)}</td><td className="num">{p.custosFixos ? pct(tot.entradas / p.custosFixos) : '—'}</td></tr></tfoot>
+                <tfoot><tr className="total-geral"><td>Total</td><td className="num">{dec(tot.entradas)}</td><td className="num">{dec(p.custosFixos)}</td><td className="num">{dec(p.despesas)}</td><td className="num">{dec(p.gerais)}</td><td className={'num' + (tot.saldo < 0 ? ' neg' : '')}>{dec(tot.saldo)}</td><td className="num">{p.custosFixos ? pct(tot.entradas / p.custosFixos) : '—'}</td></tr></tfoot>
               </table>
             </div>
             {bolsaTot && (bolsaTot.contribuir + bolsaTot.coletas + bolsaTot.transferencias) > 0 && (
