@@ -1,3 +1,4 @@
+import { partesMes, GERAIS_POR_REPARTIR } from '../lib/resumos';
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { mensagemErro, useFiltros } from '../components/ui';
@@ -47,8 +48,11 @@ export default function Exportacao() {
         estado: m.conciliadoCom ? 'Conciliado com Jotform' : m.contabilizar ? 'Contabilizado' : 'Por classificar',
       });
       const r1 = wb.addWorksheet('Resumo');
-      r1.columns = [{ header: 'Comunidade', key: 'c', width: 28 }, { header: 'Entradas (€)', key: 'e', width: 14 }, { header: 'Custos fixos (€)', key: 'f', width: 16 }, { header: 'Despesas (€)', key: 'd', width: 14 }, { header: 'Saldo (€)', key: 's', width: 14 }];
-      for (const r of resumos) { const x = r.meses[mes - 1]; r1.addRow({ c: nomeC.get(r.comunidadeId) ?? r.comunidadeId, e: x.entradas, f: x.custosFixos, d: x.despesas, s: x.saldo }); }
+      r1.columns = [{ header: 'Comunidade', key: 'c', width: 28 }, { header: 'Entradas (€)', key: 'e', width: 14 }, { header: 'Custos fixos (€)', key: 'f', width: 16 }, { header: 'Despesas (€)', key: 'd', width: 14 }, { header: 'Parte dos gerais (€)', key: 'g', width: 18 }, { header: 'Saldo (€)', key: 's', width: 14 }];
+      for (const r of resumos) {
+        const p = partesMes(r.meses[mes - 1]);
+        r1.addRow({ c: r.comunidadeId === GERAIS_POR_REPARTIR ? 'Gerais por repartir' : nomeC.get(r.comunidadeId) ?? r.comunidadeId, e: p.entradas, f: p.custosFixos, d: p.despesas, g: p.gerais, s: p.saldo });
+      }
       r1.addRow({});
       r1.addRow({ c: 'Saldos bancários (último do mês, segundo o extrato)' });
       for (const c of contas) {

@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, Kpi, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, gravarOrcamento, gravarVersaoOrcamento, lerOrcamento, listarComunidades, listarCustosFixos, listarResumos } from '../lib/db';
 import { eur, hoje, pct, periodo, r2 } from '../lib/format';
-import { comunidadeAtiva, custoAtivo, mesesDecorridos, somarMeses } from '../lib/resumos';
+import { comunidadeAtiva, custoAtivo, mesesDecorridos, somarMeses, partesMes } from '../lib/resumos';
 import type { LinhaOrcamento, Orcamento as Orc } from '../lib/types';
 
 const GRUPO_LABEL = { entradas: 'Entradas', custosFixos: 'Custos fixos', despesas: 'Despesas e reembolsos' } as const;
@@ -24,7 +24,7 @@ export default function Orcamento() {
   const realPor = new Map((real.dados ?? []).map((r) => [r.comunidadeId, somarMeses(r.meses.slice(0, Math.max(decorridos, 0)))]));
   const valorReal = (l: LinhaOrcamento) => {
     const t = realPor.get(l.comunidadeId); if (!t) return 0;
-    if (l.grupo === 'custosFixos') return t.custosFixos;
+    if (l.grupo === 'custosFixos') return partesMes(t).custosFixos; // os que ficaram na comunidade
     if (l.grupo === 'entradas') return l.categoria === 'Total' ? t.entradas : t.entradasPorCategoria[l.categoria] ?? 0;
     return t.despesasPorCategoria[l.categoria] ?? 0;
   };

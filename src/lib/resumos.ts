@@ -215,18 +215,31 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
 }
 
 /**
+ * Partes coerentes de um mês, já com a repartição dos gerais:
+ * entradas − custosFixos − despesas − gerais = saldo.
+ * custosFixos/despesas = o que ficou na comunidade; gerais = parte recebida das saídas gerais.
+ * (Resumos antigos sem os campos novos contam como sem gerais.)
+ */
+export function partesMes(x: Pick<ResumoMes, 'entradas' | 'custosFixos' | 'despesas' | 'saldo'> & Partial<Pick<ResumoMes, 'cedidoGeral' | 'geralSaidas'>>) {
+  const c = x.cedidoGeral ?? { entradas: 0, custosFixos: 0, despesas: 0 };
+  return {
+    entradas: x.entradas,
+    custosFixos: r2(x.custosFixos - c.custosFixos),
+    despesas: r2(x.despesas - c.despesas),
+    gerais: r2(x.geralSaidas ?? 0),
+    saldo: x.saldo,
+  };
+}
+
+/**
  * Valores de um mês para a página pública, já com a repartição dos gerais:
  * custos de funcionamento = custos fixos que ficaram na comunidade;
  * outras despesas = despesas que ficaram + parte recebida dos gerais.
  * (Resumos antigos sem os campos novos contam como sem gerais.)
  */
 function valoresPublicos(x: ResumoMes) {
-  const c = x.cedidoGeral ?? { entradas: 0, custosFixos: 0, despesas: 0 };
-  return {
-    entradas: x.entradas,
-    custos: r2(x.custosFixos - c.custosFixos),
-    outras: r2(x.despesas - c.despesas + (x.geralSaidas ?? 0)),
-  };
+  const p = partesMes(x);
+  return { entradas: p.entradas, custos: p.custosFixos, outras: r2(p.despesas + p.gerais) };
 }
 
 /** Resumo público: só meses fechados, só totais, com supressão de grupos com menos de 3 registos. */

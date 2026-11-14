@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calcularPublico, calcularPublicoSite, calcularResumos, type DadosCalculo } from '../../src/lib/resumos';
+import { calcularPublico, calcularPublicoSite, calcularResumos, partesMes, type DadosCalculo } from '../../src/lib/resumos';
 import { OUTROS_FUNCIONAMENTO } from '../../src/lib/rubricas';
 import type { Categoria, Comunidade, CustoFixo, Lote, Resumo } from '../../src/lib/types';
 
@@ -118,5 +118,22 @@ describe('repartição dos gerais', () => {
     expect(linha('sede').outrasDespesas).toBe(3);
     expect(linha('almada').saldo).toBe(-60);
     expect(mes(rs, 'sede', 3).cedidoGeral.despesas).toBe(90);
+  });
+
+  it('partes do mês somam ao saldo (Painel, Exportação, Orçamento)', () => {
+    const cf: CustoFixo = { id: 'r', comunidadeId: 'sede', rubrica: 'Renda', valorMensal: 300, inicio: '2026-01', fim: null, nivel: 'privado' };
+    const rs = calcularResumos(base({
+      custosFixos: [cf],
+      despesas: [lote('despesas', 'almada', 2026, 3, [{ valor: 40, categoria: 'Material' }])],
+      contribuir: [lote('contribuir', 'almada', 2026, 3, [{ valor: 500 }])],
+      assistencia: [lote('assistencia', 'almada', 2026, 3, [{ valor: 20 }]), lote('assistencia', 'porto', 2026, 3, [{ valor: 10 }])],
+    }));
+    for (const c of ['almada', 'porto', 'sede']) {
+      const x = mes(rs, c, 3);
+      const p = partesMes(x);
+      expect(Math.round((p.entradas - p.custosFixos - p.despesas - p.gerais) * 100) / 100).toBe(x.saldo);
+    }
+    expect(partesMes(mes(rs, 'sede', 3)).custosFixos).toBe(0);
+    expect(partesMes(mes(rs, 'almada', 3)).gerais).toBe(200);
   });
 });
