@@ -20,6 +20,14 @@ Prova de conceito (PoC) funcional, com a identidade visual CAF (preto, branco e 
 | Exportação | Excel mensal para o contabilista (movimentos + resumo) |
 | Administração | CRUD de comunidades, contas bancárias (com IBAN validado) e categorias; utilizadores e perfis; ligação ao Jotform; auditoria |
 
+## Análise (fase 1)
+
+- **Rubricas e âmbito:** cada categoria tem uma rubrica da demonstração de resultados e um âmbito, **local** (fica na comunidade) ou **geral** (custos e proveitos da igreja toda). Configura-se em Configuração → Categorias; *Adicionar categorias dos dados* traz as categorias usadas no Jotform que ainda não estão na lista.
+- **Repartição dos gerais:** no recálculo dos resumos, os valores em categorias gerais saem da comunidade onde foram registados e repartem-se pelas comunidades ativas conforme a **média de jovens e adultos dos últimos 12 meses** (inclui o ano anterior). Sem assistência em nenhuma comunidade, ficam em "Gerais por repartir". A bolsa geral mantém a regra do mesmo mês. O total CCLX não muda.
+- **Privacidade:** categorias confidenciais (Vencimentos, Segurança Social) entram agregadas em "Outros custos de funcionamento".
+- **Páginas:** *Demonstração de resultados* (colunas por comunidade + CCLX, ou por mês; separar local/gerais; detalhe por categoria; Excel) e *Comparação entre comunidades* (autossuficiência, défice coberto, valores por pessoa, barras, quadrantes e mapa de calor).
+- Desenho e plano: [`docs/superpowers/specs`](docs/superpowers/specs) e [`docs/superpowers/plans`](docs/superpowers/plans).
+
 ## Login
 
 - **Google** (OAuth).
