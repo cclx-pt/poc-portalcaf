@@ -15,7 +15,7 @@ import { cert, initializeApp } from 'firebase-admin/app';
 import { FieldPath, getFirestore } from 'firebase-admin/firestore';
 import { SyncEmCurso, sincronizar, type ArmazemSync, type EstadoSync } from '../src/lib/sync';
 import { calcularPublico, calcularPublicoSite, calcularResumos } from '../src/lib/resumos';
-import type { BancoLote, Comunidade, CustoFixo, Lote, Origem } from '../src/lib/types';
+import type { BancoLote, Categoria, Comunidade, CustoFixo, Lote, Origem } from '../src/lib/types';
 
 const QUEM = 'sync-automatico';
 
@@ -84,19 +84,22 @@ const armazem: ArmazemSync = {
     }
   },
   async recalcular(ano) {
-    const [comunidades, conf, priv, banco, custosFixos, mesesFechados] = await Promise.all([
+    const [comunidades, conf, priv, banco, custosFixos, mesesFechados, categorias, privAnterior] = await Promise.all([
       lerTodos<Comunidade>('comunidades'),
       lerTodos<Lote>('lotes_conf', 'ano', ano),
       lerTodos<Lote>('lotes', 'ano', ano),
       lerTodos<BancoLote>('banco_lotes', 'ano', ano),
       lerTodos<CustoFixo>('custos_fixos'),
       fechados(),
+      lerTodos<Categoria>('categorias'),
+      lerTodos<Lote>('lotes', 'ano', ano - 1),
     ]);
     const de = (o: Origem) => conf.filter((l) => l.origem === o);
     const assistencia = priv.filter((l) => l.origem === 'assistencia');
+    const assistenciaAnterior = privAnterior.filter((l) => l.origem === 'assistencia');
     comunidades.sort((a, b) => a.ordem - b.ordem);
     const hoje = new Date().toISOString().slice(0, 10);
-    const resumos = calcularResumos({ ano, comunidades, contribuir: de('contribuir'), depositos: de('depositos'), despesas: de('despesas'), assistencia, banco, custosFixos, mesesFechados, hoje });
+    const resumos = calcularResumos({ ano, comunidades, contribuir: de('contribuir'), depositos: de('depositos'), despesas: de('despesas'), assistencia, banco, custosFixos, mesesFechados, hoje, categorias, assistenciaAnterior });
     const publico = calcularPublico(ano, resumos, comunidades, mesesFechados);
     const b = db.batch();
     for (const r of resumos) b.set(db.collection('resumos').doc(r.id), { ...r, calculadoPor: QUEM });

@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros, mensagemErro } from '../components/ui';
 import { listarComunidades, listarResumos } from '../lib/db';
 import { recalcularAno } from '../lib/recalcular';
-import { somarMeses } from '../lib/resumos';
+import { somarMeses, partesMes, GERAIS_POR_REPARTIR } from '../lib/resumos';
 import { eur, MESES_CURTOS, pct } from '../lib/format';
 import Publico from './Publico';
 
@@ -26,6 +26,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
   const selecionados = todos.filter((x) => (comunidade === 'todas' ? x.comunidadeId !== 'bolsa-geral' : x.comunidadeId === comunidade));
   const porMes = Array.from({ length: 12 }, (_, i) => somarMeses(selecionados.map((s) => s.meses[i])));
   const tot = somarMeses(porMes);
+  const p = partesMes(tot); // custos e despesas que ficaram + parte dos gerais (somam ao saldo)
   const bolsa = todos.find((x) => x.comunidadeId === 'bolsa-geral');
   const bolsaTot = bolsa ? somarMeses(bolsa.meses) : null;
   const calculado = todos[0]?.calculadoEm;
@@ -44,7 +45,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
           <h1>{titulo}: custos x entradas {ano}</h1>
           <p className="muted">
             {calculado ? `Resumos calculados em ${new Date(calculado).toLocaleString('pt-PT')}.` : 'Ainda não há resumos calculados para este ano.'}{' '}
-            Entradas = Contribuir + coletas + transferências atribuídas + quota da bolsa geral. Saídas = custos fixos + despesas e reembolsos.
+            Entradas = Contribuir + coletas + transferências atribuídas + quota da bolsa geral. Saídas = custos fixos + despesas e reembolsos + parte dos custos gerais (repartidos pela assistência).
           </p>
         </div>
         {podeRecalcular && <button disabled={ocupado} onClick={recalcular}>{ocupado ? 'A recalcular…' : 'Recalcular resumos'}</button>}
@@ -54,21 +55,24 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
       {!!todos.length && <>
         <div className="cards">
           <Kpi titulo="Entradas" valor={eur(tot.entradas)} sub={<>Contribuir {eur(tot.contribuir)} · coletas {eur(tot.coletas)}{tot.quotaBolsa ? ` · bolsa ${eur(tot.quotaBolsa)}` : ''}</>} />
-          <Kpi titulo="Custos fixos" valor={eur(tot.custosFixos)} sub="Meses já decorridos" />
-          <Kpi titulo="Despesas e reembolsos" valor={eur(tot.despesas)} />
+          <Kpi titulo="Custos fixos" valor={eur(p.custosFixos)} sub="Meses já decorridos" />
+          <Kpi titulo="Despesas e reembolsos" valor={eur(p.despesas)} />
+          {!!p.gerais && <Kpi titulo="Parte dos gerais" valor={eur(p.gerais)} sub="Custos gerais repartidos pela assistência" />}
           <Kpi titulo="Saldo" valor={eur(tot.saldo)} negativo={tot.saldo < 0} sub={tot.saldo < 0 ? 'Défice coberto pelo orçamento geral' : undefined} />
-          <Kpi titulo="Cobertura dos custos fixos" valor={tot.custosFixos ? pct(tot.entradas / tot.custosFixos) : '—'} sub="Entradas ÷ custos fixos" />
+          <Kpi titulo="Cobertura dos custos fixos" valor={p.custosFixos ? pct(tot.entradas / p.custosFixos) : '—'} sub="Entradas ÷ custos fixos" />
         </div>
 
         <div className="sec card">
           <h2>Entradas e saídas por mês</h2>
-          <GraficoBarras empilhado dados={porMes.map((m, i) => ({
-            rotulo: MESES_CURTOS[i], Contribuir: m.contribuir, Coletas: m.coletas + m.transferencias + m.quotaBolsa, 'Custos fixos': m.custosFixos, Despesas: m.despesas,
-          }))} series={[
+          <GraficoBarras empilhado dados={porMes.map((m, i) => {
+            const pm = partesMes(m);
+            return { rotulo: MESES_CURTOS[i], Contribuir: m.contribuir, Coletas: m.coletas + m.transferencias + m.quotaBolsa, 'Custos fixos': pm.custosFixos, Despesas: pm.despesas, Gerais: pm.gerais };
+          })} series={[
             { key: 'Contribuir', nome: 'Contribuir', stack: 'e' },
             { key: 'Coletas', nome: 'Coletas, transferências e bolsa', stack: 'e' },
             { key: 'Custos fixos', nome: 'Custos fixos', stack: 's' },
             { key: 'Despesas', nome: 'Despesas e reembolsos', stack: 's' },
+            ...(p.gerais ? [{ key: 'Gerais', nome: 'Parte dos gerais', stack: 's' }] : []),
           ]} />
         </div>
 
@@ -77,19 +81,19 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
             <h2>Por comunidade</h2>
             <div className="tabela">
               <table>
-                <thead><tr><th>Comunidade</th><th className="num">Entradas</th><th className="num">Custos fixos</th><th className="num">Despesas</th><th className="num">Saldo</th><th className="num">Cobertura</th></tr></thead>
+                <thead><tr><th>Comunidade</th><th className="num">Entradas</th><th className="num">Custos fixos</th><th className="num">Despesas</th><th className="num">Parte dos gerais</th><th className="num">Saldo</th><th className="num">Cobertura</th></tr></thead>
                 <tbody>
                   {todos.filter((x) => x.comunidadeId !== 'bolsa-geral')
                     .sort((a, b) => (comunidades.dados?.find((c) => c.id === a.comunidadeId)?.ordem ?? 50) - (comunidades.dados?.find((c) => c.id === b.comunidadeId)?.ordem ?? 50))
-                    .map((x) => { const t = somarMeses(x.meses); return (
+                    .map((x) => { const t = partesMes(somarMeses(x.meses)); return (
                       <tr key={x.id}>
-                        <td>{nomes.get(x.comunidadeId) ?? x.comunidadeId}</td>
-                        <td className="num">{eur(t.entradas)}</td><td className="num">{eur(t.custosFixos)}</td><td className="num">{eur(t.despesas)}</td>
+                        <td>{x.comunidadeId === GERAIS_POR_REPARTIR ? 'Gerais por repartir' : nomes.get(x.comunidadeId) ?? x.comunidadeId}</td>
+                        <td className="num">{eur(t.entradas)}</td><td className="num">{eur(t.custosFixos)}</td><td className="num">{eur(t.despesas)}</td><td className="num">{t.gerais ? eur(t.gerais) : '—'}</td>
                         <td className={'num' + (t.saldo < 0 ? ' neg' : '')}>{eur(t.saldo)}</td>
                         <td className="num">{t.custosFixos ? pct(t.entradas / t.custosFixos) : '—'}</td>
                       </tr>); })}
                 </tbody>
-                <tfoot><tr><td>Total</td><td className="num">{eur(tot.entradas)}</td><td className="num">{eur(tot.custosFixos)}</td><td className="num">{eur(tot.despesas)}</td><td className="num">{eur(tot.saldo)}</td><td className="num">{tot.custosFixos ? pct(tot.entradas / tot.custosFixos) : '—'}</td></tr></tfoot>
+                <tfoot><tr><td>Total</td><td className="num">{eur(tot.entradas)}</td><td className="num">{eur(p.custosFixos)}</td><td className="num">{eur(p.despesas)}</td><td className="num">{p.gerais ? eur(p.gerais) : '—'}</td><td className="num">{eur(tot.saldo)}</td><td className="num">{p.custosFixos ? pct(tot.entradas / p.custosFixos) : '—'}</td></tr></tfoot>
               </table>
             </div>
             {bolsaTot && (bolsaTot.contribuir + bolsaTot.coletas + bolsaTot.transferencias) > 0 && (

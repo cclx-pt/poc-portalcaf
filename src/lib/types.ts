@@ -48,6 +48,10 @@ export interface Categoria {
   snc?: string;
   origem?: string; // jotform, portal
   ativo?: boolean;
+  /** Rubrica da demonstração de resultados (ver lib/rubricas.ts). */
+  rubrica?: string;
+  /** local: fica na comunidade; geral: reparte-se pela média de jovens e adultos dos últimos 12 meses. */
+  ambito?: 'local' | 'geral';
 }
 
 /** Um registo individual dentro de um lote mensal. */
@@ -134,7 +138,20 @@ export interface ResumoMes {
   despesasPorCategoria: Record<string, number>;
   custosRubricas: Record<string, number>; // só rubricas não confidenciais
   n: { contribuir: number; coletas: number; transferencias: number; despesas: number };
+  /** Demonstração de resultados por rubrica: local (registado aqui, inclui quota da bolsa) e geral (parte recebida dos gerais). */
+  rubricas: { entrada: Record<string, ParteRubrica>; saida: Record<string, ParteRubrica> };
+  /** Parte recebida dos custos e proveitos gerais. */
+  geralEntradas: number;
+  geralSaidas: number;
+  /** Peso desta comunidade na repartição dos gerais neste mês (0 a 1). */
+  pesoGeral: number | null;
+  /** Média de jovens e adultos por registo nos 12 meses até este mês. */
+  adultosMedia12m: number | null;
+  /** O que foi registado aqui em categorias gerais e saiu para a repartição. */
+  cedidoGeral: { entradas: number; custosFixos: number; despesas: number };
 }
+
+export interface ParteRubrica { local: number; geral: number }
 
 export interface Resumo {
   id: string;
