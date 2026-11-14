@@ -56,3 +56,24 @@ export function classificador(categorias: Categoria[]): (nome: string, tipo: Tip
     };
   };
 }
+
+/**
+ * Categorias usadas nos dados (resumos) que ainda não estão na lista configurada,
+ * por exemplo as que vêm do Jotform. Sem duplicados (nome normalizado + tipo), ordenadas.
+ */
+export function categoriasEmFalta(
+  categorias: Categoria[],
+  meses: { entradasPorCategoria?: Record<string, number>; despesasPorCategoria?: Record<string, number> }[],
+): { nome: string; tipo: Tipo }[] {
+  const existe = new Set(categorias.map((c) => `${c.tipo}|${chave(c.nome)}`));
+  const out = new Map<string, { nome: string; tipo: Tipo }>();
+  for (const m of meses) {
+    for (const [tipo, o] of [['entrada', m.entradasPorCategoria], ['saida', m.despesasPorCategoria]] as const) {
+      for (const nome of Object.keys(o ?? {})) {
+        const k = `${tipo}|${chave(nome)}`;
+        if (!existe.has(k) && !out.has(k)) out.set(k, { nome, tipo });
+      }
+    }
+  }
+  return [...out.values()].sort((a, b) => (a.tipo === b.tipo ? a.nome.localeCompare(b.nome, 'pt') : a.tipo === 'entrada' ? -1 : 1));
+}

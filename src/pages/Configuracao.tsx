@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { SyncEstado } from '../components/SyncEstado';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
-import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarCustosFixos } from '../lib/db';
+import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarResumos } from '../lib/db';
 import { CATEGORIAS, COMUNIDADES, CONTAS, CUSTOS_FIXOS_CDR, JOTFORM_FORMS } from '../lib/seed';
 import { NIVEIS, NIVEL_LABEL, type Categoria, type Comunidade, type Conta, type Nivel } from '../lib/types';
 import { formatarIban, ibanValido, limparIban } from '../lib/iban';
@@ -10,6 +10,8 @@ import { usosCategoria, usosComunidade, usosConta } from '../lib/uso';
 import { slug } from '../lib/format';
 import { testarChave, type ResultadoTeste } from '../lib/jotform';
 import { sincronizarAgora } from '../lib/syncWeb';
+import { RUBRICAS_ENTRADA, RUBRICAS_SAIDA, categoriasEmFalta, rubricaInicial } from '../lib/rubricas';
+import { recalcularAno } from '../lib/recalcular';
 
 type Edicao =
   | { tipo: 'comunidade'; novo: boolean; v: Comunidade }
@@ -81,6 +83,10 @@ export default function Configuracao() {
       for (const c of COMUNIDADES) if (!comEx.has(c.id)) await gravar('comunidades', { ...c, ativo: true });
       for (const c of CONTAS) if (!contaEx.has(c.id)) await gravar('contas', { ...c, ativo: true });
       for (const c of CATEGORIAS) if (!catEx.has(c.id)) await gravar('categorias', { ...c, ativo: true });
+      // Categorias existentes sem rubrica/âmbito (incluindo as do Jotform): proposta inicial, local.
+      for (const c of cats.dados ?? []) {
+        if (!c.rubrica || !c.ambito) await gravar('categorias', { ...c, rubrica: c.rubrica || rubricaInicial(c.nome, c.tipo), ambito: c.ambito ?? 'local' });
+      }
       const cfEx = new Set((await listarCustosFixos(acesso!)).map((c) => c.id));
       for (const c of CUSTOS_FIXOS_CDR) if (!cfEx.has(c.id)) await gravar('custos_fixos', c);
       await auditar(acesso!.email, 'inicializar', 'Dados de referência (só os que faltavam)');
@@ -89,9 +95,29 @@ export default function Configuracao() {
     } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
 
+  /** Acrescenta à lista as categorias que aparecem nos dados (ex.: Jotform) e ainda não estão configuradas. */
+  async function adicionarDosDados() {
+    setOcupado(true); setMsg(null);
+    try {
+      const ano = new Date().getFullYear();
+      const resumos = [...await listarResumos(acesso!, ano - 1), ...await listarResumos(acesso!, ano)];
+      const faltam = categoriasEmFalta(cats.dados ?? [], resumos.flatMap((r) => r.meses));
+      for (const f of faltam) {
+        await gravar('categorias', {
+          id: `${f.tipo}-${slug(f.nome)}`, nome: f.nome, tipo: f.tipo, atividade: 'Jotform', nivel: 'privado' as Nivel,
+          snc: '', origem: 'jotform', ativo: true, rubrica: rubricaInicial(f.nome, f.tipo), ambito: 'local' as const,
+        });
+      }
+      if (faltam.length) await auditar(acesso!.email, 'adicionar categorias dos dados', faltam.map((f) => f.nome).join(', '));
+      await recarregar();
+      setMsg(faltam.length ? `${faltam.length} categoria(s) adicionada(s) a partir dos dados: ${faltam.map((f) => f.nome).join(', ')}. Ficam locais; reveja a rubrica e o âmbito.` : 'Todas as categorias usadas nos dados já estão configuradas.');
+    } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
+  }
+
   async function guardar() {
     if (!edit) return;
     setMsg(null);
+    let recalcularDepois = false;
     try {
       if (edit.tipo === 'comunidade') {
         const v = { ...edit.v, id: edit.novo ? slug(edit.v.nome) : edit.v.id, inicio: edit.v.inicio || null, fim: edit.v.fim || null };
@@ -108,10 +134,21 @@ export default function Configuracao() {
         const v = { ...edit.v, id: edit.novo ? `${edit.v.tipo}-${slug(edit.v.nome)}` : edit.v.id };
         if (!v.nome.trim()) throw new Error('Indique o nome.');
         if (edit.novo && (cats.dados ?? []).some((c) => c.id === v.id)) throw new Error('Já existe esta categoria.');
+        const antes = (cats.dados ?? []).find((c) => c.id === v.id);
+        v.rubrica = v.rubrica || rubricaInicial(v.nome, v.tipo);
+        v.ambito = v.ambito ?? 'local';
         await gravar('categorias', v);
+        if (!antes || antes.rubrica !== v.rubrica || (antes.ambito ?? 'local') !== v.ambito || antes.nivel !== v.nivel) recalcularDepois = true;
       }
       await auditar(acesso!.email, `${edit.novo ? 'criar' : 'editar'} ${edit.tipo}`, `${edit.v.nome}`);
       setEdit(null); await recarregar();
+      if (recalcularDepois) {
+        // Rubrica, âmbito ou nível mudam a repartição dos gerais: recalcula o ano atual e o anterior.
+        const ano = new Date().getFullYear();
+        setMsg('Categoria guardada. A recalcular resumos (repartição dos gerais)…');
+        for (const a of [ano - 1, ano]) await recalcularAno(acesso!, a);
+        setMsg(`Categoria guardada. Resumos de ${ano - 1} e ${ano} recalculados.`);
+      }
     } catch (e) { setMsg(mensagemErro(e)); }
   }
 
@@ -202,15 +239,18 @@ export default function Configuracao() {
             <select value={filtroCat} onChange={(e) => setFiltroCat(e.target.value as typeof filtroCat)} aria-label="Filtrar categorias">
               <option value="todas">Todas</option><option value="entrada">Entradas</option><option value="saida">Saídas</option>
             </select>
-            <button onClick={() => setEdit({ tipo: 'categoria', novo: true, v: { id: '', nome: '', tipo: 'saida', atividade: '', nivel: 'privado', snc: '', origem: 'portal', ativo: true } })}>Nova categoria</button>
+            <button onClick={() => setEdit({ tipo: 'categoria', novo: true, v: { id: '', nome: '', tipo: 'saida', atividade: '', nivel: 'privado', snc: '', origem: 'portal', ativo: true, ambito: 'local' } })}>Nova categoria</button>
+            <button className="sec" onClick={() => void adicionarDosDados()} disabled={ocupado} title="Acrescenta as categorias usadas no Jotform que ainda não estão na lista">Adicionar categorias dos dados</button>
           </div>
         </div>
         <p className="muted">As categorias de reembolsos vindas do Jotform mantêm-se tal como estão. A conta SNC-ESNL fica para preencher com o contabilista.</p>
         <div className="tabela"><table>
-          <thead><tr><th>Categoria</th><th>Tipo</th><th>Atividade</th><th>Nível</th><th>Conta SNC-ESNL</th><th>Estado</th><th /></tr></thead>
+          <thead><tr><th>Categoria</th><th>Tipo</th><th>Atividade</th><th>Rubrica</th><th>Âmbito</th><th>Nível</th><th>Conta SNC-ESNL</th><th>Estado</th><th /></tr></thead>
           <tbody>{catsVis.map((c) => (
             <tr key={c.id}>
               <td>{c.nome}</td><td>{c.tipo === 'entrada' ? 'Entrada' : 'Saída'}</td><td>{c.atividade}</td>
+              <td>{c.rubrica || <span className="muted">{rubricaInicial(c.nome, c.tipo)} (proposta)</span>}</td>
+              <td>{c.ambito === 'geral' ? <span className="etiqueta preta">Geral</span> : 'Local'}</td>
               <td><span className={'etiqueta' + (c.nivel === 'confidencial' ? ' preta' : '')}>{NIVEL_LABEL[c.nivel]}</span></td>
               <td>{c.snc || <span className="muted">—</span>}</td><td>{ativoTxt(c.ativo) ?? 'Ativa'}</td><td>{acoes('categoria', c)}</td>
             </tr>
@@ -294,6 +334,15 @@ export default function Configuracao() {
                 <datalist id="atividades">{[...new Set((cats.dados ?? []).map((c) => c.atividade))].map((a) => <option key={a} value={a} />)}</datalist></label>
               <label className="campo">Nível de privacidade
                 <select value={edit.v.nivel} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, nivel: e.target.value as Nivel } })}>{NIVEIS.map((n) => <option key={n} value={n}>{NIVEL_LABEL[n]}</option>)}</select></label>
+              <label className="campo">Rubrica (demonstração de resultados)
+                <select value={edit.v.rubrica || rubricaInicial(edit.v.nome, edit.v.tipo)} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, rubrica: e.target.value } })}>
+                  {(edit.v.tipo === 'entrada' ? RUBRICAS_ENTRADA : RUBRICAS_SAIDA).map((r) => <option key={r} value={r}>{r}</option>)}
+                </select></label>
+              <label className="campo">Âmbito
+                <select value={edit.v.ambito ?? 'local'} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, ambito: e.target.value as 'local' | 'geral' } })}>
+                  <option value="local">Local (fica na comunidade)</option>
+                  <option value="geral">Geral (reparte pela assistência dos últimos 12 meses)</option>
+                </select></label>
               <label className="campo">Conta SNC-ESNL<input value={edit.v.snc ?? ''} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, snc: e.target.value } })} /></label>
               {!edit.novo && <p className="muted" style={{ gridColumn: '1 / -1' }}>O nome e o tipo não mudam depois de criados, porque os registos importados usam o nome.</p>}
             </>}
