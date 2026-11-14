@@ -139,6 +139,30 @@ describe('sincronização incremental', () => {
     expect([...m.cols.lotes.keys()].filter((k) => k.startsWith('contribuir'))).toEqual([]);
   });
 
+  it('reler tudo (completo) retira contribuições por pagar que já tinham entrado', async () => {
+    const subs: Record<string, Sub[]> = { [F]: [
+      { id: 'pago', created_at: '2026-07-14 13:48:46', comunidade: 'Porto', valor: '1', nome: '', pago: 'PAGO' },
+      { id: 'teste', created_at: '2026-07-14 13:33:17', comunidade: 'Porto', valor: '5000', nome: '', pago: '' },
+    ] };
+    vi.stubGlobal('fetch', jotformFalso(subs).fetchFalso);
+    const m = armazemMemoria();
+    // Estado antes da regra PAGO: os dois registos já estavam integrados.
+    const antigo: Lote = { id: 'contribuir_2026_07_porto', origem: 'contribuir', ano: 2026, mes: 7, periodo: '2026-07', comunidadeId: 'porto',
+      registos: [{ id: 'pago', data: '2026-07-14', valor: 1, categoria: 'Obras' }, { id: 'teste', data: '2026-07-14', valor: 5000, categoria: 'Obras' }],
+      total: 5001, n: 2, atualizadoEm: '', atualizadoPor: '' };
+    await m.arm.gravarLotes([{ col: 'lotes', id: antigo.id, lote: antigo }, { col: 'lotes_conf', id: antigo.id, lote: antigo }]);
+
+    const inc = await sincronizar(m.arm, CFG, 'teste'); // incremental não limpa
+    expect(m.cols.lotes.get(antigo.id)!.total).toBe(5001);
+    expect(inc.resultado.contribuir.naoPagas).toBe(1);
+
+    const e = await sincronizar(m.arm, CFG, 'teste', { modo: 'completo' });
+    expect(e.modo).toBe('completo');
+    expect(m.cols.lotes.get(antigo.id)!.total).toBe(1);
+    expect(m.cols.lotes_conf.get(antigo.id)!.registos.map((r) => r.id)).toEqual(['pago']);
+    expect(e.resultado.contribuir.naoPagas).toBe(1);
+  });
+
   it('não toca em meses fechados', async () => {
     vi.stubGlobal('fetch', jotformFalso({ [F]: [{ id: 'a', created_at: '2026-03-02 10:00:00', comunidade: 'Almada', valor: '50', nome: 'Ana' }] }).fetchFalso);
     const m = armazemMemoria(['2026-03']);
