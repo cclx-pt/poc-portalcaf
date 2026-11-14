@@ -10,6 +10,7 @@ import EntradasConjunto from './pages/EntradasConjunto';
 import Assistencia from './pages/Assistencia';
 import DemonstracaoResultados from './pages/DemonstracaoResultados';
 import Comparacao from './pages/Comparacao';
+import Relatorio from './pages/Relatorio';
 import Bancos from './pages/Bancos';
 import CustosFixos from './pages/CustosFixos';
 import Orcamento from './pages/Orcamento';
@@ -48,6 +49,7 @@ export default function App() {
             <Route path="assistencia" element={<Se nivel="privado"><Assistencia /></Se>} />
             <Route path="analise/resultados" element={<Se nivel="privado"><DemonstracaoResultados /></Se>} />
             <Route path="analise/comparacao" element={<Se nivel="privado"><Comparacao /></Se>} />
+            <Route path="analise/relatorio" element={<Se nivel="privado"><Relatorio /></Se>} />
             <Route path="bancos" element={<Se acao="bancos"><Bancos /></Se>} />
             <Route path="custos-fixos" element={<Se nivel="privado"><CustosFixos /></Se>} />
             <Route path="orcamento" element={<Se nivel="privado"><Orcamento /></Se>} />

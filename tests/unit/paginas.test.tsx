@@ -34,7 +34,8 @@ const RESUMOS = [
 ];
 
 vi.mock('../../src/lib/db', () => ({
-  listarResumos: () => sync(RESUMOS),
+  listarResumos: (_a: unknown, ano: number) => sync(ano === 2026 ? RESUMOS : []),
+  listarCustosFixos: () => sync([{ id: 'ss', comunidadeId: 'almada', rubrica: 'Segurança Social', valorMensal: 1, inicio: '2026-01', fim: null, nivel: 'privado', notas: 'Valor pendente de confirmação.' }]),
   listarExcecoes: () => sync([{ id: '2026-03-22_cclx', data: '2026-03-22', ambito: 'cclx', motivo: 'Culto conjunto', criadoPor: 'caf@x.pt', criadoEm: '' }]),
   gravarExcecao: vi.fn(), apagarExcecao: vi.fn(), auditar: vi.fn(),
   listarCategorias: () => sync([]),
@@ -102,5 +103,20 @@ describe('páginas', () => {
     expect(html).not.toContain('NaN');
     expect(html).toContain('-200 €'); // mapa de calor: resultado do Porto em março
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/comparacao.html', html);
+  });
+
+  it('Relatório custos x entradas: resumo, tabelas e notas', async () => {
+    const { default: Relatorio } = await import('../../src/pages/Relatorio');
+    const html = renderToString(<Relatorio />);
+    expect(html).toContain('RELATÓRIO FINANCEIRO · CCLX');
+    expect(html).toContain('Custos x entradas e assistência');
+    expect(html).toContain('Resumo anual');
+    expect(html).toContain('Mês a mês');
+    expect(html).toContain('Pendente de confirmação');
+    expect(html).toContain('1.300,00 €'); // entradas do ano (março)
+    expect(html).not.toContain('NaN');
+    expect(html).not.toContain('Infinity');
+    expect(html).not.toContain('Vencimentos e encargos');
+    if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/relatorio.html', html);
   });
 });
