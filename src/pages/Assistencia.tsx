@@ -5,6 +5,7 @@ import { Importar } from '../components/Importar';
 import { SyncEstado } from '../components/SyncEstado';
 import { listarComunidades, listarLotes } from '../lib/db';
 import { MESES, MESES_CURTOS, num } from '../lib/format';
+import { eDomingo } from '../lib/domingos';
 
 /** Grupos de idade do Registo de Presenças. Só pessoas: nunca símbolo de moeda. */
 const GRUPOS = [
@@ -51,7 +52,10 @@ export default function Assistencia() {
   const porMes = Array.from({ length: 12 }, () => vazio());
   const ano_ = vazio();
   const porCom = new Map<string, Agregado>();
-  for (const l of linhas) {
+  // A métrica é a celebração de domingo: só os registos de domingo entram nos totais e médias.
+  const domingos = linhas.filter((l) => eDomingo(l.data));
+  const foraDeDomingo = linhas.length - domingos.length;
+  for (const l of domingos) {
     somar(porMes[l.mes - 1], l);
     somar(ano_, l);
     if (!porCom.has(l.comunidadeId)) porCom.set(l.comunidadeId, vazio());
@@ -101,7 +105,7 @@ export default function Assistencia() {
 
         <div className="sec">
           <h2>Mapa mensal</h2>
-          <p className="muted small">Total = soma das presenças registadas no mês. Média = total a dividir pelo número de registos. Máx. = maior número de jovens e adultos num só registo.</p>
+          <p className="muted small">Só contam os registos de domingo (celebrações){foraDeDomingo ? `; ${foraDeDomingo} registo(s) noutros dias aparecem na lista mas não entram nas contas` : ''}. Total = soma das presenças registadas no mês. Média = total a dividir pelo número de registos. Máx. = maior número de jovens e adultos num só registo.</p>
           <div className="tabela"><table>
             <thead>
               <tr>
@@ -162,9 +166,9 @@ export default function Assistencia() {
         <div className="sec">
           <h2>Registos ({linhas.length > 500 ? 'últimos 500 de ' : ''}{linhas.length})</h2>
           <div className="tabela"><table>
-            <thead><tr><th>Data</th><th>Comunidade</th><th>Evento</th>{GRUPOS.map((g) => <th key={g.key} className="num">{g.nome}</th>)}<th className="num">Total</th></tr></thead>
+            <thead><tr><th>Data</th><th>Dia</th><th>Comunidade</th><th>Evento</th>{GRUPOS.map((g) => <th key={g.key} className="num">{g.nome}</th>)}<th className="num">Total</th></tr></thead>
             <tbody>{linhas.slice(0, 500).map((l, i) => (
-              <tr key={i}><td>{dataPt(l.data)}</td><td>{nomes.get(l.comunidadeId) ?? l.comunidadeId}</td><td>{l.evento}</td>
+              <tr key={i} className={eDomingo(l.data) ? '' : 'muted'}><td>{dataPt(l.data)}</td><td>{eDomingo(l.data) ? 'domingo' : 'outro dia (não conta)'}</td><td>{nomes.get(l.comunidadeId) ?? l.comunidadeId}</td><td>{l.evento}</td>
                 {GRUPOS.map((g) => <td key={g.key} className="num">{num(l[g.key])}</td>)}<td className="num">{num(l.total)}</td></tr>
             ))}</tbody>
           </table></div>

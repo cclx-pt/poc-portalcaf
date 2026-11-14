@@ -1,5 +1,6 @@
 import { periodo, r2 } from './format';
 import { OUTROS_FUNCIONAMENTO, classificador } from './rubricas';
+import { eDomingo } from './domingos';
 import type { BancoLote, Categoria, Comunidade, CustoFixo, Lote, ParteRubrica, Publico, PublicoMes, PublicoSite, Resumo, ResumoMes } from './types';
 
 export interface DadosCalculo {
@@ -41,7 +42,7 @@ export function pesos12m(assistencia: Lote[], assistenciaAnterior: Lote[], ano: 
     const k = l.ano * 12 + l.mes;
     if (k > fim || k <= fim - 12) continue;
     const a = acc.get(l.comunidadeId) ?? { soma: 0, n: 0 };
-    for (const r of l.registos) { a.soma += r.valor; a.n++; }
+    for (const r of l.registos) if (eDomingo(r.data)) { a.soma += r.valor; a.n++; } // só celebrações de domingo
     acc.set(l.comunidadeId, a);
   }
   return new Map([...acc].filter(([, a]) => a.n).map(([c, a]) => [c, r2(a.soma / a.n)]));
@@ -138,6 +139,7 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
   // Assistência média de adultos por comunidade e mês.
   const ass = new Map<string, { soma: number; n: number }>();
   for (const l of d.assistencia) for (const r of l.registos) {
+    if (!eDomingo(r.data)) continue; // a métrica é a celebração de domingo
     const k = `${l.comunidadeId}|${l.mes}`;
     const a = ass.get(k) ?? { soma: 0, n: 0 }; a.soma += r.valor; a.n++; ass.set(k, a);
   }

@@ -12,8 +12,12 @@ const LOTES: Record<string, Lote[]> = {
   contribuir: [lote('contribuir', 'almada', 3, [{ valor: 50, pessoaRef: 'Contribuinte #A1' }, { valor: 20, pessoaRef: 'Contribuinte #B2', categoria: 'Oferta' }]), lote('contribuir', 'bolsa-geral', 4, [{ valor: 100 }])],
   depositos: [lote('depositos', 'almada', 3, [{ valor: 230.5, categoria: 'Coletas em dinheiro' }])],
   assistencia: [
-    lote('assistencia', 'almada', 3, [{ valor: 120, evento: 'Culto', extra: { jump: 8, criancas: 20, connects: 5 } }, { valor: 100, evento: 'Culto', extra: { jump: 6, criancas: 15 } }]),
-    lote('assistencia', 'porto', 4, [{ valor: 40, evento: 'Culto' }]),
+    lote('assistencia', 'almada', 3, [
+      { data: '2026-03-01', valor: 120, evento: 'Culto', extra: { jump: 8, criancas: 20, connects: 5 } },
+      { data: '2026-03-08', valor: 100, evento: 'Culto', extra: { jump: 6, criancas: 15 } },
+      { data: '2026-03-07', valor: 999, evento: 'Retiro' }, // sábado: aparece na lista, não conta
+    ]),
+    lote('assistencia', 'porto', 4, [{ data: '2026-04-05', valor: 40, evento: 'Culto' }]),
   ],
 };
 
@@ -53,6 +57,8 @@ describe('páginas', () => {
     expect(html).toContain('>130,0<'); // média mensal (260/2 meses)
     expect(html).toContain('>314<'); // total de pessoas (149+121+40)
     expect(html).toContain('março');
+    expect(html).toContain('>999<'); // na lista de registos
+    expect(html).toContain('Só contam os registos de domingo');
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/assistencia.html', html);
   });
   it('Entradas: junta contribuições e depósitos', async () => {

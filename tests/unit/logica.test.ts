@@ -84,9 +84,11 @@ describe('importação Jotform', () => {
   });
 });
 
+/** Primeiro domingo do mês de 2026 (as médias de assistência só contam domingos). */
+const domingo26 = (mes: number) => { const d = new Date(Date.UTC(2026, mes - 1, 1)); d.setUTCDate(1 + ((7 - d.getUTCDay()) % 7)); return d.toISOString().slice(0, 10); };
 const lote = (origem: Lote['origem'], comunidadeId: string, mes: number, valores: number[]): Lote => ({
   id: `${origem}_2026_${mes}_${comunidadeId}`, origem, ano: 2026, mes, periodo: `2026-${String(mes).padStart(2, '0')}`, comunidadeId,
-  registos: valores.map((v, i) => ({ id: `${mes}-${i}`, data: `2026-${String(mes).padStart(2, '0')}-10`, valor: v, categoria: origem === 'despesas' ? 'Material' : 'Dízimos' })),
+  registos: valores.map((v, i) => ({ id: `${mes}-${i}`, data: domingo26(mes), valor: v, categoria: origem === 'despesas' ? 'Material' : 'Dízimos' })),
   total: valores.reduce((a, b) => a + b, 0), n: valores.length, atualizadoEm: '', atualizadoPor: '',
 });
 
