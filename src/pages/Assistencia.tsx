@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros } from '../components/ui';
+import { Estado, GraficoBarras, Kpi, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { Importar } from '../components/Importar';
 import { SyncEstado } from '../components/SyncEstado';
-import { apagarExcecao, auditar, gravarExcecao, lerConfigAssistencia, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
+import { lerConfigAssistencia, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
+import { sincronizarAgora } from '../lib/syncWeb';
 import { MESES, MESES_CURTOS, num } from '../lib/format';
 import { contaParaMedia, domingosEmFalta, eDomingo } from '../lib/domingos';
-import type { ExcecaoAssistencia } from '../lib/types';
 
 /** Grupos de idade do Registo de Presenças. Só pessoas: nunca símbolo de moeda. */
 const GRUPOS = [
@@ -42,28 +42,24 @@ export default function Assistencia() {
   const coms = useCarregar(listarComunidades, []);
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
   const excecoes = useCarregar(listarExcecoes, []);
-  const podeEditar = pode('aprovar'); // Master e CAF
-  const hojeIso = new Date().toISOString().slice(0, 10);
-  const [nova, setNova] = useState({ data: '', ambito: 'cclx', motivo: '' });
-  const [msgExc, setMsgExc] = useState<string | null>(null);
-  async function guardarExcecao() {
-    setMsgExc(null);
+  // "Calcular": traz os registos novos do Jotform (Master), recalcula os resumos e atualiza o mapa e os domingos em falta.
+  const [aCalcular, setACalcular] = useState(false);
+  const [msgCalc, setMsgCalc] = useState<string | null>(null);
+  async function calcular() {
+    setACalcular(true); setMsgCalc(null);
     try {
-      if (!eDomingo(nova.data)) throw new Error('A data tem de ser um domingo.');
-      if (!nova.motivo.trim()) throw new Error('Indique o motivo.');
-      const e: ExcecaoAssistencia = { id: `${nova.data}_${nova.ambito}`, data: nova.data, ambito: nova.ambito, motivo: nova.motivo.trim(), criadoPor: acesso!.email, criadoEm: new Date().toISOString() };
-      await gravarExcecao(e);
-      await auditar(acesso!.email, 'exceção de assistência', `${e.data} · ${e.ambito === 'cclx' ? 'Toda a CCLX' : nomes.get(e.ambito) ?? e.ambito} · ${e.motivo}`);
-      setNova({ data: '', ambito: 'cclx', motivo: '' });
-      await excecoes.recarregar();
-    } catch (err) { setMsgExc(err instanceof Error ? err.message : String(err)); }
+      if (acesso?.papel === 'master') {
+        const e = await sincronizarAgora(acesso, setMsgCalc, 'incremental');
+        const novos = e.resultado.assistencia?.novos ?? 0;
+        setMsgCalc(e.ok ? `Atualizado: ${novos} registo${novos === 1 ? '' : 's'} de presenças novo${novos === 1 ? '' : 's'}; resumos recalculados.` : `Terminou com erros: ${e.erros.join('; ')}`);
+      } else {
+        setMsgCalc('Dados recarregados. A leitura de registos novos do Jotform é feita pela sincronização automática ou pelo Master.');
+      }
+      await Promise.all([lotes.recarregar(), excecoes.recarregar(), config.recarregar()]);
+    } catch (e) { setMsgCalc(mensagemErro(e)); }
+    finally { setACalcular(false); }
   }
-  async function removerExcecao(e: ExcecaoAssistencia) {
-    if (!confirm(`Apagar a exceção de ${dataPt(e.data)}?`)) return;
-    await apagarExcecao(e.id);
-    await auditar(acesso!.email, 'apagar exceção de assistência', `${e.data} · ${e.ambito}`);
-    await excecoes.recarregar();
-  }
+  const hojeIso = new Date().toISOString().slice(0, 10);
 
   const todas: Linha[] = useMemo(() => (lotes.dados ?? [])
     .filter((l) => comunidade === 'todas' || l.comunidadeId === comunidade)
@@ -102,19 +98,22 @@ export default function Assistencia() {
     ano, hoje: hojeIso, comunidades: (coms.dados ?? []).filter((c) => (c.ativo ?? true) && (comunidade === 'todas' || c.id === comunidade)),
     assistencia: lotes.dados ?? [], excecoes: excecoes.dados ?? [], evento: tipoCelebracao,
   });
-  const excAno = (excecoes.dados ?? []).filter((e) => e.data.startsWith(String(ano)));
 
   return (
     <>
       <div className="linha" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
-          <h1>Assistência {ano}</h1>
-          <p className="muted">Presenças registadas no formulário CCLX : Registo de Presenças. Valores em número de pessoas. A média de jovens e adultos de cada mês serve para distribuir a bolsa geral.</p>
+          <h1>Presenças por evento {ano}</h1>
+          <p className="muted">Registo de presenças nos cultos e restantes atividades da comunidade (formulário CCLX : Registo de Presenças). Valores em número de pessoas. A média de jovens e adultos de cada mês serve para distribuir a bolsa geral.</p>
           <SyncEstado />
         </div>
-        <div className="acoes">{pode('importar') && <button className="sec" onClick={() => setImportar(true)}>Importação manual (recurso)</button>}</div>
+        <div className="acoes">
+          <button onClick={() => void calcular()} disabled={aCalcular} title="Vai buscar os registos novos ao Jotform e atualiza o mapa e os domingos em falta">{aCalcular ? 'A calcular…' : 'Calcular'}</button>
+          {pode('importar') && <button className="sec" onClick={() => setImportar(true)}>Importação manual (recurso)</button>}
+        </div>
       </div>
 
+      {msgCalc && <div className="nota">{msgCalc}</div>}
       <div className="filtros" style={{ marginBottom: 12 }}>
         <label className="campo">Evento
           <select value={evento} onChange={(e) => setEvento(e.target.value)}>
@@ -232,36 +231,7 @@ export default function Assistencia() {
         </> : <p className="muted">Sem domingos esperados neste período.</p>}
       </div>
 
-      <div className="sec">
-        <h2>Domingos sem assistência esperada (exceções)</h2>
-        <p className="muted small">Por exemplo: culto conjunto, retiro ou encerramento. Podem valer para toda a CCLX ou só para uma comunidade.</p>
-        {podeEditar && (
-          <div className="filtros" style={{ alignItems: 'flex-end', marginBottom: 10 }}>
-            <label className="campo">Domingo<input type="date" value={nova.data} onChange={(e) => setNova({ ...nova, data: e.target.value })} /></label>
-            <label className="campo">Âmbito
-              <select value={nova.ambito} onChange={(e) => setNova({ ...nova, ambito: e.target.value })}>
-                <option value="cclx">Toda a CCLX</option>
-                {(coms.dados ?? []).filter((c) => !c.especial).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-            </label>
-            <label className="campo">Motivo<input value={nova.motivo} onChange={(e) => setNova({ ...nova, motivo: e.target.value })} style={{ width: 240 }} /></label>
-            <button onClick={() => void guardarExcecao()} disabled={!nova.data}>Acrescentar</button>
-          </div>
-        )}
-        {msgExc && <div className="aviso">{msgExc}</div>}
-        {excAno.length ? (
-          <div className="tabela"><table>
-            <thead><tr><th>Domingo</th><th>Âmbito</th><th>Motivo</th><th>Registado por</th>{podeEditar && <th />}</tr></thead>
-            <tbody>{excAno.map((e) => (
-              <tr key={e.id}>
-                <td>{dataPt(e.data)}</td><td>{e.ambito === 'cclx' ? 'Toda a CCLX' : nomes.get(e.ambito) ?? e.ambito}</td><td>{e.motivo}</td>
-                <td className="small muted">{e.criadoPor}</td>
-                {podeEditar && <td><button className="link" onClick={() => void removerExcecao(e)}>Apagar</button></td>}
-              </tr>
-            ))}</tbody>
-          </table></div>
-        ) : <p className="muted">Sem exceções em {ano}.</p>}
-      </div>
+      <p className="muted small">Os domingos sem assistência esperada (cultos conjuntos, retiros, encerramentos) registam-se na Configuração, no separador Assistência.</p>
 
       {importar && <Importar origem="assistencia" onFechar={() => setImportar(false)} onFeito={() => void lotes.recarregar()} />}
     </>

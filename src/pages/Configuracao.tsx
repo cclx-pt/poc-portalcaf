@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { SyncEstado } from '../components/SyncEstado';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
-import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia } from '../lib/db';
+import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
 import { CATEGORIAS, COMUNIDADES, CONTAS, CUSTOS_FIXOS_CDR, JOTFORM_FORMS } from '../lib/seed';
 import { NIVEIS, NIVEL_LABEL, type Categoria, type Comunidade, type Conta, type Nivel } from '../lib/types';
 import { formatarIban, ibanValido, limparIban } from '../lib/iban';
 import { usosCategoria, usosComunidade, usosConta } from '../lib/uso';
 import { parseData, slug } from '../lib/format';
+import { eDomingo } from '../lib/domingos';
+import type { ExcecaoAssistencia } from '../lib/types';
 import { testarChave, type ResultadoTeste } from '../lib/jotform';
 import { sincronizarAgora } from '../lib/syncWeb';
 import { RUBRICAS_ENTRADA, RUBRICAS_SAIDA, categoriasEmFalta, rubricaInicial } from '../lib/rubricas';
@@ -84,6 +86,32 @@ export default function Configuracao() {
       await configAss.recarregar(); setTipoNovo(null);
       setMsgTipo(`Guardado. Resumos de ${anoCfg - 1} e ${anoCfg} recalculados.`);
     } catch (e) { setMsgTipo(mensagemErro(e)); }
+  }
+  // Separadores por área, para a página não ficar toda junta.
+  const [area, setArea] = useState<'estrutura' | 'assistencia' | 'jotform'>('estrutura');
+  // Exceções de assistência (domingos sem culto esperado).
+  const excecoes = useCarregar(listarExcecoes, []);
+  const [nova, setNova] = useState({ data: '', ambito: 'cclx', motivo: '' });
+  const [msgExc, setMsgExc] = useState<string | null>(null);
+  const dataPt = (d: string) => d.split('-').reverse().join('/');
+  const nomeCom = (id: string) => (coms.dados ?? []).find((c) => c.id === id)?.nome ?? id;
+  async function guardarExcecao() {
+    setMsgExc(null);
+    try {
+      if (!eDomingo(nova.data)) throw new Error('A data tem de ser um domingo.');
+      if (!nova.motivo.trim()) throw new Error('Indique o motivo.');
+      const e: ExcecaoAssistencia = { id: `${nova.data}_${nova.ambito}`, data: nova.data, ambito: nova.ambito, motivo: nova.motivo.trim(), criadoPor: acesso!.email, criadoEm: new Date().toISOString() };
+      await gravarExcecao(e);
+      await auditar(acesso!.email, 'exceção de assistência', `${e.data} · ${e.ambito === 'cclx' ? 'Toda a CCLX' : nomeCom(e.ambito)} · ${e.motivo}`);
+      setNova({ data: '', ambito: 'cclx', motivo: '' });
+      await excecoes.recarregar();
+    } catch (err) { setMsgExc(err instanceof Error ? err.message : String(err)); }
+  }
+  async function removerExcecao(e: ExcecaoAssistencia) {
+    if (!confirm(`Apagar a exceção de ${dataPt(e.data)}?`)) return;
+    await apagarExcecao(e.id);
+    await auditar(acesso!.email, 'apagar exceção de assistência', `${e.data} · ${e.ambito}`);
+    await excecoes.recarregar();
   }
   const [teste, setTeste] = useState<ResultadoTeste | null>(null);
   const [aTestar, setATestar] = useState(false);
@@ -223,6 +251,13 @@ export default function Configuracao() {
       <p className="muted">Só o Master e o CAF podem criar, alterar ou apagar. Entidades com dados não se apagam: desativam-se, para manter o histórico. Todas as alterações ficam na auditoria.</p>
       {msg && <div className="nota">{msg}</div>}
 
+      <div className="abas" role="tablist">
+        {([['estrutura', 'Comunidades, contas e categorias'], ['assistencia', 'Assistência'], ['jotform', 'Jotform e sincronização']] as const).map(([k, rot]) => (
+          <button key={k} role="tab" aria-selected={area === k} className={area === k ? 'ativa' : ''} onClick={() => setArea(k)}>{rot}</button>
+        ))}
+      </div>
+
+      {area === 'estrutura' && <>
       <div className="sec card">
         <h2>Dados de referência</h2>
         <p className="small">Cria só o que ainda não existe: comunidades (Barreiro até 31/10/2026), contas CGD e Santander, categorias por atividade e custos fixos reais de Caldas da Rainha. Não altera o que já foi editado.</p>
@@ -290,8 +325,11 @@ export default function Configuracao() {
         </table></div>
       </div>
 
+      </>}
+
+      {area === 'assistencia' && <>
       <div className="sec card">
-        <h2>Assistência: tipo de celebração</h2>
+        <h2>Tipo de celebração</h2>
         <p className="small">Tipo de evento (campo "Evento" do Registo de Presenças) que conta como <b>celebração de domingo</b>. Só os registos deste tipo entram na média de jovens e adultos usada para repartir a bolsa geral e os gerais, e nos valores por pessoa; os domingos sem registo deste tipo aparecem como em falta.</p>
         {acesso?.papel === 'master' ? (
           <div className="linha">
@@ -308,6 +346,38 @@ export default function Configuracao() {
         {msgTipo && <p className="small" style={{ marginTop: 8 }}>{msgTipo}</p>}
       </div>
 
+      <div className="sec">
+        <h2>Domingos sem assistência esperada (exceções)</h2>
+        <p className="muted small">Por exemplo: culto conjunto, retiro ou encerramento. Podem valer para toda a CCLX ou só para uma comunidade.</p>
+        <div className="filtros" style={{ alignItems: 'flex-end', marginBottom: 10 }}>
+            <label className="campo">Domingo<input type="date" value={nova.data} onChange={(e) => setNova({ ...nova, data: e.target.value })} /></label>
+            <label className="campo">Âmbito
+              <select value={nova.ambito} onChange={(e) => setNova({ ...nova, ambito: e.target.value })}>
+                <option value="cclx">Toda a CCLX</option>
+                {(coms.dados ?? []).filter((c) => !c.especial).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </label>
+            <label className="campo">Motivo<input value={nova.motivo} onChange={(e) => setNova({ ...nova, motivo: e.target.value })} style={{ width: 240 }} /></label>
+            <button onClick={() => void guardarExcecao()} disabled={!nova.data}>Acrescentar</button>
+          </div>
+        {msgExc && <div className="aviso">{msgExc}</div>}
+        {(excecoes.dados ?? []).length ? (
+          <div className="tabela"><table>
+            <thead><tr><th>Domingo</th><th>Âmbito</th><th>Motivo</th><th>Registado por</th><th /></tr></thead>
+            <tbody>{(excecoes.dados ?? []).map((e) => (
+              <tr key={e.id}>
+                <td>{dataPt(e.data)}</td><td>{e.ambito === 'cclx' ? 'Toda a CCLX' : nomeCom(e.ambito)}</td><td>{e.motivo}</td>
+                <td className="small muted">{e.criadoPor}</td>
+                <td><button className="link" onClick={() => void removerExcecao(e)}>Apagar</button></td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        ) : <p className="muted">Sem exceções registadas.</p>}
+      </div>
+
+      </>}
+
+      {area === 'jotform' && <>
       <div className="sec card">
         <h2>Sincronização automática com o Jotform (só leitura)</h2>
         <p className="small">Formulários: {Object.values(JOTFORM_FORMS).map((f) => `${f.nome} (${f.id})`).join(' · ')}.</p>
@@ -351,6 +421,8 @@ export default function Configuracao() {
           )}
         </>}
       </div>
+
+      </>}
 
       {edit && (
         <Modal titulo={`${edit.novo ? 'Nova' : 'Editar'} ${edit.tipo === 'comunidade' ? 'comunidade' : edit.tipo === 'conta' ? 'conta bancária' : 'categoria'}`} onFechar={() => setEdit(null)}>

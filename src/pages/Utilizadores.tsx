@@ -19,7 +19,7 @@ export default function Utilizadores() {
     if (!edit) return;
     try {
       const p = { ...edit, email: edit.email.trim().toLowerCase(), comunidades: edit.papel === 'caf' ? ['*'] : edit.comunidades };
-      if (p.papel === 'tesoureiro' && (p.comunidades.includes('*') || !p.comunidades.length)) { setMsg('O tesoureiro tem de ter uma comunidade.'); return; }
+      if (p.papel !== 'caf' && !p.comunidades.length) { setMsg('Escolha "Todas" ou pelo menos uma comunidade.'); return; }
       await gravarPerfil(p);
       await auditar(acesso!.email, 'utilizador', `${p.email}: ${p.papel}, ${p.nivel}, ${p.comunidades.join(',')}, ${p.ativo ? 'ativo' : 'inativo'}`);
       setEdit(null); await perfis.recarregar();
@@ -35,7 +35,7 @@ export default function Utilizadores() {
       <div className="linha" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <h1>Utilizadores</h1>
-          <p className="muted">Master (fixos): {MASTER_EMAILS.join(', ')}. O CAF vê toda a organização; o tesoureiro só a sua comunidade; a leitura só consulta, até ao nível definido.</p>
+          <p className="muted">Master (fixos): {MASTER_EMAILS.join(', ')}. O CAF vê toda a organização; o tesoureiro e a leitura veem tudo ou só as comunidades escolhidas; a leitura só consulta, até ao nível definido.</p>
         </div>
         <button onClick={() => setEdit(novo())}>Novo utilizador</button>
       </div>
@@ -62,7 +62,7 @@ export default function Utilizadores() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
               <label className="campo">Email (conta Google ou email/senha)<input type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></label>
               <label className="campo">Perfil
-                <select value={edit.papel} onChange={(e) => { const papel = e.target.value as Papel; setEdit({ ...edit, papel, nivel: NIVEL_DEFEITO[papel], comunidades: papel === 'caf' ? ['*'] : papel === 'tesoureiro' ? [] : edit.comunidades }); }}>
+                <select value={edit.papel} onChange={(e) => { const papel = e.target.value as Papel; setEdit({ ...edit, papel, nivel: NIVEL_DEFEITO[papel], comunidades: papel === 'caf' ? ['*'] : edit.comunidades }); }}>
                   {(['caf', 'tesoureiro', 'leitura'] as Papel[]).map((p) => <option key={p} value={p}>{PAPEL_LABEL[p]}</option>)}
                 </select>
               </label>
@@ -75,14 +75,15 @@ export default function Utilizadores() {
             </div>
             {edit.papel !== 'caf' && (
               <fieldset style={{ marginTop: 12, border: '1px solid #e6e6e6' }}>
-                <legend className="small">Comunidades</legend>
-                {edit.papel === 'leitura' && <label className="small" style={{ marginRight: 12 }}><input type="checkbox" checked={edit.comunidades.includes('*')} onChange={(e) => setEdit({ ...edit, comunidades: e.target.checked ? ['*'] : [] })} /> Todas</label>}
+                <legend className="small">Comunidades cujos dados pode ver</legend>
+                <label className="small" style={{ marginRight: 12 }}><input type="checkbox" checked={edit.comunidades.includes('*')} onChange={(e) => setEdit({ ...edit, comunidades: e.target.checked ? ['*'] : [] })} /> <b>Ver tudo (todas as comunidades)</b></label>
                 {!edit.comunidades.includes('*') && (coms.dados ?? []).filter((c) => !c.especial && (c.ativo !== false || edit.comunidades.includes(c.id))).map((c) => (
                   <label key={c.id} className="small" style={{ marginRight: 12, whiteSpace: 'nowrap' }}>
-                    <input type={edit.papel === 'tesoureiro' ? 'radio' : 'checkbox'} name="com" checked={edit.comunidades.includes(c.id)}
-                      onChange={(e) => setEdit({ ...edit, comunidades: edit.papel === 'tesoureiro' ? [c.id] : e.target.checked ? [...edit.comunidades, c.id] : edit.comunidades.filter((x) => x !== c.id) })} /> {c.nome}
+                    <input type="checkbox" checked={edit.comunidades.includes(c.id)}
+                      onChange={(e) => setEdit({ ...edit, comunidades: e.target.checked ? [...edit.comunidades, c.id] : edit.comunidades.filter((x) => x !== c.id) })} /> {c.nome}
                   </label>
                 ))}
+                <p className="muted" style={{ margin: '6px 0 0' }}>Vale para tudo o que o utilizador vê no portal, dentro do seu nível de privacidade. É imposto nas regras da base de dados, não só no ecrã.</p>
               </fieldset>
             )}
             <div className="acoes" style={{ marginTop: 14 }}>
