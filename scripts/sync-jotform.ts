@@ -4,6 +4,7 @@
  * Variáveis de ambiente:
  *   FIREBASE_SERVICE_ACCOUNT  JSON da conta de serviço (só com acesso ao Firestore), segredo do repositório
  *   SYNC_MODO                 'incremental' (por defeito) ou 'completo'
+ *   SYNC_DESDE                data de referência da releitura completa (AAAA-MM-DD; por defeito 2025-01-01)
  *
  * A chave da API Jotform é lida do Firestore (segredos/jotform), onde o Master a guarda no portal.
  * Em alternativa, pode vir da variável JOTFORM_API_KEY (e JOTFORM_BASE).
@@ -115,8 +116,10 @@ const armazem: ArmazemSync = {
 
 async function main() {
   const modo = process.env.SYNC_MODO === 'completo' ? 'completo' : 'incremental';
+  const desde = process.env.SYNC_DESDE?.trim() || undefined;
+  if (desde && !/^\d{4}-\d{2}-\d{2}$/.test(desde)) throw new Error(`SYNC_DESDE inválida: ${desde} (use AAAA-MM-DD)`);
   const cfg = await configJotform();
-  const estado = await sincronizar(armazem, cfg, QUEM, { modo, onProgresso: (m) => console.log(m) });
+  const estado = await sincronizar(armazem, cfg, QUEM, { modo, desde, onProgresso: (m) => console.log(m) });
   for (const [k, v] of Object.entries(estado.resultado)) console.log(k, JSON.stringify(v));
   if (!estado.ok) { console.error(estado.erros); process.exit(1); }
 }

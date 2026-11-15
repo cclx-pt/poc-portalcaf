@@ -7,7 +7,7 @@ import { CATEGORIAS, COMUNIDADES, CONTAS, CUSTOS_FIXOS_CDR, JOTFORM_FORMS } from
 import { NIVEIS, NIVEL_LABEL, type Categoria, type Comunidade, type Conta, type Nivel } from '../lib/types';
 import { formatarIban, ibanValido, limparIban } from '../lib/iban';
 import { usosCategoria, usosComunidade, usosConta } from '../lib/uso';
-import { slug } from '../lib/format';
+import { parseData, slug } from '../lib/format';
 import { testarChave, type ResultadoTeste } from '../lib/jotform';
 import { sincronizarAgora } from '../lib/syncWeb';
 import { RUBRICAS_ENTRADA, RUBRICAS_SAIDA, categoriasEmFalta, rubricaInicial } from '../lib/rubricas';
@@ -42,13 +42,18 @@ export default function Configuracao() {
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [aSincronizar, setASincronizar] = useState(false);
   async function forcarSync(modo: 'incremental' | 'completo' = 'incremental') {
-    const pergunta = modo === 'completo'
-      ? 'Reler tudo do Jotform desde 01/01/2025?\n\nOs lotes dos meses abertos são substituídos: sai o que deixou de cumprir as regras (ex.: contribuições com o campo Pago em branco) e o que foi apagado no Jotform. Meses fechados não mudam. Pode demorar alguns minutos.'
-      : 'Sincronizar agora com o Jotform? Só são integradas as submissões novas desde a última sincronização.';
-    if (!confirm(pergunta)) return;
+    let desde: string | undefined;
+    if (modo === 'completo') {
+      // Data de referência da releitura: só entram submissões e movimentos a partir dela.
+      const resposta = prompt('Reler tudo do Jotform a partir de que data de referência?\n\nFormato: DD/MM/AAAA. Só entram registos a partir desta data.', '01/01/2015');
+      if (resposta == null) return;
+      desde = parseData(resposta.trim()) ?? undefined;
+      if (!desde) { setSyncMsg('Data inválida. Use o formato DD/MM/AAAA (ex.: 01/01/2015).'); return; }
+      if (!confirm(`Reler tudo do Jotform desde ${desde.split('-').reverse().join('/')}?\n\nOs lotes dos meses abertos são substituídos: sai o que deixou de cumprir as regras (ex.: contribuições com o campo Pago em branco), o que foi apagado no Jotform e o que ficou anterior à data de referência. Meses fechados não mudam. Pode demorar alguns minutos.`)) return;
+    } else if (!confirm('Sincronizar agora com o Jotform? Só são integradas as submissões novas desde a última sincronização.')) return;
     setASincronizar(true); setSyncMsg('A iniciar…');
     try {
-      const e = await sincronizarAgora(acesso!, setSyncMsg, modo);
+      const e = await sincronizarAgora(acesso!, setSyncMsg, modo, desde);
       const novos = Object.values(e.resultado).reduce((s, r) => s + r.novos, 0);
       const naoPagas = e.resultado.contribuir?.naoPagas ?? 0;
       const removidos = Object.values(e.resultado).reduce((s, r) => s + r.removidos, 0);

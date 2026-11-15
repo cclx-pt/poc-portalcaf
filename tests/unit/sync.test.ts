@@ -163,6 +163,20 @@ describe('sincronização incremental', () => {
     expect(e.resultado.contribuir.naoPagas).toBe(1);
   });
 
+  it('reler tudo usa a data de referência pedida', async () => {
+    const subs: Record<string, Sub[]> = { [F]: [
+      { id: 'velho', created_at: '2016-05-01 10:00:00', comunidade: 'Almada', valor: '10', nome: 'Ana', pago: 'PAGO' },
+      { id: 'novo', created_at: '2026-03-01 10:00:00', comunidade: 'Almada', valor: '20', nome: 'Rui', pago: 'PAGO' },
+    ] };
+    const j = jotformFalso(subs);
+    vi.stubGlobal('fetch', j.fetchFalso);
+    const m = armazemMemoria();
+    const e = await sincronizar(m.arm, CFG, 'teste', { modo: 'completo', desde: '2015-01-01' });
+    expect(j.chamadas.find((c) => c.form === F)!.desde).toBe('2015-01-01 00:00:00');
+    expect(e.resultado.contribuir.registos).toBe(2); // o registo de 2016 também entra
+    expect([...m.cols.lotes.keys()].some((k) => k.includes('2016'))).toBe(true);
+  });
+
   it('não toca em meses fechados', async () => {
     vi.stubGlobal('fetch', jotformFalso({ [F]: [{ id: 'a', created_at: '2026-03-02 10:00:00', comunidade: 'Almada', valor: '50', nome: 'Ana' }] }).fetchFalso);
     const m = armazemMemoria(['2026-03']);

@@ -13,6 +13,9 @@ on:
         type: choice
         options: [incremental, completo]
         default: incremental
+      desde:
+        description: 'Data de referência da releitura completa (AAAA-MM-DD)'
+        default: '2015-01-01'
 
 concurrency:
   group: sync-jotform
@@ -33,4 +36,5 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           SYNC_MODO: ${{ inputs.modo || 'incremental' }}
+          SYNC_DESDE: ${{ inputs.desde || '' }}
         run: npx tsx scripts/sync-jotform.ts

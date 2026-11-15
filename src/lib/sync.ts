@@ -5,7 +5,7 @@
  * Modo incremental (normal): para cada formulário pede ao Jotform só as submissões criadas depois
  * do último marcador guardado em estado/sync e acrescenta-as aos lotes mensais, sem duplicar
  * (a chave é o ID da submissão) e sem reescrever o que já existe.
- * Modo completo (só à mão, na tarefa do GitHub): volta a ler tudo desde 01/01/2025 e substitui
+ * Modo completo (à mão, no portal ou no GitHub): volta a ler tudo desde a data de referência e substitui
  * os lotes dos meses abertos, removendo submissões apagadas no Jotform.
  *
  * Meses fechados pelo CAF nunca são alterados.
@@ -16,6 +16,7 @@ import { JOTFORM_FORMS } from './seed';
 import { r2 } from './format';
 import type { Lote, Origem } from './types';
 
+/** Data de referência por omissão: o início dos dados tratados no portal. */
 export const SYNC_DESDE = '2025-01-01';
 export const ORIGENS_SYNC: Origem[] = ['contribuir', 'depositos', 'despesas', 'assistencia'];
 /** Uma sincronização "em curso" há mais do que isto é considerada abandonada. */
@@ -115,11 +116,12 @@ async function sincronizarOrigem(
   modo: EstadoSync['modo'],
   marcador: string | undefined,
   anosTocados: Set<number>,
+  desdeBase: string,
 ): Promise<{ resultado: ResultadoOrigem; marcador?: string }> {
-  let desde = modo === 'completo' || !marcador ? SYNC_DESDE : marcador;
-  if (desde !== SYNC_DESDE && RELER_DIAS[origem]) {
+  let desde = modo === 'completo' || !marcador ? desdeBase : marcador;
+  if (desde !== desdeBase && RELER_DIAS[origem]) {
     desde = recuar(desde, RELER_DIAS[origem]!);
-    if (desde < SYNC_DESDE) desde = SYNC_DESDE;
+    if (desde < desdeBase) desde = desdeBase;
   }
   const linhas = await lerSubmissoes(cfg, JOTFORM_FORMS[origem].id, desde);
   const novoMarcador = marcadorMaisRecente(linhas, modo === 'completo' ? undefined : marcador);
@@ -131,7 +133,7 @@ async function sincronizarOrigem(
   const falta = FONTES[origem].campos.filter((c) => c.obrigatorio && !mapa[c.key]).map((c) => c.label);
   if (linhas.length && falta.length) throw new Error(`colunas obrigatórias não encontradas (${falta.join(', ')})`);
   const { registos, rejeitadas, naoPagas } = linhas.length ? mapearLinhas(origem, linhas, mapa) : { registos: [], rejeitadas: [], naoPagas: 0 };
-  const validos = registos.filter((r) => r.data >= SYNC_DESDE);
+  const validos = registos.filter((r) => r.data >= desdeBase);
   const { conf, priv } = await construirLotes(origem, validos, quem);
   const temConf = origem !== 'assistencia';
 
@@ -182,9 +184,10 @@ export async function sincronizar(
   arm: ArmazemSync,
   cfg: JotConfig,
   quem: string,
-  opcoes: { modo?: EstadoSync['modo']; onProgresso?: (msg: string) => void; ignorarBloqueio?: boolean } = {},
+  opcoes: { modo?: EstadoSync['modo']; onProgresso?: (msg: string) => void; ignorarBloqueio?: boolean; desde?: string } = {},
 ): Promise<EstadoSync> {
   const modo = opcoes.modo ?? 'incremental';
+  const desdeBase = opcoes.desde ?? SYNC_DESDE; // data de referência (modo completo)
   const progresso = opcoes.onProgresso ?? (() => {});
   const anterior = await arm.lerEstado();
   const em = anterior?.emCurso;
@@ -204,7 +207,7 @@ export async function sincronizar(
     for (const origem of ORIGENS_SYNC) {
       progresso(`A ler ${JOTFORM_FORMS[origem].nome}…`);
       try {
-        const r = await sincronizarOrigem(arm, origem, cfg, quem, fechados, modo, marcadores[origem], anosTocados);
+        const r = await sincronizarOrigem(arm, origem, cfg, quem, fechados, modo, marcadores[origem], anosTocados, desdeBase);
         resultado[origem] = r.resultado;
         if (r.marcador) marcadores[origem] = r.marcador;
       } catch (e) {
