@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros } from '../components/ui';
+import { Estado, GraficoBarras, Kpi, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { Importar } from '../components/Importar';
 import { SyncEstado } from '../components/SyncEstado';
 import { lerConfigAssistencia, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
+import { sincronizarAgora } from '../lib/syncWeb';
 import { MESES, MESES_CURTOS, num } from '../lib/format';
 import { contaParaMedia, domingosEmFalta, eDomingo } from '../lib/domingos';
 
@@ -41,6 +42,23 @@ export default function Assistencia() {
   const coms = useCarregar(listarComunidades, []);
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
   const excecoes = useCarregar(listarExcecoes, []);
+  // "Calcular": traz os registos novos do Jotform (Master), recalcula os resumos e atualiza o mapa e os domingos em falta.
+  const [aCalcular, setACalcular] = useState(false);
+  const [msgCalc, setMsgCalc] = useState<string | null>(null);
+  async function calcular() {
+    setACalcular(true); setMsgCalc(null);
+    try {
+      if (acesso?.papel === 'master') {
+        const e = await sincronizarAgora(acesso, setMsgCalc, 'incremental');
+        const novos = e.resultado.assistencia?.novos ?? 0;
+        setMsgCalc(e.ok ? `Atualizado: ${novos} registo${novos === 1 ? '' : 's'} de presenças novo${novos === 1 ? '' : 's'}; resumos recalculados.` : `Terminou com erros: ${e.erros.join('; ')}`);
+      } else {
+        setMsgCalc('Dados recarregados. A leitura de registos novos do Jotform é feita pela sincronização automática ou pelo Master.');
+      }
+      await Promise.all([lotes.recarregar(), excecoes.recarregar(), config.recarregar()]);
+    } catch (e) { setMsgCalc(mensagemErro(e)); }
+    finally { setACalcular(false); }
+  }
   const hojeIso = new Date().toISOString().slice(0, 10);
 
   const todas: Linha[] = useMemo(() => (lotes.dados ?? [])
@@ -89,9 +107,13 @@ export default function Assistencia() {
           <p className="muted">Registo de presenças nos cultos e restantes atividades da comunidade (formulário CCLX : Registo de Presenças). Valores em número de pessoas. A média de jovens e adultos de cada mês serve para distribuir a bolsa geral.</p>
           <SyncEstado />
         </div>
-        <div className="acoes">{pode('importar') && <button className="sec" onClick={() => setImportar(true)}>Importação manual (recurso)</button>}</div>
+        <div className="acoes">
+          <button onClick={() => void calcular()} disabled={aCalcular} title="Vai buscar os registos novos ao Jotform e atualiza o mapa e os domingos em falta">{aCalcular ? 'A calcular…' : 'Calcular'}</button>
+          {pode('importar') && <button className="sec" onClick={() => setImportar(true)}>Importação manual (recurso)</button>}
+        </div>
       </div>
 
+      {msgCalc && <div className="nota">{msgCalc}</div>}
       <div className="filtros" style={{ marginBottom: 12 }}>
         <label className="campo">Evento
           <select value={evento} onChange={(e) => setEvento(e.target.value)}>

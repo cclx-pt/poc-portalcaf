@@ -66,6 +66,7 @@ describe('páginas', () => {
     expect(html).toContain('>314<'); // total de pessoas (149+121+40)
     expect(html).toContain('março');
     expect(html).toContain('Presenças por evento');
+    expect(html).toContain('>Calcular<');
     expect(html).toContain('>999<'); // na lista de registos
     expect(html).toContain('Sem tipo de celebração escolhido');
     expect(html).toContain('Domingos sem registo');
