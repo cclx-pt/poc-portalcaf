@@ -53,8 +53,8 @@ function armazemWeb(a: Acesso): ArmazemSync {
  * incremental: só submissões novas. completo: relê tudo desde 01/01/2025 e substitui os meses abertos
  * (retira o que deixou de cumprir as regras, ex.: contribuições com o campo Pago em branco).
  */
-export async function sincronizarAgora(a: Acesso, onProgresso?: (msg: string) => void, modo: EstadoSync['modo'] = 'incremental'): Promise<EstadoSync> {
+export async function sincronizarAgora(a: Acesso, onProgresso?: (msg: string) => void, modo: EstadoSync['modo'] = 'incremental', desde?: string): Promise<EstadoSync> {
   const cfg = await lerSegredoJotform();
   if (!cfg?.apiKey) throw new Error('A chave da API Jotform ainda não está guardada.');
-  return sincronizar(armazemWeb(a), { apiKey: cfg.apiKey, base: cfg.base || 'https://eu-api.jotform.com' }, a.email, { modo, onProgresso });
+  return sincronizar(armazemWeb(a), { apiKey: cfg.apiKey, base: cfg.base || 'https://eu-api.jotform.com' }, a.email, { modo, onProgresso, desde });
 }

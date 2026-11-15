@@ -70,7 +70,7 @@ Movimentos bancários conciliados com o Jotform não contam duas vezes.
 - **Entradas só pagas:** do CONTRIBUIR só contam as submissões com o campo PAGO = "PAGO" (sincronização e importação por ficheiro). Os últimos 30 dias do CONTRIBUIR são sempre relidos, para apanhar contribuições que passam a PAGO depois de submetidas. Se o campo PAGO não for encontrado, nada é integrado e a sincronização dá erro.
 - **Sincronização forçada:** o Master pode correr a mesma sincronização na hora, no portal (Configuração → *Sincronizar agora*). Usa o mesmo motor ([`src/lib/sync.ts`](src/lib/sync.ts)).
 - **Sem sobreposições:** enquanto uma sincronização corre, outra não arranca (bloqueio de 20 minutos em `estado/sync`).
-- **Modo completo:** só à mão no GitHub (Run workflow → modo *completo*). Relê tudo desde 01/01/2025 e substitui os lotes dos meses abertos, o que também remove submissões apagadas no Jotform. As submissões editadas no Jotform depois de integradas só são atualizadas neste modo.
+- **Modo completo (Reler tudo):** à mão, no portal (Configuração → *Reler tudo*, que pede a **data de referência**, proposta 01/01/2015) ou no GitHub (Run workflow → modo *completo*, campo *desde*). Relê tudo a partir dessa data e substitui os lotes dos meses abertos, o que também remove submissões apagadas no Jotform e registos anteriores à data. As submissões editadas no Jotform depois de integradas só são atualizadas neste modo.
 
 1. Lê os 4 formulários desde 01/01/2025 (só leitura).
 2. Grava lotes mensais por comunidade (confidencial e privado), sem tocar em meses fechados, e remove lotes de submissões apagadas.
