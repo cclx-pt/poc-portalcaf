@@ -1,11 +1,22 @@
 /** Domingos (dia das celebrações) e domingos sem registo de assistência. Datas AAAA-MM-DD, sempre em UTC. */
-import type { Comunidade, ExcecaoAssistencia, Lote } from './types';
+import { norm } from './format';
+import type { Comunidade, ExcecaoAssistencia, Lote, Registo } from './types';
 
 const utc = (d: string) => new Date(`${d}T00:00:00Z`);
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export function eDomingo(data: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(data) && utc(data).getUTCDay() === 0;
+}
+
+/**
+ * Registo que conta para a média de assistência (bolsa geral, gerais, valores por pessoa):
+ * com o tipo de celebração configurado, só registos desse tipo (em qualquer dia);
+ * sem configuração, os registos feitos a um domingo.
+ */
+export function contaParaMedia(r: Pick<Registo, 'data' | 'evento'>, eventoCelebracao?: string | null): boolean {
+  if (eventoCelebracao) return norm(r.evento ?? '') === norm(eventoCelebracao);
+  return eDomingo(r.data);
 }
 
 /** Domingos do ano com data estritamente anterior a `antesDe`. */
@@ -26,10 +37,13 @@ export interface DomingosComunidade { comunidadeId: string; esperados: number; c
  * Por comunidade ativa (não especial): domingos esperados (sem exceção da CCLX nem da comunidade),
  * quantos têm registo de assistência nesse dia, e quais faltam. O domingo de hoje ainda não conta.
  */
-export function domingosEmFalta(p: { ano: number; hoje: string; comunidades: Comunidade[]; assistencia: Lote[]; excecoes: ExcecaoAssistencia[] }): DomingosComunidade[] {
+export function domingosEmFalta(p: { ano: number; hoje: string; comunidades: Comunidade[]; assistencia: Lote[]; excecoes: ExcecaoAssistencia[]; evento?: string | null }): DomingosComunidade[] {
   const domingos = domingosDoAno(p.ano, p.hoje);
   const excecao = new Set(p.excecoes.map((e) => `${e.data}|${e.ambito}`));
-  const comRegisto = new Set(p.assistencia.flatMap((l) => l.registos.map((r) => `${l.comunidadeId}|${r.data}`)));
+  // Com tipo de celebração configurado, só conta um registo desse tipo nesse domingo.
+  const comRegisto = new Set(p.assistencia.flatMap((l) => l.registos
+    .filter((r) => !p.evento || norm(r.evento ?? '') === norm(p.evento))
+    .map((r) => `${l.comunidadeId}|${r.data}`)));
   return p.comunidades
     .filter((c) => !c.especial)
     .map((c) => {

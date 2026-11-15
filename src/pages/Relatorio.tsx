@@ -1,7 +1,7 @@
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros, Frescura } from '../components/ui';
-import { listarComunidades, listarCustosFixos, listarExcecoes, listarLotes, listarResumos } from '../lib/db';
-import { domingosEmFalta, eDomingo } from '../lib/domingos';
+import { lerConfigAssistencia, listarComunidades, listarCustosFixos, listarExcecoes, listarLotes, listarResumos } from '../lib/db';
+import { contaParaMedia, domingosEmFalta } from '../lib/domingos';
 import { dec, eur, hoje, MESES, MESES_CURTOS, num, pct, r2 } from '../lib/format';
 import { mesesDoRelatorio, resumoAnual, type ResumoAnual } from '../lib/relatorio';
 import { mesesDecorridos } from '../lib/resumos';
@@ -9,14 +9,14 @@ import type { Lote, Resumo } from '../lib/types';
 
 const BASE = import.meta.env.BASE_URL;
 
-/** Média total de pessoas (todas as idades) por domingo, por mês, somando as comunidades. */
-function pessoasPorMes(lotes: Lote[]): (number | null)[] {
+/** Média total de pessoas (todas as idades) por celebração, por mês, somando as comunidades. */
+function pessoasPorMes(lotes: Lote[], tipo: string | null): (number | null)[] {
   return Array.from({ length: 12 }, (_, i) => {
     const porCom = new Map<string, { soma: number; n: number }>();
     for (const l of lotes) {
       if (l.mes !== i + 1) continue;
       for (const r of l.registos) {
-        if (!eDomingo(r.data)) continue;
+        if (!contaParaMedia(r, tipo)) continue;
         const x = (k: string) => Number(r.extra?.[k] ?? 0) || 0;
         const a = porCom.get(l.comunidadeId) ?? { soma: 0, n: 0 };
         a.soma += r.valor + x('jump') + x('criancas') + x('connects'); a.n++;
@@ -39,6 +39,8 @@ export default function Relatorio() {
   const ass = useCarregar(() => listarLotes(acesso!, 'assistencia', ano, false), [ano, acesso?.email]);
   const exc = useCarregar(listarExcecoes, []);
   const cfs = useCarregar(() => listarCustosFixos(acesso!), [acesso?.email]);
+  const cfgAss = useCarregar(lerConfigAssistencia, []);
+  const tipo = cfgAss.dados?.eventoCelebracao ?? null;
 
   const daqui = (rs: Resumo[] | null) => (rs ?? []).filter((r) => (comunidade === 'todas' ? r.comunidadeId !== 'bolsa-geral' : r.comunidadeId === comunidade));
   const atual = daqui(rAtual.dados);
@@ -49,9 +51,9 @@ export default function Relatorio() {
   const P: ResumoAnual | null = antes.length ? resumoAnual(antes, 12) : null;
   const meses = mesesDoRelatorio(atual, ate);
   const lotesAss = (ass.dados ?? []).filter((l) => comunidade === 'todas' || l.comunidadeId === comunidade);
-  const pessoas = pessoasPorMes(lotesAss);
+  const pessoas = pessoasPorMes(lotesAss, tipo);
   const dom = domingosEmFalta({
-    ano, hoje: hoje(), assistencia: lotesAss, excecoes: exc.dados ?? [],
+    ano, hoje: hoje(), assistencia: lotesAss, excecoes: exc.dados ?? [], evento: tipo,
     comunidades: (coms.dados ?? []).filter((c) => (c.ativo ?? true) && (comunidade === 'todas' || c.id === comunidade)),
   });
   const domEsperados = dom.reduce((t, d) => t + d.esperados, 0);
@@ -179,7 +181,7 @@ export default function Relatorio() {
             <li>Entradas do contribuir.cclx.pt só com o campo Pago preenchido ("PAGO"); coletas em dinheiro pelos depósitos registados.</li>
             <li>Os custos e proveitos gerais da CCLX são repartidos pelas comunidades conforme a média de jovens e adultos dos últimos 12 meses.</li>
             <li>Vencimentos e Segurança Social aparecem agregados em "Outros custos de funcionamento".</li>
-            <li>A assistência conta só os registos de domingo; os domingos do quadro de exceções não são esperados.</li>
+            <li>A assistência conta só {tipo ? `os registos do tipo "${tipo}"` : 'os registos de domingo'}; os domingos do quadro de exceções não são esperados.</li>
             {!!pendentes.length && <li><b>Pendente de confirmação:</b> {pendentes.map((c) => `${c.rubrica}: ${c.notas}`).join(' ')}</li>}
           </ul>
           <p className="muted small">Fonte: Portal CAF (Jotform e tabela de custos fixos). Valores em euros, com duas casas decimais. Gerado em {new Date().toLocaleString('pt-PT')}.</p>

@@ -45,4 +45,13 @@ describe('domingos', () => {
     expect(barreiro.emFalta).not.toContain('2026-11-01');
     expect(r.some((x) => x.comunidadeId === 'bolsa-geral')).toBe(false);
   });
+
+  it('com o tipo de celebração, só um registo desse tipo ao domingo conta', () => {
+    const l = ass('almada', ['2026-01-04', '2026-01-11']);
+    l.registos[0].evento = 'Celebração de Domingo';
+    l.registos[1].evento = 'Batismos';
+    const r = domingosEmFalta({ ano: 2026, hoje: '2026-01-18', comunidades: COMS.slice(0, 1), assistencia: [l], excecoes: [], evento: 'celebração de domingo' });
+    expect(r[0].comRegisto).toBe(1);
+    expect(r[0].emFalta).toEqual(['2026-01-11']);
+  });
 });

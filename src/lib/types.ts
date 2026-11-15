@@ -221,3 +221,11 @@ export interface ExcecaoAssistencia {
   criadoPor: string;
   criadoEm: string;
 }
+
+/** Configuração da assistência (config/assistencia). */
+export interface ConfigAssistencia {
+  /** Tipo de evento (campo "Evento" do Registo de Presenças) que conta como celebração de domingo. */
+  eventoCelebracao: string | null;
+  atualizadoPor?: string;
+  atualizadoEm?: string;
+}

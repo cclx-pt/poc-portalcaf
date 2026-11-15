@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { SyncEstado } from '../components/SyncEstado';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
-import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarResumos } from '../lib/db';
+import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia } from '../lib/db';
 import { CATEGORIAS, COMUNIDADES, CONTAS, CUSTOS_FIXOS_CDR, JOTFORM_FORMS } from '../lib/seed';
 import { NIVEIS, NIVEL_LABEL, type Categoria, type Comunidade, type Conta, type Nivel } from '../lib/types';
 import { formatarIban, ibanValido, limparIban } from '../lib/iban';
@@ -57,6 +57,28 @@ export default function Configuracao() {
       else setSyncMsg(novos ? `Concluído: ${novos} registo${novos === 1 ? '' : 's'} novo${novos === 1 ? '' : 's'} integrado${novos === 1 ? '' : 's'}; resumos recalculados.` : 'Concluído: não havia submissões novas.');
     } catch (e) { setSyncMsg(mensagemErro(e)); }
     finally { setASincronizar(false); setSyncVersao((v) => v + 1); }
+  }
+  // Tipo de evento que conta como celebração de domingo (médias da bolsa geral, dos gerais e por pessoa).
+  const anoCfg = new Date().getFullYear();
+  const configAss = useCarregar(lerConfigAssistencia, []);
+  const tiposEvento = useCarregar(async () => {
+    const ls = [...await listarLotes(acesso!, 'assistencia', anoCfg - 1), ...await listarLotes(acesso!, 'assistencia', anoCfg)];
+    const conta = new Map<string, number>();
+    for (const l of ls) for (const r of l.registos) { const e = r.evento?.trim(); if (e) conta.set(e, (conta.get(e) ?? 0) + 1); }
+    return [...conta.entries()].sort((a, b) => b[1] - a[1]);
+  }, [acesso?.email]);
+  const [tipoNovo, setTipoNovo] = useState<string | null>(null);
+  const [msgTipo, setMsgTipo] = useState<string | null>(null);
+  async function guardarTipo() {
+    const v = tipoNovo ?? configAss.dados?.eventoCelebracao ?? '';
+    setMsgTipo('A guardar e a recalcular resumos…');
+    try {
+      await gravarConfigAssistencia({ eventoCelebracao: v || null, atualizadoPor: acesso!.email, atualizadoEm: new Date().toISOString() });
+      await auditar(acesso!.email, 'tipo de celebração', v || '(nenhum: contar os domingos)');
+      for (const a of [anoCfg - 1, anoCfg]) await recalcularAno(acesso!, a);
+      await configAss.recarregar(); setTipoNovo(null);
+      setMsgTipo(`Guardado. Resumos de ${anoCfg - 1} e ${anoCfg} recalculados.`);
+    } catch (e) { setMsgTipo(mensagemErro(e)); }
   }
   const [teste, setTeste] = useState<ResultadoTeste | null>(null);
   const [aTestar, setATestar] = useState(false);
@@ -261,6 +283,24 @@ export default function Configuracao() {
             </tr>
           ))}</tbody>
         </table></div>
+      </div>
+
+      <div className="sec card">
+        <h2>Assistência: tipo de celebração</h2>
+        <p className="small">Tipo de evento (campo "Evento" do Registo de Presenças) que conta como <b>celebração de domingo</b>. Só os registos deste tipo entram na média de jovens e adultos usada para repartir a bolsa geral e os gerais, e nos valores por pessoa; os domingos sem registo deste tipo aparecem como em falta.</p>
+        {acesso?.papel === 'master' ? (
+          <div className="linha">
+            <label className="campo">Tipo de celebração
+              <select value={tipoNovo ?? configAss.dados?.eventoCelebracao ?? ''} onChange={(e) => setTipoNovo(e.target.value)}>
+                <option value="">Nenhum (contar os registos feitos ao domingo)</option>
+                {(tiposEvento.dados ?? []).map(([t, n]) => <option key={t} value={t}>{t} ({n} registos)</option>)}
+                {configAss.dados?.eventoCelebracao && !(tiposEvento.dados ?? []).some(([t]) => t === configAss.dados?.eventoCelebracao) && <option value={configAss.dados.eventoCelebracao}>{configAss.dados.eventoCelebracao}</option>}
+              </select>
+            </label>
+            <button onClick={() => void guardarTipo()} disabled={tipoNovo == null || tipoNovo === (configAss.dados?.eventoCelebracao ?? '')}>Guardar e recalcular</button>
+          </div>
+        ) : <p className="muted">Atual: {configAss.dados?.eventoCelebracao ? `"${configAss.dados.eventoCelebracao}"` : 'nenhum (contam os registos feitos ao domingo)'}. Só o Master altera.</p>}
+        {msgTipo && <p className="small" style={{ marginTop: 8 }}>{msgTipo}</p>}
       </div>
 
       <div className="sec card">
