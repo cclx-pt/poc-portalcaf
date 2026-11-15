@@ -24,7 +24,12 @@ export default function Layout() {
           <NavLink to="/entradas">Contribuições</NavLink>
           <NavLink to="/depositos">Depósitos de coletas</NavLink>
           <NavLink to="/reembolsos">Reembolsos e despesas</NavLink>
-          <NavLink to="/assistencia">Assistência</NavLink>
+        </>}
+        {temNivel('privado') && <>
+          <div className="grupo">Registos</div>
+          <NavLink to="/registos/presencas">Presenças por evento</NavLink>
+          <NavLink to="/registos/batismos">Batismos</NavLink>
+          <NavLink to="/registos/conversoes">Conversões</NavLink>
         </>}
         {temNivel('privado') && <>
           <div className="grupo">Análise</div>

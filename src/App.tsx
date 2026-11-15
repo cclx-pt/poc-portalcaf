@@ -9,6 +9,7 @@ import Fonte from './pages/Fonte';
 import EntradasConjunto from './pages/EntradasConjunto';
 import Assistencia from './pages/Assistencia';
 import DemonstracaoResultados from './pages/DemonstracaoResultados';
+import RegistoEvento from './pages/RegistoEvento';
 import Comparacao from './pages/Comparacao';
 import Relatorio from './pages/Relatorio';
 import Bancos from './pages/Bancos';
@@ -45,8 +46,11 @@ export default function App() {
             <Route path="entradas" element={<Se nivel="privado"><Fonte key="c" origem="contribuir" /></Se>} />
             <Route path="depositos" element={<Se nivel="privado"><Fonte key="d" origem="depositos" /></Se>} />
             <Route path="reembolsos" element={<Se nivel="privado"><Fonte key="r" origem="despesas" /></Se>} />
+            <Route path="registos/presencas" element={<Se nivel="privado"><Assistencia /></Se>} />
+            <Route path="registos/batismos" element={<Se nivel="privado"><RegistoEvento key="b" registo="batismos" /></Se>} />
+            <Route path="registos/conversoes" element={<Se nivel="privado"><RegistoEvento key="c2" registo="conversoes" /></Se>} />
             <Route path="entradas-conjunto" element={<Se nivel="privado"><EntradasConjunto /></Se>} />
-            <Route path="assistencia" element={<Se nivel="privado"><Assistencia /></Se>} />
+            <Route path="assistencia" element={<Navigate to="/registos/presencas" replace />} />
             <Route path="analise/resultados" element={<Se nivel="privado"><DemonstracaoResultados /></Se>} />
             <Route path="analise/comparacao" element={<Se nivel="privado"><Comparacao /></Se>} />
             <Route path="analise/relatorio" element={<Se nivel="privado"><Relatorio /></Se>} />

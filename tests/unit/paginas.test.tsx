@@ -16,6 +16,8 @@ const LOTES: Record<string, Lote[]> = {
       { data: '2026-03-01', valor: 120, evento: 'Culto', extra: { jump: 8, criancas: 20, connects: 5 } },
       { data: '2026-03-08', valor: 100, evento: 'Culto', extra: { jump: 6, criancas: 15 } },
       { data: '2026-03-07', valor: 999, evento: 'Retiro' }, // sábado: aparece na lista, não conta
+      { data: '2026-03-14', valor: 80, evento: 'Culto com Batismos', extra: { criancas: 10 } },
+      { data: '2026-03-21', valor: 60, evento: 'Conversões e decisões' },
     ]),
     lote('assistencia', 'porto', 4, [{ data: '2026-04-05', valor: 40, evento: 'Culto' }]),
   ],
@@ -63,10 +65,10 @@ describe('páginas', () => {
     expect(html).toContain('>130,0<'); // média mensal (260/2 meses)
     expect(html).toContain('>314<'); // total de pessoas (149+121+40)
     expect(html).toContain('março');
+    expect(html).toContain('Presenças por evento');
     expect(html).toContain('>999<'); // na lista de registos
     expect(html).toContain('Sem tipo de celebração escolhido');
     expect(html).toContain('Domingos sem registo');
-    expect(html).toContain('Culto conjunto');
     expect(html).toContain('15/03/2026'); // domingo em falta em Almada
     expect(html).not.toContain('22/03/2026 ·'); // exceção da CCLX: não está em falta
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/assistencia.html', html);
@@ -136,5 +138,22 @@ describe('páginas', () => {
     expect(html).toContain('"Culto"'); // nota: o tipo que conta para as médias
     expect(html).toContain('>260<'); // só registos Culto
     expect(html).not.toContain('>999<'); // Retiro fora do filtro
+  });
+
+  it('Batismos: só eventos de batismo, com nota da fase seguinte', async () => {
+    const { default: RegistoEvento } = await import('../../src/pages/RegistoEvento');
+    const html = renderToString(<RegistoEvento registo="batismos" />);
+    expect(html).toContain('Batismos');
+    expect(html).toContain('Culto com Batismos');
+    expect(html).not.toContain('Retiro');
+    expect(html).not.toContain('Conversões e decisões');
+    expect(html).toContain('fase seguinte');
+    expect(html).not.toContain('€');
+  });
+  it('Conversões: só eventos de conversões/decisões', async () => {
+    const { default: RegistoEvento } = await import('../../src/pages/RegistoEvento');
+    const html = renderToString(<RegistoEvento registo="conversoes" />);
+    expect(html).toContain('Conversões e decisões');
+    expect(html).not.toContain('Culto com Batismos');
   });
 });
