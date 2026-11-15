@@ -67,7 +67,7 @@ export default function Fonte({ origem }: { origem: Origem }) {
         </div>
         <div className="card sec">
           <h2>{origem === 'assistencia' ? 'Média de adultos por mês' : 'Total por mês'}</h2>
-          <GraficoBarras dados={porMes} series={[{ key: 'Total', nome: origem === 'assistencia' ? 'Média de adultos' : 'Total (€)' }]} altura={240} />
+          <GraficoBarras dados={porMes} series={[{ key: 'Total', nome: origem === 'assistencia' ? 'Média de adultos' : 'Total (€)', cor: origem === 'despesas' ? 'saidas2' : 'entradas' }]} altura={240} />
         </div>
         {origem !== 'assistencia' && (
           <div className="sec">

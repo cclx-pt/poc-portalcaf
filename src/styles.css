@@ -140,3 +140,5 @@ label.campo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; 
 .abas { display: flex; gap: 0; border-bottom: 2px solid var(--preto); margin-bottom: 20px; flex-wrap: wrap; }
 .abas button { background: var(--branco); color: var(--preto); border: 1px solid var(--claro); border-bottom: none; font-size: 13px; padding: 8px 16px; }
 .abas button.ativa { background: var(--preto); color: var(--branco); border-color: var(--preto); font-weight: 700; }
+
+.side .etiqueta-menu { font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--cinza); margin-left: 6px; }

@@ -141,20 +141,14 @@ describe('páginas', () => {
     expect(html).not.toContain('>999<'); // Retiro fora do filtro
   });
 
-  it('Batismos: só eventos de batismo, com nota da fase seguinte', async () => {
+  it('Batismos e Conversões: em desenvolvimento, sem dados', async () => {
     const { default: RegistoEvento } = await import('../../src/pages/RegistoEvento');
-    const html = renderToString(<RegistoEvento registo="batismos" />);
-    expect(html).toContain('Batismos');
-    expect(html).toContain('Culto com Batismos');
-    expect(html).not.toContain('Retiro');
-    expect(html).not.toContain('Conversões e decisões');
-    expect(html).toContain('fase seguinte');
-    expect(html).not.toContain('€');
-  });
-  it('Conversões: só eventos de conversões/decisões', async () => {
-    const { default: RegistoEvento } = await import('../../src/pages/RegistoEvento');
-    const html = renderToString(<RegistoEvento registo="conversoes" />);
-    expect(html).toContain('Conversões e decisões');
-    expect(html).not.toContain('Culto com Batismos');
+    const b = renderToString(<RegistoEvento registo="batismos" />);
+    expect(b).toContain('Batismos');
+    expect(b).toContain('Em desenvolvimento');
+    expect(b).not.toContain('Culto com Batismos');
+    const c = renderToString(<RegistoEvento registo="conversoes" />);
+    expect(c).toContain('Conversões');
+    expect(c).toContain('Em desenvolvimento');
   });
 });

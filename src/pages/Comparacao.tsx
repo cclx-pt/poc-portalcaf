@@ -6,6 +6,7 @@ import { listarComunidades, listarResumos } from '../lib/db';
 import { totaisPeriodo } from '../lib/analise';
 import { dec, eur, eurK, MESES, MESES_CURTOS, num, pct, r2, hoje } from '../lib/format';
 import { GERAIS_POR_REPARTIR, mesesDecorridos } from '../lib/resumos';
+import { CORES, corDivergente } from '../lib/cores';
 
 interface Linha {
   id: string;
@@ -143,7 +144,7 @@ export default function Comparacao() {
 
         <div className="card sec">
           <h2>Entradas e saídas por comunidade</h2>
-          <GraficoBarras dados={ordenadas.map((l) => ({ rotulo: l.nome, Entradas: l.entradas, Saídas: l.saidas }))} series={[{ key: 'Entradas', nome: 'Entradas' }, { key: 'Saídas', nome: 'Saídas' }]} altura={260} />
+          <GraficoBarras dados={ordenadas.map((l) => ({ rotulo: l.nome, Entradas: l.entradas, Saídas: l.saidas }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas' }]} altura={260} />
         </div>
 
         <div className="card sec">
@@ -157,9 +158,9 @@ export default function Comparacao() {
                   <XAxis type="number" dataKey="x" name="Entradas por pessoa" domain={[0, limite]} tickFormatter={(v) => eurK(Number(v))} tick={{ fontSize: 11, fill: '#333' }} label={{ value: 'Entradas por pessoa', position: 'insideBottom', offset: -10, fontSize: 11 }} />
                   <YAxis type="number" dataKey="y" name="Custo por pessoa" domain={[0, limite]} tickFormatter={(v) => eurK(Number(v))} tick={{ fontSize: 11, fill: '#333' }} width={80} />
                   <ZAxis range={[80, 80]} />
-                  <ReferenceLine segment={[{ x: 0, y: 0 }, { x: limite, y: limite }]} stroke="#777" strokeDasharray="4 4" />
+                  <ReferenceLine segment={[{ x: 0, y: 0 }, { x: limite, y: limite }]} stroke={CORES.eixo} strokeDasharray="4 4" />
                   <Tooltip formatter={(v) => eur(Number(v))} contentStyle={{ border: '1px solid #333', borderRadius: 0, fontSize: 12 }} />
-                  <Scatter data={quadrantes} fill="#000"><LabelList dataKey="nome" position="top" style={{ fontSize: 11, fill: '#333' }} /></Scatter>
+                  <Scatter data={quadrantes} fill={CORES.entradas} isAnimationActive={false}><LabelList dataKey="nome" position="top" style={{ fontSize: 11, fill: '#333' }} /></Scatter>
                 </ScatterChart>
               </ResponsiveContainer>
             </div>
@@ -172,17 +173,17 @@ export default function Comparacao() {
             <thead><tr><th>Comunidade</th>{meses.map((m) => <th key={m} className="num">{MESES_CURTOS[m - 1]}</th>)}</tr></thead>
             <tbody>{calor.map(({ l, vals }) => (
               <tr key={l.id}><td>{l.nome}</td>{vals.map((v, i) => {
-                const a = Math.min(0.85, (Math.abs(v) / maxAbs) * 0.85);
+                const c = corDivergente(v, maxAbs);
                 return (
                   <td key={i} className="num" title={eur(v)}
-                    style={{ background: v ? `rgba(0,0,0,${v < 0 ? a : a * 0.45})` : undefined, color: (v < 0 ? a : a * 0.45) > 0.4 ? '#fff' : undefined, fontWeight: v < 0 ? 700 : undefined }}>
+                    style={{ background: v ? c.fundo : undefined, color: v ? c.tinta : undefined, fontWeight: v < 0 ? 700 : undefined }}>
                     {v ? eurK(v) : '—'}
                   </td>
                 );
               })}</tr>
             ))}</tbody>
           </table></div>
-          <p className="muted small">Quanto mais escuro, maior o valor. Défices a negrito e em tons mais escuros.</p>
+          <p className="muted small">Azul = resultado positivo, vermelho = défice; quanto mais forte a cor, maior o valor. "—" = sem movimentos.</p>
         </div>
       </>}
     </>

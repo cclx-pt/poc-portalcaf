@@ -150,7 +150,7 @@ export default function EntradasConjunto() {
 
         <div className="card sec">
           <h2>Por mês</h2>
-          <GraficoBarras dados={grafico} series={[{ key: 'contribuir', nome: 'Contribuições' }, { key: 'depositos', nome: 'Depósitos de coletas' }]} empilhado altura={250} />
+          <GraficoBarras dados={grafico} series={[{ key: 'contribuir', nome: 'Contribuições', cor: 'entradas' }, { key: 'depositos', nome: 'Depósitos de coletas', cor: 'entradas2' }]} empilhado altura={250} />
         </div>
 
         <div className="sec">
