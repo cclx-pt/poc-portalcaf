@@ -45,6 +45,15 @@ beforeEach(async () => {
   });
 });
 
+describe('configuração da assistência', () => {
+  it('utilizadores ativos leem; só o Master escolhe o tipo de celebração', async () => {
+    await assertSucceeds(getDoc(doc(as(LEITOR), 'config', 'assistencia')));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'config', 'assistencia')));
+    await assertFails(setDoc(doc(as(CAF), 'config', 'assistencia'), { eventoCelebracao: 'X' }));
+    await assertSucceeds(setDoc(doc(as(MASTER), 'config', 'assistencia'), { eventoCelebracao: 'Celebração de Domingo' }));
+  });
+});
+
 describe('exceções de assistência', () => {
   it('qualquer utilizador ativo lê; só Master e CAF escrevem', async () => {
     await assertSucceeds(getDoc(doc(as(LEITOR), 'assistencia_excecoes', '2026-12-27_cclx')));

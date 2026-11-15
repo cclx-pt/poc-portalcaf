@@ -22,6 +22,7 @@ const LOTES: Record<string, Lote[]> = {
 };
 
 vi.mock('../../src/auth/AuthProvider', () => ({ useAuth: () => ({ acesso: { email: 'm@x.pt', papel: 'master' }, pode: () => true, temNivel: () => true }) }));
+const CONFIG_ASS: { atual: { eventoCelebracao: string | null } } = { atual: { eventoCelebracao: null } };
 const mesR = (m: number, x: Record<string, unknown> = {}) => ({
   mes: m, contribuir: 0, coletas: 0, transferencias: 0, quotaBolsa: 0, entradas: 0, custosFixos: 0, despesas: 0, saidas: 0, saldo: 0,
   adultosMedia: null, entradasPorCategoria: {}, despesasPorCategoria: {}, custosRubricas: {}, n: { contribuir: 0, coletas: 0, transferencias: 0, despesas: 0 },
@@ -36,6 +37,8 @@ const RESUMOS = [
 vi.mock('../../src/lib/db', () => ({
   listarResumos: (_a: unknown, ano: number) => sync(ano === 2026 ? RESUMOS : []),
   listarCustosFixos: () => sync([{ id: 'ss', comunidadeId: 'almada', rubrica: 'Segurança Social', valorMensal: 1, inicio: '2026-01', fim: null, nivel: 'privado', notas: 'Valor pendente de confirmação.' }]),
+  lerConfigAssistencia: () => sync(CONFIG_ASS.atual),
+  gravarConfigAssistencia: vi.fn(),
   listarExcecoes: () => sync([{ id: '2026-03-22_cclx', data: '2026-03-22', ambito: 'cclx', motivo: 'Culto conjunto', criadoPor: 'caf@x.pt', criadoEm: '' }]),
   gravarExcecao: vi.fn(), apagarExcecao: vi.fn(), auditar: vi.fn(),
   listarCategorias: () => sync([]),
@@ -61,7 +64,7 @@ describe('páginas', () => {
     expect(html).toContain('>314<'); // total de pessoas (149+121+40)
     expect(html).toContain('março');
     expect(html).toContain('>999<'); // na lista de registos
-    expect(html).toContain('Só contam os registos de domingo');
+    expect(html).toContain('Sem tipo de celebração escolhido');
     expect(html).toContain('Domingos sem registo');
     expect(html).toContain('Culto conjunto');
     expect(html).toContain('15/03/2026'); // domingo em falta em Almada
@@ -122,5 +125,16 @@ describe('páginas', () => {
     expect(html).not.toContain('Infinity');
     expect(html).not.toContain('Vencimentos e encargos');
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/relatorio.html', html);
+  });
+
+  it('Assistência com tipo de celebração configurado: filtro por defeito e o que conta', async () => {
+    CONFIG_ASS.atual = { eventoCelebracao: 'Culto' };
+    const { default: Assistencia } = await import('../../src/pages/Assistencia');
+    const html = renderToString(<Assistencia />);
+    CONFIG_ASS.atual = { eventoCelebracao: null };
+    expect(html).toContain('<option value="Culto" selected="">Culto</option>');
+    expect(html).toContain('"Culto"'); // nota: o tipo que conta para as médias
+    expect(html).toContain('>260<'); // só registos Culto
+    expect(html).not.toContain('>999<'); // Retiro fora do filtro
   });
 });

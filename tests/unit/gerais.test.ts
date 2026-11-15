@@ -54,6 +54,27 @@ describe('repartição dos gerais', () => {
     expect(mes(rs, 'porto', 3).geralSaidas).toBe(100);
   });
 
+  it('com o tipo de celebração configurado, conta só esse tipo, em qualquer dia', () => {
+    const a = (com: string, regs: { data: string; valor: number; evento: string }[]): Lote => {
+      const l = lote('assistencia', com, 2026, 3, regs.map((r) => ({ valor: r.valor })));
+      l.registos = l.registos.map((r, i) => ({ ...r, data: regs[i].data, evento: regs[i].evento }));
+      return l;
+    };
+    const rs = calcularResumos(base({
+      eventoCelebracao: 'Celebração de Domingo',
+      despesas: [lote('despesas', 'sede', 2026, 3, [{ valor: 300, categoria: 'Renda' }])],
+      assistencia: [
+        a('almada', [{ data: '2026-03-07', valor: 100, evento: 'celebração de domingo' }, { data: '2026-03-08', valor: 999, evento: 'Batismos' }]),
+        a('porto', [{ data: '2026-03-08', valor: 50, evento: 'Celebração de Domingo' }]),
+      ],
+      contribuir: [lote('contribuir', 'bolsa-geral', 2026, 3, [{ valor: 150 }])],
+    }));
+    expect(mes(rs, 'almada', 3).adultosMedia).toBe(100); // sábado conta (tipo certo); domingo de Batismos não
+    expect(mes(rs, 'almada', 3).adultosMedia12m).toBe(100);
+    expect(mes(rs, 'almada', 3).geralSaidas).toBe(200);
+    expect(mes(rs, 'almada', 3).quotaBolsa).toBe(100);
+  });
+
   it('janeiro usa a assistência do ano anterior', () => {
     const rs = calcularResumos(base({
       despesas: [lote('despesas', 'sede', 2026, 1, [{ valor: 120, categoria: 'Renda' }])],

@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import type {
-  BancoLote, Categoria, Comunidade, Conta, CustoFixo, Fecho, Lote, Nivel, Orcamento, Origem, Perfil, Publico, PublicoSite, Resumo, ExcecaoAssistencia,
+  BancoLote, Categoria, Comunidade, Conta, CustoFixo, Fecho, Lote, Nivel, Orcamento, Origem, Perfil, Publico, PublicoSite, Resumo, ExcecaoAssistencia, ConfigAssistencia,
 } from './types';
 import { NIVEIS, nivelNum } from './types';
 
@@ -112,6 +112,13 @@ export async function lerPublicoSites(ano: number): Promise<Publico | null> {
   const s = await getDoc(doc(db, 'publico_sites', String(ano)));
   return s.exists() ? (s.data() as Publico) : null;
 }
+
+// ---------- configuração da assistência ----------
+export async function lerConfigAssistencia(): Promise<ConfigAssistencia> {
+  const s = await getDoc(doc(db, 'config', 'assistencia'));
+  return s.exists() ? (s.data() as ConfigAssistencia) : { eventoCelebracao: null };
+}
+export const gravarConfigAssistencia = (c: ConfigAssistencia) => setDoc(doc(db, 'config', 'assistencia'), c);
 
 // ---------- exceções de assistência ----------
 export const listarExcecoes = async () => (await lista<ExcecaoAssistencia>('assistencia_excecoes')).sort((a, b) => a.data.localeCompare(b.data));

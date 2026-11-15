@@ -3,9 +3,9 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros } from '../components/ui';
 import { Importar } from '../components/Importar';
 import { SyncEstado } from '../components/SyncEstado';
-import { apagarExcecao, auditar, gravarExcecao, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
+import { apagarExcecao, auditar, gravarExcecao, lerConfigAssistencia, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
 import { MESES, MESES_CURTOS, num } from '../lib/format';
-import { domingosEmFalta, eDomingo } from '../lib/domingos';
+import { contaParaMedia, domingosEmFalta, eDomingo } from '../lib/domingos';
 import type { ExcecaoAssistencia } from '../lib/types';
 
 /** Grupos de idade do Registo de Presenças. Só pessoas: nunca símbolo de moeda. */
@@ -34,7 +34,9 @@ const dataPt = (d: string) => d.split('-').reverse().join('/');
 export default function Assistencia() {
   const { acesso, pode } = useAuth();
   const { ano, comunidade } = useFiltros();
-  const [evento, setEvento] = useState('todos');
+  const [eventoEscolhido, setEvento] = useState<string | null>(null);
+  const config = useCarregar(lerConfigAssistencia, []);
+  const tipoCelebracao = config.dados?.eventoCelebracao ?? null;
   const [importar, setImportar] = useState(false);
   const lotes = useCarregar(() => listarLotes(acesso!, 'assistencia', ano, false), [ano, acesso?.email]);
   const coms = useCarregar(listarComunidades, []);
@@ -71,15 +73,18 @@ export default function Assistencia() {
       return { data: r.data, mes: l.mes, comunidadeId: l.comunidadeId, evento: r.evento?.trim() || 'Sem evento', adultos, jump, criancas, connects, total: adultos + jump + criancas + connects };
     })), [lotes.dados, comunidade]);
   const eventos = [...new Set(todas.map((l) => l.evento))].sort((a, b) => a.localeCompare(b, 'pt'));
+  // Por defeito, o filtro mostra o tipo que conta como celebração de domingo (se existir nos dados).
+  const evento = eventoEscolhido ?? (tipoCelebracao && eventos.includes(tipoCelebracao) ? tipoCelebracao : 'todos');
   const linhas = todas.filter((l) => evento === 'todos' || l.evento === evento).sort((a, b) => b.data.localeCompare(a.data));
 
   const porMes = Array.from({ length: 12 }, () => vazio());
   const ano_ = vazio();
   const porCom = new Map<string, Agregado>();
-  // A métrica é a celebração de domingo: só os registos de domingo entram nos totais e médias.
-  const domingos = linhas.filter((l) => eDomingo(l.data));
-  const foraDeDomingo = linhas.length - domingos.length;
-  for (const l of domingos) {
+  // Com tipo de celebração configurado, o mapa mostra o evento escolhido no filtro (qualquer dia).
+  // Sem configuração, mantém-se a regra anterior: só os registos de domingo entram nos totais.
+  const doMapa = tipoCelebracao ? linhas : linhas.filter((l) => eDomingo(l.data));
+  const foraDoMapa = linhas.length - doMapa.length;
+  for (const l of doMapa) {
     somar(porMes[l.mes - 1], l);
     somar(ano_, l);
     if (!porCom.has(l.comunidadeId)) porCom.set(l.comunidadeId, vazio());
@@ -95,7 +100,7 @@ export default function Assistencia() {
 
   const falta = domingosEmFalta({
     ano, hoje: hojeIso, comunidades: (coms.dados ?? []).filter((c) => (c.ativo ?? true) && (comunidade === 'todas' || c.id === comunidade)),
-    assistencia: lotes.dados ?? [], excecoes: excecoes.dados ?? [],
+    assistencia: lotes.dados ?? [], excecoes: excecoes.dados ?? [], evento: tipoCelebracao,
   });
   const excAno = (excecoes.dados ?? []).filter((e) => e.data.startsWith(String(ano)));
 
@@ -135,7 +140,11 @@ export default function Assistencia() {
 
         <div className="sec">
           <h2>Mapa mensal</h2>
-          <p className="muted small">Só contam os registos de domingo (celebrações){foraDeDomingo ? `; ${foraDeDomingo} registo(s) noutros dias aparecem na lista mas não entram nas contas` : ''}. Total = soma das presenças registadas no mês. Média = total a dividir pelo número de registos. Máx. = maior número de jovens e adultos num só registo.</p>
+          <p className="muted small">
+            {tipoCelebracao
+              ? <>Mapa do evento escolhido no filtro. Para a bolsa geral, os gerais e os valores por pessoa conta só o tipo "{tipoCelebracao}" (escolhido na Configuração).</>
+              : <>Sem tipo de celebração escolhido na Configuração: contam os registos feitos a um domingo{foraDoMapa ? `; ${foraDoMapa} registo(s) noutros dias aparecem na lista mas não entram nas contas` : ''}.</>}
+            {' '}Total = soma das presenças registadas no mês. Média = total a dividir pelo número de registos. Máx. = maior número de jovens e adultos num só registo.</p>
           <div className="tabela"><table>
             <thead>
               <tr>
@@ -196,9 +205,9 @@ export default function Assistencia() {
         <div className="sec">
           <h2>Registos ({linhas.length > 500 ? 'últimos 500 de ' : ''}{linhas.length})</h2>
           <div className="tabela"><table>
-            <thead><tr><th>Data</th><th>Dia</th><th>Comunidade</th><th>Evento</th>{GRUPOS.map((g) => <th key={g.key} className="num">{g.nome}</th>)}<th className="num">Total</th></tr></thead>
+            <thead><tr><th>Data</th><th>Conta para as médias</th><th>Comunidade</th><th>Evento</th>{GRUPOS.map((g) => <th key={g.key} className="num">{g.nome}</th>)}<th className="num">Total</th></tr></thead>
             <tbody>{linhas.slice(0, 500).map((l, i) => (
-              <tr key={i} className={eDomingo(l.data) ? '' : 'muted'}><td>{dataPt(l.data)}</td><td>{eDomingo(l.data) ? 'domingo' : 'outro dia (não conta)'}</td><td>{nomes.get(l.comunidadeId) ?? l.comunidadeId}</td><td>{l.evento}</td>
+              <tr key={i} className={contaParaMedia(l, tipoCelebracao) ? '' : 'muted'}><td>{dataPt(l.data)}</td><td>{contaParaMedia(l, tipoCelebracao) ? 'sim' : 'não'}</td><td>{nomes.get(l.comunidadeId) ?? l.comunidadeId}</td><td>{l.evento}</td>
                 {GRUPOS.map((g) => <td key={g.key} className="num">{num(l[g.key])}</td>)}<td className="num">{num(l.total)}</td></tr>
             ))}</tbody>
           </table></div>
@@ -206,7 +215,7 @@ export default function Assistencia() {
       </>}
       <div className="sec">
         <h2>Domingos sem registo</h2>
-        <p className="muted small">Domingos até hoje sem nenhum registo no Registo de Presenças, por comunidade ativa. Não contam os domingos do quadro de exceções.</p>
+        <p className="muted small">Domingos até hoje sem registo {tipoCelebracao ? `do tipo "${tipoCelebracao}"` : 'no Registo de Presenças'}, por comunidade ativa (filtro de comunidade no topo). Não contam os domingos do quadro de exceções.</p>
         {falta.length ? <>
           <div className="tabela"><table>
             <thead><tr><th>Comunidade</th><th className="num">Domingos esperados</th><th className="num">Com registo</th><th className="num">Em falta</th><th className="num">Cobertura</th><th>Domingos em falta</th></tr></thead>

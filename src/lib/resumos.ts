@@ -1,6 +1,6 @@
 import { periodo, r2 } from './format';
 import { OUTROS_FUNCIONAMENTO, classificador } from './rubricas';
-import { eDomingo } from './domingos';
+import { contaParaMedia } from './domingos';
 import type { BancoLote, Categoria, Comunidade, CustoFixo, Lote, ParteRubrica, Publico, PublicoMes, PublicoSite, Resumo, ResumoMes } from './types';
 
 export interface DadosCalculo {
@@ -18,6 +18,8 @@ export interface DadosCalculo {
   categorias?: Categoria[];
   /** Assistência do ano anterior, para a média dos últimos 12 meses. */
   assistenciaAnterior?: Lote[];
+  /** Tipo de evento que conta para as médias (ex.: "Celebração de Domingo"). Sem ele, contam os domingos. */
+  eventoCelebracao?: string | null;
 }
 
 /** Comunidade especial onde ficam os gerais quando nenhuma comunidade tem assistência. */
@@ -35,14 +37,14 @@ export function repartir(valor: number, pesos: number[]): number[] {
 }
 
 /** Média de jovens e adultos por registo, por comunidade, nos 12 meses que terminam em (ano, mes). */
-export function pesos12m(assistencia: Lote[], assistenciaAnterior: Lote[], ano: number, mes: number): Map<string, number> {
+export function pesos12m(assistencia: Lote[], assistenciaAnterior: Lote[], ano: number, mes: number, eventoCelebracao?: string | null): Map<string, number> {
   const fim = ano * 12 + mes;
   const acc = new Map<string, { soma: number; n: number }>();
   for (const l of [...assistenciaAnterior, ...assistencia]) {
     const k = l.ano * 12 + l.mes;
     if (k > fim || k <= fim - 12) continue;
     const a = acc.get(l.comunidadeId) ?? { soma: 0, n: 0 };
-    for (const r of l.registos) if (eDomingo(r.data)) { a.soma += r.valor; a.n++; } // só celebrações de domingo
+    for (const r of l.registos) if (contaParaMedia(r, eventoCelebracao)) { a.soma += r.valor; a.n++; } // só a celebração
     acc.set(l.comunidadeId, a);
   }
   return new Map([...acc].filter(([, a]) => a.n).map(([c, a]) => [c, r2(a.soma / a.n)]));
@@ -139,7 +141,7 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
   // Assistência média de adultos por comunidade e mês.
   const ass = new Map<string, { soma: number; n: number }>();
   for (const l of d.assistencia) for (const r of l.registos) {
-    if (!eDomingo(r.data)) continue; // a métrica é a celebração de domingo
+    if (!contaParaMedia(r, d.eventoCelebracao)) continue; // a métrica é a celebração de domingo
     const k = `${l.comunidadeId}|${l.mes}`;
     const a = ass.get(k) ?? { soma: 0, n: 0 }; a.soma += r.valor; a.n++; ass.set(k, a);
   }
@@ -178,7 +180,7 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
   // Repartição dos gerais pela média de jovens e adultos dos últimos 12 meses.
   for (let mes = 1; mes <= 12; mes++) {
     const p = periodo(d.ano, mes);
-    const w12 = pesos12m(d.assistencia, d.assistenciaAnterior ?? [], d.ano, mes);
+    const w12 = pesos12m(d.assistencia, d.assistenciaAnterior ?? [], d.ano, mes, d.eventoCelebracao);
     for (const [c, w] of w12) if (mapa.has(c)) m(c, mes).adultosMedia12m = w;
     const elegiveis = d.comunidades.filter((c) => !c.especial && comunidadeAtiva(c, p) && (w12.get(c.id) ?? 0) > 0);
     const pesos = elegiveis.map((c) => w12.get(c.id)!);

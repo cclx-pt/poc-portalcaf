@@ -84,7 +84,7 @@ const armazem: ArmazemSync = {
     }
   },
   async recalcular(ano) {
-    const [comunidades, conf, priv, banco, custosFixos, mesesFechados, categorias, privAnterior] = await Promise.all([
+    const [comunidades, conf, priv, banco, custosFixos, mesesFechados, categorias, privAnterior, configAss] = await Promise.all([
       lerTodos<Comunidade>('comunidades'),
       lerTodos<Lote>('lotes_conf', 'ano', ano),
       lerTodos<Lote>('lotes', 'ano', ano),
@@ -93,13 +93,14 @@ const armazem: ArmazemSync = {
       fechados(),
       lerTodos<Categoria>('categorias'),
       lerTodos<Lote>('lotes', 'ano', ano - 1),
+      db.collection('config').doc('assistencia').get().then((d) => (d.data() as { eventoCelebracao?: string | null } | undefined)?.eventoCelebracao ?? null),
     ]);
     const de = (o: Origem) => conf.filter((l) => l.origem === o);
     const assistencia = priv.filter((l) => l.origem === 'assistencia');
     const assistenciaAnterior = privAnterior.filter((l) => l.origem === 'assistencia');
     comunidades.sort((a, b) => a.ordem - b.ordem);
     const hoje = new Date().toISOString().slice(0, 10);
-    const resumos = calcularResumos({ ano, comunidades, contribuir: de('contribuir'), depositos: de('depositos'), despesas: de('despesas'), assistencia, banco, custosFixos, mesesFechados, hoje, categorias, assistenciaAnterior });
+    const resumos = calcularResumos({ ano, comunidades, contribuir: de('contribuir'), depositos: de('depositos'), despesas: de('despesas'), assistencia, banco, custosFixos, mesesFechados, hoje, categorias, assistenciaAnterior, eventoCelebracao: configAss });
     const publico = calcularPublico(ano, resumos, comunidades, mesesFechados);
     const b = db.batch();
     for (const r of resumos) b.set(db.collection('resumos').doc(r.id), { ...r, calculadoPor: QUEM });

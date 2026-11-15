@@ -1,11 +1,11 @@
 import { doc, writeBatch } from 'firebase/firestore';
-import { db, listarBanco, listarCategorias, listarComunidades, listarCustosFixos, listarFechos, listarLotes, auditar, type Acesso } from './db';
+import { db, lerConfigAssistencia, listarBanco, listarCategorias, listarComunidades, listarCustosFixos, listarFechos, listarLotes, auditar, type Acesso } from './db';
 import { calcularPublico, calcularPublicoSite, calcularResumos } from './resumos';
 import { hoje } from './format';
 
 /** Recalcula os resumos de um ano e a página pública. Só master e CAF (precisa de dados confidenciais). */
 export async function recalcularAno(a: Acesso, ano: number) {
-  const [comunidades, contribuir, depositos, despesas, assistencia, banco, custosFixos, fechos, categorias, assistenciaAnterior] = await Promise.all([
+  const [comunidades, contribuir, depositos, despesas, assistencia, banco, custosFixos, fechos, categorias, assistenciaAnterior, configAss] = await Promise.all([
     listarComunidades(),
     listarLotes(a, 'contribuir', ano, true),
     listarLotes(a, 'depositos', ano, true),
@@ -16,9 +16,10 @@ export async function recalcularAno(a: Acesso, ano: number) {
     listarFechos(),
     listarCategorias(),
     listarLotes(a, 'assistencia', ano - 1, false), // média dos últimos 12 meses atravessa o ano
+    lerConfigAssistencia(),
   ]);
   const mesesFechados = new Set(fechos.filter((f) => f.estado === 'fechado').map((f) => f.periodo));
-  const resumos = calcularResumos({ ano, comunidades, contribuir, depositos, despesas, assistencia, banco, custosFixos, mesesFechados, hoje: hoje(), categorias, assistenciaAnterior });
+  const resumos = calcularResumos({ ano, comunidades, contribuir, depositos, despesas, assistencia, banco, custosFixos, mesesFechados, hoje: hoje(), categorias, assistenciaAnterior, eventoCelebracao: configAss.eventoCelebracao });
   const publico = calcularPublico(ano, resumos, comunidades, mesesFechados);
   const site = calcularPublicoSite(ano, resumos, mesesFechados);
   const b = writeBatch(db);
