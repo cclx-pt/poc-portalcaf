@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { CartesianGrid, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis, LabelList } from 'recharts';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, GraficoBarras, useCarregar, useFiltros } from '../components/ui';
+import { Estado, GraficoBarras, useCarregar, useFiltros, Frescura } from '../components/ui';
 import { listarComunidades, listarResumos } from '../lib/db';
 import { totaisPeriodo } from '../lib/analise';
-import { eur, eurK, MESES, MESES_CURTOS, num, pct, r2 } from '../lib/format';
-import { GERAIS_POR_REPARTIR } from '../lib/resumos';
+import { dec, eur, eurK, MESES, MESES_CURTOS, num, pct, r2, hoje } from '../lib/format';
+import { GERAIS_POR_REPARTIR, mesesDecorridos } from '../lib/resumos';
 
 interface Linha {
   id: string;
@@ -23,14 +23,14 @@ interface Linha {
 type Chave = keyof Omit<Linha, 'id' | 'nome'>;
 
 const COLUNAS: { k: Chave; rot: string; fmt: (v: number | null) => string }[] = [
-  { k: 'entradas', rot: 'Entradas', fmt: (v) => eur(v) },
-  { k: 'saidas', rot: 'Saídas', fmt: (v) => eur(v) },
-  { k: 'resultado', rot: 'Resultado', fmt: (v) => eur(v) },
+  { k: 'entradas', rot: 'Entradas (€)', fmt: dec },
+  { k: 'saidas', rot: 'Saídas (€)', fmt: dec },
+  { k: 'resultado', rot: 'Resultado (€)', fmt: dec },
   { k: 'autossuf', rot: 'Autossuficiência', fmt: (v) => pct(v) },
-  { k: 'defice', rot: 'Défice coberto', fmt: (v) => (v ? eur(v) : '—') },
+  { k: 'defice', rot: 'Défice coberto (€)', fmt: dec },
   { k: 'adultos', rot: 'Média jovens e adultos', fmt: (v) => num(v, 1) },
-  { k: 'entradasPessoa', rot: 'Entradas por pessoa', fmt: (v) => eur(v) },
-  { k: 'custoPessoa', rot: 'Custo por pessoa', fmt: (v) => eur(v) },
+  { k: 'entradasPessoa', rot: 'Entradas por pessoa (€)', fmt: dec },
+  { k: 'custoPessoa', rot: 'Custo por pessoa (€)', fmt: dec },
   { k: 'pctDizimos', rot: '% das entradas em dízimos', fmt: (v) => pct(v) },
 ];
 
@@ -99,6 +99,7 @@ export default function Comparacao() {
   return (
     <>
       <h1>Comparação entre comunidades {ano}</h1>
+      <Frescura ano={ano} ate={mesesDecorridos(ano, hoje())} calculadoEm={resumos.dados?.[0]?.calculadoEm} />
       <p className="muted">Entradas e saídas de cada comunidade, já com a parte dos custos e proveitos gerais (repartidos pela média de jovens e adultos dos últimos 12 meses). "Por pessoa" divide pelo número médio de jovens e adultos por registo de assistência no período.</p>
 
       <div className="card sec">
@@ -135,7 +136,7 @@ export default function Comparacao() {
               ))}
               {porRepartir && <tr className="muted"><td>{porRepartir.nome}</td>{COLUNAS.map((c) => <td key={c.k} className="num">{c.fmt(porRepartir[c.k] as number | null)}</td>)}</tr>}
             </tbody>
-            <tfoot><tr><td>CCLX</td>{COLUNAS.map((c) => <td key={c.k} className="num">{c.fmt(cclx[c.k] as number | null)}</td>)}</tr></tfoot>
+            <tfoot><tr className="total-geral"><td>CCLX</td>{COLUNAS.map((c) => <td key={c.k} className="num">{c.fmt(cclx[c.k] as number | null)}</td>)}</tr></tfoot>
           </table></div>
           <p className="muted small">Autossuficiência = entradas a dividir pelas saídas. Défice coberto = parte das saídas que as entradas da comunidade não cobrem e que vem do orçamento geral.{gerais ? '' : ' Sem a parte dos gerais, o total CCLX continua a incluí-los.'}</p>
         </div>

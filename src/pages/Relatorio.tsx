@@ -1,8 +1,8 @@
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros } from '../components/ui';
+import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros, Frescura } from '../components/ui';
 import { listarComunidades, listarCustosFixos, listarExcecoes, listarLotes, listarResumos } from '../lib/db';
 import { domingosEmFalta, eDomingo } from '../lib/domingos';
-import { eur, hoje, MESES, MESES_CURTOS, num, pct, r2 } from '../lib/format';
+import { dec, eur, hoje, MESES, MESES_CURTOS, num, pct, r2 } from '../lib/format';
 import { mesesDoRelatorio, resumoAnual, type ResumoAnual } from '../lib/relatorio';
 import { mesesDecorridos } from '../lib/resumos';
 import type { Lote, Resumo } from '../lib/types';
@@ -96,6 +96,7 @@ export default function Relatorio() {
       </div>
       <div className="kicker" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.12em', color: 'var(--cinza)' }}>{`RELATÓRIO FINANCEIRO · ${nomeCom.toUpperCase()}`}</div>
       <h1>Custos x entradas e assistência {ano}</h1>
+      <Frescura ano={ano} ate={ate} calculadoEm={rAtual.dados?.[0]?.calculadoEm} />
 
       <Estado aCarregar={aCarregar} erro={rAtual.erro || ass.erro} vazio={!atual.length} />
       {!aCarregar && !!atual.length && <>
@@ -147,16 +148,16 @@ export default function Relatorio() {
         <div className="sec">
           <h2>Mês a mês ({ano})</h2>
           <div className="tabela"><table>
-            <thead><tr><th>Mês</th><th className="num">Entradas</th><th className="num">Custos fixos</th><th className="num">Despesas</th><th className="num">Gerais</th><th className="num">Saldo</th><th className="num">Saldo acumulado</th><th className="num">Jovens e adultos</th><th className="num">Total de pessoas</th></tr></thead>
+            <thead><tr><th>Mês</th><th className="num">Entradas (€)</th><th className="num">Custos fixos (€)</th><th className="num">Despesas (€)</th><th className="num">Gerais (€)</th><th className="num">Saldo (€)</th><th className="num">Saldo acumulado (€)</th><th className="num">Jovens e adultos</th><th className="num">Total de pessoas</th></tr></thead>
             <tbody>{meses.map((m) => (
               <tr key={m.mes}>
-                <td>{MESES[m.mes - 1]}</td><td className="num">{eur(m.entradas)}</td><td className="num">{eur(m.custosFixos)}</td><td className="num">{eur(m.despesas)}</td>
-                <td className="num">{m.gerais ? eur(m.gerais) : '—'}</td>
-                <td className={'num' + (m.saldo < 0 ? ' neg' : '')}>{eur(m.saldo)}</td><td className={'num' + (m.saldoAcumulado < 0 ? ' neg' : '')}>{eur(m.saldoAcumulado)}</td>
+                <td>{MESES[m.mes - 1]}</td><td className="num">{dec(m.entradas)}</td><td className="num">{dec(m.custosFixos)}</td><td className="num">{dec(m.despesas)}</td>
+                <td className="num">{dec(m.gerais)}</td>
+                <td className={'num' + (m.saldo < 0 ? ' neg' : '')}>{dec(m.saldo)}</td><td className={'num' + (m.saldoAcumulado < 0 ? ' neg' : '')}>{dec(m.saldoAcumulado)}</td>
                 <td className="num">{num(m.adultosMedia, 1)}</td><td className="num">{num(pessoas[m.mes - 1], 1)}</td>
               </tr>
             ))}</tbody>
-            <tfoot><tr><td>Total</td><td className="num">{eur(A.entradas)}</td><td className="num">{eur(A.custosFixos)}</td><td className="num">{eur(A.despesas)}</td><td className="num">{A.gerais ? eur(A.gerais) : '—'}</td><td className="num">{eur(A.resultado)}</td><td /><td className="num">{num(A.adultosMedia, 1)}</td><td /></tr></tfoot>
+            <tfoot><tr className="total-geral"><td>Total</td><td className="num">{dec(A.entradas)}</td><td className="num">{dec(A.custosFixos)}</td><td className="num">{dec(A.despesas)}</td><td className="num">{dec(A.gerais)}</td><td className={'num' + (A.resultado < 0 ? ' neg' : '')}>{dec(A.resultado)}</td><td /><td className="num">{num(A.adultosMedia, 1)}</td><td /></tr></tfoot>
           </table></div>
           <p className="muted small">Assistência: média por domingo (celebrações). "Total de pessoas" inclui jovens e adultos, Jump, crianças e Connect's.</p>
         </div>

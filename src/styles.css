@@ -2,7 +2,7 @@
 :root {
   --preto: #000000;
   --grafite: #333333;
-  --cinza: #777777;
+  --cinza: #666666; /* 5,7:1 sobre branco (WCAG AA também em texto pequeno) */
   --claro: #e6e6e6;
   --branco: #ffffff;
   --fundo: #f7f7f7;
@@ -11,17 +11,20 @@
   line-height: 1.3;
   color: var(--preto);
   background: var(--fundo);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 * { box-sizing: border-box; }
 body { margin: 0; }
 a { color: var(--preto); }
-h1 { font-size: 26px; font-weight: 700; margin: 0 0 4px; }
-h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; }
+h1 { font-size: 26px; font-weight: 700; margin: 0 0 4px; text-wrap: balance; }
+h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; text-wrap: balance; }
 h3 { font-size: 12px; font-weight: 500; margin: 0; letter-spacing: .06em; text-transform: uppercase; color: var(--cinza); }
+p, li, .nota, .aviso { text-wrap: pretty; }
 p { margin: 0 0 8px; }
 .muted { color: var(--cinza); font-size: 12px; }
 .small { font-size: 12px; }
-.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums lining-nums; text-align: right; white-space: nowrap; }
 .neg { font-weight: 700; }
 
 /* Estrutura */
@@ -55,18 +58,42 @@ p { margin: 0 0 8px; }
 .etiqueta { display: inline-block; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; border: 1px solid var(--grafite); padding: 1px 6px; }
 .etiqueta.preta { background: var(--preto); color: var(--branco); border-color: var(--preto); }
 
-table { border-collapse: collapse; width: 100%; background: var(--branco); }
-th, td { padding: 6px 10px; border-bottom: 1px solid var(--claro); text-align: left; font-size: 13px; vertical-align: top; }
-th { background: var(--preto); color: var(--branco); font-size: 11px; font-weight: 700; position: sticky; top: 0; }
-tfoot td { font-weight: 700; border-top: 1px solid var(--preto); }
+table { border-collapse: separate; border-spacing: 0; width: 100%; background: var(--branco); font-variant-numeric: tabular-nums lining-nums; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--claro); text-align: left; font-size: 13px; vertical-align: top; background: var(--branco); }
+thead th { background: var(--preto); color: var(--branco); font-size: 11px; font-weight: 700; position: sticky; top: 0; z-index: 2; }
+/* Linhas de total ao estilo contabilístico: negrito e regra simples por cima; total geral com regra dupla por baixo. */
+tfoot td, tfoot th { font-weight: 700; font-size: 13px; color: var(--preto); background: var(--branco); position: static; }
+tfoot tr:first-child td, tfoot tr:first-child th { border-top: 1px solid var(--preto); }
+tr.total-geral td, tr.total-geral th { border-bottom: 3px double var(--preto); }
+/* Seguir uma linha ao longo de tabelas largas. */
+tbody tr:nth-child(even) td { background: #fafafa; }
+tbody tr:hover td { background: #f0f0f0; }
+tbody td { transition: background-color 120ms ease; }
 .tabela { overflow-x: auto; max-height: 560px; overflow-y: auto; border: 1px solid var(--claro); }
+/* Primeira coluna fixa ao deslizar na horizontal. */
+.tabela th:first-child, .tabela td:first-child { position: sticky; left: 0; z-index: 1; box-shadow: inset -1px 0 0 var(--claro); }
+.tabela thead th:first-child { z-index: 3; }
+.tabela tfoot td:first-child, .tabela tfoot th:first-child { position: sticky; }
 
 button, .btn { font-family: inherit; font-size: 13px; padding: 7px 14px; border: 1px solid var(--preto); background: var(--preto); color: var(--branco); cursor: pointer; }
 button.sec, .btn.sec { background: var(--branco); color: var(--preto); }
 button:disabled { opacity: .45; cursor: default; }
-button.link { background: none; border: none; color: var(--preto); text-decoration: underline; padding: 0; }
-input, select, textarea { font-family: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--cinza); background: var(--branco); color: var(--preto); }
-input[type=number] { text-align: right; }
+button.link { background: none; border: none; color: var(--preto); text-decoration: underline; padding: 0; position: relative; }
+/* Área de clique alargada (≈40px) sem mudar o aspeto. */
+button.link::after { content: ''; position: absolute; inset: -10px -6px; }
+thead button.link { color: inherit; }
+input, select, textarea { font-family: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--cinza); background: var(--branco); color: var(--preto); font-variant-numeric: tabular-nums lining-nums; }
+input[type=number], input[inputmode=decimal] { text-align: right; }
+/* Foco visível para quem trabalha com o teclado. */
+:focus-visible { outline: 2px solid var(--preto); outline-offset: 2px; }
+.side :focus-visible { outline-color: var(--branco); }
+.recharts-text, .recharts-tooltip-wrapper { font-variant-numeric: tabular-nums lining-nums; }
+/* Espaços reservados enquanto os dados carregam (evitam saltos na página). */
+.esqueleto { display: grid; gap: 12px; }
+.esqueleto .blocos { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.esqueleto .bloco { height: 84px; background: var(--branco); border: 1px solid var(--claro); border-top: 3px solid var(--claro); }
+.esqueleto .linha-e { height: 30px; background: var(--branco); border: 1px solid var(--claro); }
+.frescura { font-size: 11px; color: var(--grafite); border-left: 3px solid var(--claro); padding: 4px 10px; margin: 0 0 14px; }
 label.campo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--grafite); }
 .linha { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
 .acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -101,7 +128,9 @@ label.campo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; 
   .main { padding: 0; }
   .so-imprimir { display: block; }
   .card { break-inside: avoid; border: 1px solid #e6e6e6; }
-  .tabela { overflow: visible; }
+  .tabela { overflow: visible; max-height: none; }
+  .tabela th:first-child, .tabela td:first-child { position: static; box-shadow: none; }
+  tbody tr:nth-child(even) td, tbody tr:hover td { background: #fff; }
   .tabela table { font-size: 10px; }
   .quebra-antes { break-before: page; }
   .cards { grid-template-columns: repeat(5, 1fr); }

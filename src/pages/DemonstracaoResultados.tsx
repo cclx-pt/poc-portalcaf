@@ -1,11 +1,11 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, useCarregar, useFiltros } from '../components/ui';
+import { Estado, useCarregar, useFiltros, Frescura } from '../components/ui';
 import { listarCategorias, listarComunidades, listarResumos } from '../lib/db';
 import { linhasDR, type LinhaDR } from '../lib/analise';
-import { eur, MESES, MESES_CURTOS, pct, r2 } from '../lib/format';
+import { eurContab, MESES, MESES_CURTOS, pct, r2, XLSX_EUR, hoje } from '../lib/format';
 import { OUTROS_FUNCIONAMENTO, classificador } from '../lib/rubricas';
-import { GERAIS_POR_REPARTIR } from '../lib/resumos';
+import { GERAIS_POR_REPARTIR, mesesDecorridos } from '../lib/resumos';
 
 type Colunas = 'comunidades' | 'meses';
 /** Vencimentos são confidenciais: entram em "Outros custos de funcionamento"; estas linhas só aparecem com valor. */
@@ -97,7 +97,7 @@ export default function DemonstracaoResultados() {
     }
     linha('RESULTADO', Object.fromEntries(cols.map((c) => [c.id, r2(tE[c.id] - tS[c.id])]))).font = { bold: true };
     ws.getColumn(1).width = 40;
-    cols.forEach((_, i) => { ws.getColumn(i + 2).width = 16; ws.getColumn(i + 2).numFmt = '#,##0.00 €'; });
+    cols.forEach((_, i) => { ws.getColumn(i + 2).width = 16; ws.getColumn(i + 2).numFmt = XLSX_EUR; });
     const buf = await wb.xlsx.writeBuffer();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
@@ -106,12 +106,16 @@ export default function DemonstracaoResultados() {
     URL.revokeObjectURL(a.href);
   }
 
-  const celula = (v: number | undefined, forte = false) => <td className={'num' + ((v ?? 0) < 0 ? ' neg' : '')} style={forte ? { fontWeight: 700 } : undefined}>{v ? eur(v) : <span className="muted">—</span>}</td>;
+  // "0,00" = zero real; "—" = sem dados. Negativos entre parênteses (formato contabilístico).
+  const celula = (v: number | undefined, forte = false) => (
+    <td className={'num' + ((v ?? 0) < 0 ? ' neg' : '') + (v === 0 ? ' muted' : '')} style={forte ? { fontWeight: 700 } : undefined}>{eurContab(v)}</td>
+  );
   const aCarregar = resumos.aCarregar || coms.aCarregar;
 
   return (
     <>
       <h1>Demonstração de resultados {ano}</h1>
+      <Frescura ano={ano} ate={mesesDecorridos(ano, hoje())} calculadoEm={todos[0]?.calculadoEm} />
       <p className="muted">Rendimentos e gastos por rubrica. Os custos e proveitos <b>gerais</b> são repartidos pelas comunidades conforme a média de jovens e adultos dos últimos 12 meses. Vencimentos e Segurança Social aparecem agregados em "{OUTROS_FUNCIONAMENTO}".</p>
 
       <div className="card sec">
@@ -134,7 +138,8 @@ export default function DemonstracaoResultados() {
       </div>
 
       <Estado aCarregar={aCarregar} erro={resumos.erro || coms.erro} vazio={!sel.length} />
-      {!aCarregar && !!sel.length && (
+      {!aCarregar && !!sel.length && (<>
+        <p className="muted small">Valores em euros (€). Negativos entre parênteses; "0,00" é zero e "—" é sem dados.</p>
         <div className="tabela"><table>
           <thead><tr><th>Rubrica</th>{cols.map((c) => <th key={c.id} className="num">{c.nome}</th>)}</tr></thead>
           <tbody>
@@ -155,7 +160,7 @@ export default function DemonstracaoResultados() {
                         {cols.map((c) => <Fragment key={c.id}>{celula(l.valores[c.id], c.id === 'cclx')}</Fragment>)}
                       </tr>
                       {aberto && detalhe(l.tipo, l.rubrica).map((d) => (
-                        <tr key={d.nome} className="small"><td style={{ paddingLeft: 28 }} className="muted">{d.nome}</td>{cols.map((c) => <td key={c.id} className="num muted">{d.valores[c.id] ? eur(d.valores[c.id]) : ''}</td>)}</tr>
+                        <tr key={d.nome} className="small"><td style={{ paddingLeft: 28 }} className="muted">{d.nome}</td>{cols.map((c) => <td key={c.id} className="num muted">{d.valores[c.id] ? eurContab(d.valores[c.id]) : ''}</td>)}</tr>
                       ))}
                       {aberto && <tr className="small"><td colSpan={cols.length + 1} className="muted" style={{ paddingLeft: 28 }}>Valores registados por categoria, antes da repartição dos gerais.</td></tr>}
                     </Fragment>
@@ -166,12 +171,12 @@ export default function DemonstracaoResultados() {
             ))}
           </tbody>
           <tfoot>
-            <tr><td>RESULTADO</td>{cols.map((c) => { const v = r2(tE[c.id] - tS[c.id]); return <td key={c.id} className={'num' + (v < 0 ? ' neg' : '')}>{eur(v)}</td>; })}</tr>
+            <tr className="total-geral"><td>RESULTADO</td>{cols.map((c) => { const v = r2(tE[c.id] - tS[c.id]); return <td key={c.id} className={'num' + (v < 0 ? ' neg' : '')}>{eurContab(v)}</td>; })}</tr>
             <tr><td>Margem (resultado / rendimentos)</td>{cols.map((c) => <td key={c.id} className="num">{tE[c.id] ? pct((tE[c.id] - tS[c.id]) / tE[c.id]) : '—'}</td>)}</tr>
             <tr><td>Autossuficiência (rendimentos / gastos)</td>{cols.map((c) => <td key={c.id} className="num">{tS[c.id] ? pct(tE[c.id] / tS[c.id]) : '—'}</td>)}</tr>
           </tfoot>
         </table></div>
-      )}
+      </>)}
     </>
   );
 }

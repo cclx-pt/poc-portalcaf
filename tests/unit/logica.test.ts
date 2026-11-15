@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { eur, parseData, parseNumero } from '../../src/lib/format';
+import { dec, eur, eurContab, parseData, parseNumero } from '../../src/lib/format';
 import { FONTES, construirLotes, mapearLinhas, resolverComunidade, sugerirMapa } from '../../src/lib/fontes';
 import { calcularPublico, calcularPublicoSite, calcularResumos, somarMeses } from '../../src/lib/resumos';
 import { mapearExtrato, sugerir, sugerirMapaBanco } from '../../src/lib/banco';
@@ -21,7 +21,13 @@ describe('formatos portugueses', () => {
     expect(parseData('03-01-2026')).toBe('2026-01-03');
   });
   it('euros com duas casas', () => {
-    expect(eur(-7847.65).replace(/\s/g, ' ')).toBe('-7.847,65 €');
+    expect(eur(-7847.65).replace(/\s/g, ' ')).toBe('−7.847,65 €'); // sinal de menos tipográfico (U+2212)
+    expect(eurContab(-200)).toBe('(200,00)');
+    expect(eurContab(1234.5)).toBe('1.234,50');
+    expect(eurContab(0)).toBe('0,00');
+    expect(eurContab(null)).toBe('—');
+    expect(dec(-3.5)).toBe('−3,50');
+    expect(dec(undefined)).toBe('—');
   });
 });
 
