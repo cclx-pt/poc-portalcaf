@@ -28,6 +28,7 @@ export default function Layout() {
         {temNivel('privado') && <>
           <div className="grupo">Registos</div>
           <NavLink to="/registos/presencas">Presenças por evento</NavLink>
+          {pode('registar') && <NavLink to="/registos/presencas/novo">Registar presenças</NavLink>}
           <NavLink to="/registos/batismos">Batismos <span className="etiqueta-menu">em desenvolvimento</span></NavLink>
           <NavLink to="/registos/conversoes">Conversões <span className="etiqueta-menu">em desenvolvimento</span></NavLink>
         </>}

@@ -226,6 +226,8 @@ export interface ExcecaoAssistencia {
 export interface ConfigAssistencia {
   /** Tipo de evento (campo "Evento" do Registo de Presenças) que conta como celebração de domingo. */
   eventoCelebracao: string | null;
+  /** Tipos de evento disponíveis no formulário de presenças do portal (por omissão, os do Jotform). */
+  eventos?: string[];
   atualizadoPor?: string;
   atualizadoEm?: string;
 }

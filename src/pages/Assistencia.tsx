@@ -109,6 +109,7 @@ export default function Assistencia() {
           <SyncEstado />
         </div>
         <div className="acoes">
+          {pode('registar') && <a className="btn" href={`${import.meta.env.BASE_URL}#/registos/presencas/novo`}>Registar presenças</a>}
           <button onClick={() => void calcular()} disabled={aCalcular} title="Vai buscar os registos novos ao Jotform e atualiza o mapa e os domingos em falta">{aCalcular ? 'A calcular…' : 'Calcular'}</button>
           {pode('importar') && <button className="sec" onClick={() => setImportar(true)}>Importação manual (recurso)</button>}
         </div>

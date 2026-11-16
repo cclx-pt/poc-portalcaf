@@ -177,6 +177,27 @@ describe('sincronização incremental', () => {
     expect([...m.cols.lotes.keys()].some((k) => k.includes('2016'))).toBe(true);
   });
 
+  it('reler tudo preserva os registos de presenças feitos no portal', async () => {
+    const A = JOTFORM_FORMS.assistencia.id;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, status: 200, json: async () => ({ responseCode: 200, content: !url.includes(A) ? [] : [
+      { id: 'j1', created_at: '2026-11-08 12:00:00', status: 'ACTIVE', answers: { '1': { text: 'Dia', type: 'control_datetime', answer: { day: '08', month: '11', year: '2026' } }, '2': { text: 'Comunidade', answer: 'Almada' }, '3': { text: 'Jovens e Adultos', answer: '100' }, '4': { text: 'Evento', answer: 'Celebração Domingo' } } },
+    ] }) }) as Response));
+    const m = armazemMemoria();
+    // Registo feito no portal, no mesmo lote mensal.
+    const doPortal: Lote = { id: 'assistencia_2026_11_almada', origem: 'assistencia', ano: 2026, mes: 11, periodo: '2026-11', comunidadeId: 'almada',
+      registos: [{ id: 'portal-2026-11-15-x', data: '2026-11-15', valor: 120, categoria: 'Assistência', evento: 'Celebração Domingo' }], total: 120, n: 1, atualizadoEm: '', atualizadoPor: 'ana@x.pt' };
+    const soPortal: Lote = { ...doPortal, id: 'assistencia_2026_10_porto', mes: 10, periodo: '2026-10', comunidadeId: 'porto', registos: [{ id: 'portal-2026-10-04-y', data: '2026-10-04', valor: 40, categoria: 'Assistência', evento: 'ATOS' }], total: 40 };
+    await m.arm.gravarLotes([{ col: 'lotes', id: doPortal.id, lote: doPortal }, { col: 'lotes', id: soPortal.id, lote: soPortal }]);
+
+    const e = await sincronizar(m.arm, CFG, 'teste', { modo: 'completo' });
+    expect(e.ok).toBe(true);
+    const l = m.cols.lotes.get('assistencia_2026_11_almada')!;
+    expect(l.registos.map((r) => r.id).sort()).toEqual(['j1', 'portal-2026-11-15-x']);
+    expect(l.total).toBe(220);
+    // Lote que só tinha registos do portal não é apagado.
+    expect(m.cols.lotes.get('assistencia_2026_10_porto')!.registos.map((r) => r.id)).toEqual(['portal-2026-10-04-y']);
+  });
+
   it('não toca em meses fechados', async () => {
     vi.stubGlobal('fetch', jotformFalso({ [F]: [{ id: 'a', created_at: '2026-03-02 10:00:00', comunidade: 'Almada', valor: '50', nome: 'Ana' }] }).fetchFalso);
     const m = armazemMemoria(['2026-03']);
