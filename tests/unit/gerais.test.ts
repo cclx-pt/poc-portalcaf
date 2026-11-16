@@ -127,13 +127,15 @@ describe('repartição dos gerais', () => {
     expect(mes(rs, 'almada', 7).entradas).toBe(12.9);
   });
 
-  it('a quota da bolsa geral entra nas rubricas da comunidade', () => {
+  it('a quota da bolsa geral entra nas rubricas da comunidade, sempre em "Outros rendimentos"', () => {
     const rs = calcularResumos(base({
       contribuir: [lote('contribuir', 'bolsa-geral', 2026, 6, [{ valor: 100, categoria: 'Dízimos' }])],
       assistencia: [lote('assistencia', 'almada', 2026, 6, [{ valor: 30 }]), lote('assistencia', 'porto', 2026, 6, [{ valor: 10 }])],
     }));
-    expect(mes(rs, 'almada', 6).rubricas.entrada['Dízimos'].local).toBe(75);
-    expect(mes(rs, 'porto', 6).rubricas.entrada['Dízimos'].local).toBe(25);
+    // Entradas sem comunidade: rubrica "Outros rendimentos", seja qual for a categoria (decisão do CAF).
+    expect(mes(rs, 'almada', 6).rubricas.entrada['Outros rendimentos'].local).toBe(75);
+    expect(mes(rs, 'porto', 6).rubricas.entrada['Outros rendimentos'].local).toBe(25);
+    expect(mes(rs, 'almada', 6).rubricas.entrada['Dízimos']).toBeUndefined();
   });
 
   it('página pública: "gerais" conta no total CCLX mas não é uma comunidade', () => {

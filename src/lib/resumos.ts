@@ -107,7 +107,8 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
   const registar = (com: string, mes: number, tipo: Tipo, categoria: string, valor: number, confidencial = false, custoFixo = false) => {
     const k = classificar(categoria, tipo);
     const rubrica = k.confidencial || confidencial ? OUTROS_FUNCIONAMENTO : k.rubrica;
-    if (com === 'bolsa-geral' && tipo === 'entrada') { soma(bolsaRub[mes - 1], rubrica, valor); return; }
+    // Entradas sem comunidade (bolsa geral): rubrica "Outros rendimentos", seja qual for a categoria (decisão do CAF).
+    if (com === 'bolsa-geral' && tipo === 'entrada') { soma(bolsaRub[mes - 1], 'Outros rendimentos', valor); return; }
     if (k.ambito === 'geral' && com !== 'bolsa-geral') {
       soma(bolo[mes - 1][tipo], rubrica, valor);
       const ced = m(com, mes).cedidoGeral;
