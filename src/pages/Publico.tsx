@@ -65,7 +65,7 @@ export default function Publico({ embutido }: { embutido?: boolean }) {
         <div className="card sec">
           <h2>Por mês</h2>
           <GraficoBarras dados={porMes.map((m) => ({ rotulo: MESES_CURTOS[m.mes - 1], Entradas: m.entradas ?? 0, 'Custos de funcionamento': m.custos ?? 0, 'Outras despesas': m.outras ?? 0 }))}
-            series={[{ key: 'Entradas', nome: 'Entradas' }, { key: 'Custos de funcionamento', nome: 'Custos de funcionamento' }, { key: 'Outras despesas', nome: 'Outras despesas' }]} />
+            series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Custos de funcionamento', nome: 'Custos de funcionamento', cor: 'saidas' }, { key: 'Outras despesas', nome: 'Outras despesas', cor: 'saidas2' }]} />
         </div>
         <div className="tabela">
           <table>

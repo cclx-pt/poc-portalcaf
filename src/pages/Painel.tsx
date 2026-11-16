@@ -69,11 +69,11 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
             const pm = partesMes(m);
             return { rotulo: MESES_CURTOS[i], Contribuir: m.contribuir, Coletas: m.coletas + m.transferencias + m.quotaBolsa, 'Custos fixos': pm.custosFixos, Despesas: pm.despesas, Gerais: pm.gerais };
           })} series={[
-            { key: 'Contribuir', nome: 'Contribuir', stack: 'e' },
-            { key: 'Coletas', nome: 'Coletas, transferências e bolsa', stack: 'e' },
-            { key: 'Custos fixos', nome: 'Custos fixos', stack: 's' },
-            { key: 'Despesas', nome: 'Despesas e reembolsos', stack: 's' },
-            ...(p.gerais ? [{ key: 'Gerais', nome: 'Parte dos gerais', stack: 's' }] : []),
+            { key: 'Contribuir', nome: 'Contribuir', stack: 'e', cor: 'entradas' },
+            { key: 'Coletas', nome: 'Coletas, transferências e bolsa', stack: 'e', cor: 'entradas2' },
+            { key: 'Custos fixos', nome: 'Custos fixos', stack: 's', cor: 'saidas' },
+            { key: 'Despesas', nome: 'Despesas e reembolsos', stack: 's', cor: 'saidas2' },
+            ...(p.gerais ? [{ key: 'Gerais', nome: 'Parte dos gerais', stack: 's', cor: 'saidas3' as const }] : []),
           ]} />
         </div>
 

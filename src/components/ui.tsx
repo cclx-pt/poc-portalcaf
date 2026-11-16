@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { eur, eurK, num } from '../lib/format';
+import { CATEGORICAS, CORES } from '../lib/cores';
 
 // ---------- filtros globais (ano e comunidade) ----------
 interface Filtros { ano: number; setAno: (a: number) => void; comunidade: string; setComunidade: (c: string) => void }
@@ -57,11 +58,12 @@ export function Kpi({ titulo, valor, sub, negativo }: { titulo: string; valor: s
   );
 }
 
-// ---------- gráfico de barras em escala de cinzentos ----------
-export const TONS = ['#000000', '#777777', '#333333', '#bdbdbd'];
+// ---------- gráfico de barras ----------
+export const TONS = CATEGORICAS;
+export interface Serie { key: string; nome: string; stack?: string; cor?: keyof typeof CORES | string }
 export function GraficoBarras({ dados, series, altura = 280, empilhado, unidade = 'eur' }: {
   dados: Record<string, string | number>[];
-  series: { key: string; nome: string; stack?: string }[];
+  series: Serie[];
   altura?: number;
   empilhado?: boolean;
   /** 'pessoas': eixos e dicas sem símbolo de moeda. */
@@ -69,17 +71,21 @@ export function GraficoBarras({ dados, series, altura = 280, empilhado, unidade 
 }) {
   const fmtEixo = (v: number) => (unidade === 'eur' ? eurK(v) : num(v));
   const fmtDica = (v: number) => (unidade === 'eur' ? eur(v) : num(v, Number.isInteger(v) ? 0 : 1));
+  const cor = (s: Serie, i: number) => (s.cor && s.cor in CORES ? CORES[s.cor as keyof typeof CORES] : s.cor ?? CATEGORICAS[i % CATEGORICAS.length]);
+  // Cantos arredondados só no topo de cada barra (na última série de cada pilha).
+  const ultimaDaPilha = (s: Serie, i: number) => !empilhado || series.slice(i + 1).every((x) => (x.stack ?? 'a') !== (s.stack ?? 'a'));
   return (
     <div role="img" aria-label={'Gráfico: ' + series.map((s) => s.nome).join(', ')} style={{ width: '100%', height: altura }}>
       <ResponsiveContainer>
-        <BarChart data={dados} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-          <CartesianGrid stroke="#e6e6e6" vertical={false} />
-          <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: '#333' }} axisLine={{ stroke: '#777' }} tickLine={false} />
-          <YAxis tickFormatter={(v) => fmtEixo(Number(v))} tick={{ fontSize: 11, fill: '#333' }} axisLine={false} tickLine={false} width={80} />
+        <BarChart data={dados} margin={{ top: 10, right: 10, left: 10, bottom: 0 }} barCategoryGap="30%" barGap={4}>
+          <CartesianGrid stroke={CORES.grelha} vertical={false} />
+          <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.texto }} axisLine={{ stroke: CORES.eixo }} tickLine={false} />
+          <YAxis tickFormatter={(v) => fmtEixo(Number(v))} tick={{ fontSize: 11, fill: CORES.texto }} axisLine={false} tickLine={false} width={80} />
           <Tooltip cursor={{ fill: '#f2f2f2' }} formatter={(v) => fmtDica(Number(v))} contentStyle={{ border: '1px solid #333', borderRadius: 0, fontSize: 12 }} />
-          <Legend wrapperStyle={{ fontSize: 12 }} iconType="square" />
+          {series.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} iconType="square" formatter={(v) => <span style={{ color: CORES.texto }}>{v}</span>} />}
           {series.map((s, i) => (
-            <Bar key={s.key} dataKey={s.key} name={s.nome} fill={TONS[i % TONS.length]} stackId={empilhado ? s.stack ?? 'a' : undefined} />
+            <Bar key={s.key} dataKey={s.key} name={s.nome} fill={cor(s, i)} stackId={empilhado ? s.stack ?? 'a' : undefined}
+              maxBarSize={36} radius={ultimaDaPilha(s, i) ? [4, 4, 0, 0] : 0} stroke="#fff" strokeWidth={empilhado ? 1 : 0} isAnimationActive={false} />
           ))}
         </BarChart>
       </ResponsiveContainer>

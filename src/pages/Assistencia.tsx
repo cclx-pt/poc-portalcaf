@@ -7,6 +7,7 @@ import { lerConfigAssistencia, listarComunidades, listarExcecoes, listarLotes } 
 import { sincronizarAgora } from '../lib/syncWeb';
 import { MESES, MESES_CURTOS, num } from '../lib/format';
 import { contaParaMedia, domingosEmFalta, eDomingo } from '../lib/domingos';
+import { CATEGORICAS } from '../lib/cores';
 
 /** Grupos de idade do Registo de Presenças. Só pessoas: nunca símbolo de moeda. */
 const GRUPOS = [
@@ -134,7 +135,7 @@ export default function Assistencia() {
 
         <div className="card sec">
           <h2>Média de pessoas por registo, por mês</h2>
-          <GraficoBarras dados={grafico} series={GRUPOS.map((g) => ({ key: g.key, nome: g.nome }))} empilhado unidade="pessoas" altura={260} />
+          <GraficoBarras dados={grafico} series={GRUPOS.map((g, i) => ({ key: g.key, nome: g.nome, cor: CATEGORICAS[i] }))} empilhado unidade="pessoas" altura={260} />
         </div>
 
         <div className="sec">
