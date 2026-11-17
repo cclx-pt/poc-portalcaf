@@ -142,3 +142,28 @@ label.campo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; 
 .abas button.ativa { background: var(--preto); color: var(--branco); border-color: var(--preto); font-weight: 700; }
 
 .side .etiqueta-menu { font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--cinza); margin-left: 6px; }
+
+/* Registo de presenças (página do portal e link direto /registar) */
+.form-presencas { max-width: 760px; }
+.grelha-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.grelha-num { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.grelha-num input { width: 100%; }
+.erro-campo { color: #d03b3b; }
+input[aria-invalid="true"] { border-color: #d03b3b; }
+.registo-rapido { max-width: 820px; margin: 0 auto; padding: 16px 16px 40px; }
+.rr-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 2px solid var(--preto); padding-bottom: 12px; margin-bottom: 16px; }
+.rr-topo img { width: 150px; }
+.rr-utilizador { text-align: right; }
+.rr-ligacoes { display: flex; gap: 12px; justify-content: flex-end; }
+@media (max-width: 600px) {
+  .grelha-num { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .form-presencas input, .form-presencas select, .form-presencas textarea { font-size: 16px; min-height: 44px; } /* 16px evita o zoom do iOS */
+  .form-presencas .acoes button { flex: 1; min-height: 44px; }
+  .rr-topo img { width: 110px; }
+  .registo-rapido .abas button { flex: 1; min-height: 44px; }
+  /* tabela de presenças em cartões */
+  .tabela-presencas thead { display: none; }
+  .tabela-presencas tr { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; border-bottom: 1px solid var(--claro); padding: 8px 0; }
+  .tabela-presencas td { border: none; padding: 2px 0; text-align: left; }
+  .tabela-presencas td[data-rotulo]::before { content: attr(data-rotulo); display: block; font-size: 10px; color: var(--cinza); text-transform: uppercase; letter-spacing: .06em; }
+}

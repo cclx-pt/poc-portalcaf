@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { eur, eurK, num } from '../lib/format';
+import { dataPT, eur, eurK, lerDataPT, mascaraDataPT, num } from '../lib/format';
 import { CATEGORICAS, CORES } from '../lib/cores';
 
 // ---------- filtros globais (ano e comunidade) ----------
@@ -129,5 +129,21 @@ export function Frescura({ calculadoEm, ate, ano }: { calculadoEm?: string; ate:
     <p className="frescura">
       Valores {ate ? `até ${MES[ate - 1]} de ${ano}` : `de ${ano}`} · resumos calculados em {dt(calculadoEm)} · última sincronização com o Jotform: {dt(sync.dados?.fim)} · fonte: Jotform e tabela de custos fixos
     </p>
+  );
+}
+
+// ---------- campo de data em dd/mm/aaaa (norma portuguesa, igual em qualquer browser) ----------
+/** Data escrita como dd/mm/aaaa; devolve AAAA-MM-DD (ou '' enquanto incompleta/inválida). */
+export function CampoData({ rotulo, valor, onChange, max, obrigatorio }: { rotulo: string; valor: string; onChange: (iso: string) => void; max?: string; obrigatorio?: boolean }) {
+  const [texto, setTexto] = useState(dataPT(valor));
+  useEffect(() => { if ((lerDataPT(texto) ?? '') !== valor) setTexto(dataPT(valor)); }, [valor]); // eslint-disable-line react-hooks/exhaustive-deps
+  const iso = lerDataPT(texto);
+  const erro = texto.length === 10 && !iso ? 'Data inválida' : iso && max && iso > max ? `Não pode ser depois de ${dataPT(max)}` : null;
+  return (
+    <label className="campo">{rotulo}{obrigatorio ? ' *' : ''}
+      <input type="text" inputMode="numeric" placeholder="dd/mm/aaaa" maxLength={10} autoComplete="off" value={texto} aria-invalid={!!erro}
+        onChange={(e) => { const t = mascaraDataPT(e.target.value); setTexto(t); const d = lerDataPT(t); onChange(d && (!max || d <= max) ? d : ''); }} />
+      {erro && <span className="small erro-campo">{erro}</span>}
+    </label>
   );
 }

@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { SyncEstado } from '../components/SyncEstado';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
+import { CampoData, Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
 import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
 import { CATEGORIAS, COMUNIDADES, CONTAS, CUSTOS_FIXOS_CDR, JOTFORM_FORMS } from '../lib/seed';
 import { NIVEIS, NIVEL_LABEL, type Categoria, type Comunidade, type Conta, type Nivel } from '../lib/types';
 import { formatarIban, ibanValido, limparIban } from '../lib/iban';
 import { usosCategoria, usosComunidade, usosConta } from '../lib/uso';
-import { parseData, slug } from '../lib/format';
+import { dataPT, parseData, slug } from '../lib/format';
 import { eDomingo } from '../lib/domingos';
 import { EVENTOS_INICIAIS } from '../lib/presencas';
 import type { ExcecaoAssistencia } from '../lib/types';
@@ -103,7 +103,7 @@ export default function Configuracao() {
       if (!nova.motivo.trim()) throw new Error('Indique o motivo.');
       const e: ExcecaoAssistencia = { id: `${nova.data}_${nova.ambito}`, data: nova.data, ambito: nova.ambito, motivo: nova.motivo.trim(), criadoPor: acesso!.email, criadoEm: new Date().toISOString() };
       await gravarExcecao(e);
-      await auditar(acesso!.email, 'exceção de assistência', `${e.data} · ${e.ambito === 'cclx' ? 'Toda a CCLX' : nomeCom(e.ambito)} · ${e.motivo}`);
+      await auditar(acesso!.email, 'exceção de assistência', `${dataPT(e.data)} · ${e.ambito === 'cclx' ? 'Toda a CCLX' : nomeCom(e.ambito)} · ${e.motivo}`);
       setNova({ data: '', ambito: 'cclx', motivo: '' });
       await excecoes.recarregar();
     } catch (err) { setMsgExc(err instanceof Error ? err.message : String(err)); }
@@ -111,7 +111,7 @@ export default function Configuracao() {
   async function removerExcecao(e: ExcecaoAssistencia) {
     if (!confirm(`Apagar a exceção de ${dataPt(e.data)}?`)) return;
     await apagarExcecao(e.id);
-    await auditar(acesso!.email, 'apagar exceção de assistência', `${e.data} · ${e.ambito}`);
+    await auditar(acesso!.email, 'apagar exceção de assistência', `${dataPT(e.data)} · ${e.ambito}`);
     await excecoes.recarregar();
   }
   // Tipos de evento do formulário de presenças do portal.
@@ -384,7 +384,7 @@ export default function Configuracao() {
         <h2>Domingos sem assistência esperada (exceções)</h2>
         <p className="muted small">Por exemplo: culto conjunto, retiro ou encerramento. Podem valer para toda a CCLX ou só para uma comunidade.</p>
         <div className="filtros" style={{ alignItems: 'flex-end', marginBottom: 10 }}>
-            <label className="campo">Domingo<input type="date" value={nova.data} onChange={(e) => setNova({ ...nova, data: e.target.value })} /></label>
+            <CampoData rotulo="Domingo" valor={nova.data} onChange={(d) => setNova({ ...nova, data: d })} />
             <label className="campo">Âmbito
               <select value={nova.ambito} onChange={(e) => setNova({ ...nova, ambito: e.target.value })}>
                 <option value="cclx">Toda a CCLX</option>
@@ -465,8 +465,8 @@ export default function Configuracao() {
             {edit.tipo === 'comunidade' && <>
               <label className="campo">Nome<input value={edit.v.nome} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, nome: e.target.value } })} /></label>
               <label className="campo">Ordem<input type="number" value={edit.v.ordem} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, ordem: Number(e.target.value) } })} /></label>
-              <label className="campo">Início (opcional)<input type="date" value={edit.v.inicio ?? ''} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, inicio: e.target.value } })} /></label>
-              <label className="campo">Fim (opcional)<input type="date" value={edit.v.fim ?? ''} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, fim: e.target.value } })} /></label>
+              <CampoData rotulo="Início (opcional)" valor={edit.v.inicio ?? ''} onChange={(d) => setEdit({ ...edit, v: { ...edit.v, inicio: d } })} />
+              <CampoData rotulo="Fim (opcional)" valor={edit.v.fim ?? ''} onChange={(d) => setEdit({ ...edit, v: { ...edit.v, fim: d } })} />
               {edit.novo && <p className="muted" style={{ gridColumn: '1 / -1' }}>Identificador: {slug(edit.v.nome) || '—'} (não muda depois de criado).</p>}
             </>}
             {edit.tipo === 'conta' && <>

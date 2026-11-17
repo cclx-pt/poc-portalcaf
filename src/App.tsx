@@ -11,6 +11,7 @@ import Assistencia from './pages/Assistencia';
 import DemonstracaoResultados from './pages/DemonstracaoResultados';
 import RegistoEvento from './pages/RegistoEvento';
 import RegistarPresencas from './pages/RegistarPresencas';
+import RegistoRapido from './pages/RegistoRapido';
 import Comparacao from './pages/Comparacao';
 import Relatorio from './pages/Relatorio';
 import Bancos from './pages/Bancos';
@@ -27,7 +28,18 @@ function Protegido() {
   const { carregando, acesso } = useAuth();
   if (carregando) return <div className="login"><p className="muted">A carregar…</p></div>;
   if (!acesso) return <Login />;
+  // O perfil Registos só tem a área de registo de presenças (link direto, sem menu).
+  if (acesso.papel === 'registos') return <Navigate to="/registar" replace />;
   return <FiltrosProvider><Layout /></FiltrosProvider>;
+}
+
+/** Link direto /registar: pede login se preciso e volta ao formulário; layout mínimo (telemóvel e computador). */
+function ProtegidoRegisto() {
+  const { carregando, acesso, pode } = useAuth();
+  if (carregando) return <div className="login"><p className="muted">A carregar…</p></div>;
+  if (!acesso) return <Login />;
+  if (!pode('registar')) return <Navigate to="/" replace />;
+  return <RegistoRapido />;
 }
 
 function Se({ acao, nivel, children }: { acao?: Acao; nivel?: 'privado' | 'confidencial'; children: ReactElement }) {
@@ -42,6 +54,7 @@ export default function App() {
       <HashRouter>
         <Routes>
           <Route path="/publico" element={<Publico />} />
+          <Route path="/registar" element={<ProtegidoRegisto />} />
           <Route element={<Protegido />}>
             <Route index element={<Painel />} />
             <Route path="entradas" element={<Se nivel="privado"><Fonte key="c" origem="contribuir" /></Se>} />

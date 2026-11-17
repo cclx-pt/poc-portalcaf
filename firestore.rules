@@ -71,8 +71,17 @@ service cloud.firestore {
     // Privado: sem dados pessoais (pseudónimos).
     match /lotes/{id} {
       allow read: if isActive() && myNivel() >= 1 && inScope(resource.data.comunidadeId);
+      // Perfil Registos: só presenças (origem 'assistencia') das suas comunidades.
+      allow list: if hasRole(['registos']) && resource.data.origem == 'assistencia' && inScope(resource.data.comunidadeId);
+      allow get: if hasRole(['registos'])
+        && (resource == null || (resource.data.origem == 'assistencia' && inScope(resource.data.comunidadeId)));
       allow create, update: if canWriteCommunity(request.resource.data.comunidadeId)
         && periodOpen(request.resource.data.periodo);
+      allow create, update: if hasRole(['registos'])
+        && request.resource.data.origem == 'assistencia'
+        && inScope(request.resource.data.comunidadeId)
+        && periodOpen(request.resource.data.periodo)
+        && (resource == null || (resource.data.origem == 'assistencia' && resource.data.comunidadeId == request.resource.data.comunidadeId));
       allow delete: if hasRole(['master', 'caf']) && periodOpen(resource.data.periodo);
     }
 
