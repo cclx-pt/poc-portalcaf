@@ -1,61 +1,52 @@
-import { useEffect } from 'react';
 import type { Contagem } from '../lib/eventos';
 import { num } from '../lib/format';
 
+const hora = (iso?: string) => {
+  const d = iso ? new Date(iso) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString('pt-PT', { timeZone: 'Europe/Lisbon', hour: '2-digit', minute: '2-digit' }) : '';
+};
+
 /**
- * Contador manual (como os contadores de clique): ecrã inteiro com um botão grande de +1.
- * Os atalhos no topo mudam de contagem (ex.: de Jovens e adultos para Crianças); "Voltar ao registo" fecha.
+ * Contador em grelha de toque: um quadrado grande por contagem. Tocar no quadrado soma 1;
+ * o − no canto corrige. Todas as contagens ficam visíveis ao mesmo tempo, com o total em cima.
  */
-export function Contador({ contagens, ativa, valores, contexto, aoMudar, aoSomar, aoEscolher, aoFechar, rascunhoAtivo = true }: {
-  contagens: Contagem[]; ativa: string; valores: Record<string, number | undefined>; contexto: string; rascunhoAtivo?: boolean;
-  aoMudar: (id: string, valor: number) => void;
+export function Contador({ contagens, valores, contexto, aoSomar, aoFechar, rascunhoAtivo = true, guardadoEm }: {
+  contagens: Contagem[]; valores: Record<string, number | undefined>; contexto: string;
   /** Soma (ou subtrai) ao valor mais recente, para cliques rápidos não se perderem. */
   aoSomar: (id: string, delta: number) => void;
-  aoEscolher: (id: string) => void; aoFechar: () => void;
+  aoFechar: () => void; rascunhoAtivo?: boolean; guardadoEm?: string;
 }) {
-  const atual = contagens.find((c) => c.id === ativa) ?? contagens[0];
   const v = (id: string) => { const x = valores[id]; return x == null || Number.isNaN(x) ? 0 : x; };
-  const valor = v(atual.id);
-  const somar = (d: number) => {
-    if (d < 0 && valor <= 0) return;
-    aoSomar(atual.id, d);
+  const total = contagens.reduce((s, c) => s + v(c.id), 0);
+  const somar = (id: string, d: number) => {
+    if (d < 0 && v(id) <= 0) return;
+    aoSomar(id, d);
     try { navigator.vibrate?.(d > 0 ? 15 : [10, 40, 10]); } catch { /* sem vibração */ }
   };
 
-  // Teclado (computador): espaço/Enter/+ soma, − ou Backspace subtrai, Esc volta.
-  useEffect(() => {
-    const tecla = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape') aoFechar();
-      else if (ev.key === '+' || ((ev.key === ' ' || ev.key === 'Enter') && !(ev.target instanceof HTMLButtonElement))) { ev.preventDefault(); somar(1); }
-      else if (ev.key === '-' || ev.key === 'Backspace') { ev.preventDefault(); somar(-1); }
-    };
-    window.addEventListener('keydown', tecla);
-    return () => window.removeEventListener('keydown', tecla);
-  });
-
   return (
-    <div className="contador" role="dialog" aria-label={`Contador de ${atual.nome}`}>
+    <div className="contador" role="dialog" aria-label="Contador">
       <div className="contador-topo">
-        <button className="link" onClick={aoFechar}>← Voltar ao registo</button>
+        <button className="link" onClick={aoFechar}>← Registo</button>
         <span className="small muted">{contexto}</span>
       </div>
-      <div className="contador-categorias" role="tablist" aria-label="Contagens">
-        {contagens.map((c) => (
-          <button key={c.id} role="tab" aria-selected={c.id === atual.id} className={c.id === atual.id ? 'ativa' : ''} onClick={() => aoEscolher(c.id)}>
-            <span>{c.nome}</span><b>{num(v(c.id))}</b>
-          </button>
+      <div className="contador-total"><span>Total</span><b aria-live="polite">{num(total)}</b></div>
+      <div className={`contador-grelha n${Math.min(contagens.length, 6)}`}>
+        {contagens.map((c, i) => (
+          <div key={c.id} className={`contador-tile${i === 0 ? ' prim' : ''}`}>
+            <button className="contador-toque" onClick={() => somar(c.id, 1)} aria-label={`Mais 1 em ${c.nome}`}>
+              <span className="contador-tile-nome">{c.nome}</span>
+              <span className="contador-tile-valor">{num(v(c.id))}</span>
+              <span className="contador-tile-dica">toque para +1</span>
+            </button>
+            <button className="contador-menos" onClick={() => somar(c.id, -1)} disabled={v(c.id) <= 0} aria-label={`Menos 1 em ${c.nome}`}>−</button>
+          </div>
         ))}
       </div>
-      <div className="contador-nome">{atual.nome}</div>
-      <div className="contador-valor" aria-live="polite">{num(valor)}</div>
-      <button className="contador-mais" onClick={() => somar(1)} aria-label={`Mais 1 em ${atual.nome}`}>+1</button>
-      <div className="contador-acoes">
-        <button className="sec" onClick={() => somar(-1)} disabled={valor <= 0} aria-label={`Menos 1 em ${atual.nome}`}>−1</button>
-        <button className="sec" onClick={() => { if (valor && confirm(`Repor ${atual.nome} a 0?`)) aoMudar(atual.id, 0); }} disabled={!valor}>Repor a 0</button>
-      </div>
       <p className="small muted contador-nota">{rascunhoAtivo
-        ? 'Rascunho guardado neste dispositivo a cada clique. Para gravar o registo, volte ao registo e carregue em Guardar registo.'
-        : 'Escolha a data, o evento e a comunidade no registo para a contagem ficar guardada em rascunho.'}</p>
+        ? (guardadoEm ? `Rascunho guardado às ${hora(guardadoEm)}` : 'Rascunho guardado neste dispositivo a cada toque')
+        : 'Escolha a data, o evento e a comunidade no registo para a contagem ficar em rascunho.'}</p>
+      <button className="contador-guardar" onClick={aoFechar}>Rever e guardar registo</button>
     </div>
   );
 }

@@ -253,17 +253,18 @@ describe('páginas', () => {
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/config-eventos.html', html);
   });
 
-  it('Contador manual: número grande, +1, −1 e atalhos para outras contagens', async () => {
+  it('Contador (grelha de toque): um quadrado por contagem, − no canto, total e rever e guardar', async () => {
     const { Contador } = await import('../../src/pages/Contador');
-    const html = renderToString(<Contador contagens={[{ id: 'adultos', nome: 'Jovens e adultos' }, { id: 'criancas', nome: 'Crianças (3-11)' }]} ativa="criancas" valores={{ adultos: 37, criancas: 12 }} contexto="15/11/2026 · Celebração Domingo · Almada" aoMudar={() => {}} aoSomar={() => {}} aoEscolher={() => {}} aoFechar={() => {}} />);
-    for (const t of ['Crianças (3-11)', '>12<', '+1', '−1', 'Jovens e adultos', '37', 'Voltar ao registo', 'Celebração Domingo', 'Rascunho guardado neste dispositivo']) expect(html).toContain(t);
+    const html = renderToString(<Contador contagens={[{ id: 'adultos', nome: 'Jovens e adultos' }, { id: 'criancas', nome: 'Crianças (3-11)' }]} valores={{ adultos: 37, criancas: 12 }} contexto="15/11/2026 · Celebração Domingo · Almada" guardadoEm="2026-11-15T10:42:00.000Z" aoSomar={() => {}} aoFechar={() => {}} />);
+    for (const t of ['Jovens e adultos', '>37<', 'Crianças (3-11)', '>12<', 'Total', '>49<', 'toque para +1', 'Mais 1 em Crianças (3-11)', 'Menos 1 em Crianças (3-11)', 'Rever e guardar registo', 'Celebração Domingo', 'Rascunho guardado às']) expect(html).toContain(t);
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/contador.html', html);
   });
 
-  it('Formulário: botão Contador em cada contagem', async () => {
+  it('Formulário: botão Abrir contador', async () => {
     const { FormularioPresencas } = await import('../../src/pages/RegistarPresencas');
     const html = renderToString(<FormularioPresencas comunidades={[{ id: 'almada', nome: 'Almada', ordem: 1 }]} lotes={[]} aposGravar={async () => {}} />);
-    expect(html.match(/aria-label="Contador de /g)?.length).toBe(4);
+    expect(html).toContain('Abrir contador');
   });
+
 });
 

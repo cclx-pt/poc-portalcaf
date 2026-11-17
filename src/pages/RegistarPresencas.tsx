@@ -47,11 +47,17 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   const [sucesso, setSucesso] = useState<{ entrada: EntradaPresenca; comunidade: string; nota: string; contagens: Contagem[] } | null>(null);
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
   const [aGuardar, setAGuardar] = useState(false);
-  const [contador, setContador] = useState<string | null>(null);
+  const [contador, setContador] = useState(false);
+  const [guardadoEm, setGuardadoEm] = useState<string | undefined>();
   const [rascunhos, setRascunhos] = useState(() => (edicao ? [] : lerRascunhos(armazemLocal(), acesso?.email ?? '')));
   // Rascunho no dispositivo: guarda a cada alteração, quando já há data, evento, comunidade e alguma contagem.
   const comRascunho = !edicao && deveGuardarRascunho(e);
-  useEffect(() => { if (comRascunho && acesso) guardarRascunho(armazemLocal(), acesso.email, e); }, [e, comRascunho, acesso]);
+  useEffect(() => {
+    if (!comRascunho || !acesso) return;
+    const agora = new Date().toISOString();
+    guardarRascunho(armazemLocal(), acesso.email, e, agora);
+    setGuardadoEm(agora);
+  }, [e, comRascunho, acesso]);
   const eventos = eventosEfetivos(config.dados);
   const opcoes = eventosParaData(eventos, e.data);
   const evSel = eventoPorNome(eventos, e.evento);
@@ -116,15 +122,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
     return { ...p, outras: { ...(p.outras ?? {}), [id]: Math.max(0, atual(p.outras?.[id]) + d) } };
   });
   const campoNum = (c: Contagem) => (
-    <div key={c.id} className="campo campo-contagem">
-      <label htmlFor={`cont-${c.id}`}>{`${c.nome} *`}</label>
-      <div className="campo-data-linha">
-        <input id={`cont-${c.id}`} type="number" inputMode="numeric" min={0} step={1} value={Number.isNaN(valorDe(c.id)) ? '' : valorDe(c.id)} onChange={(ev) => mudar(c.id, ev.target.value)} />
-        <button type="button" className="botao-calendario" aria-label={`Contador de ${c.nome}`} title="Contar com o contador (+1)" onClick={() => setContador(c.id)}>
-          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="13" r="8" /><path d="M12 9v8M8 13h8M10 2h4" /></svg>
-        </button>
-      </div>
-    </div>
+    <label key={c.id} className="campo">{`${c.nome} *`}<input type="number" inputMode="numeric" min={0} step={1} value={Number.isNaN(valorDe(c.id)) ? '' : valorDe(c.id)} onChange={(ev) => mudar(c.id, ev.target.value)} /></label>
   );
   const valoresContador = Object.fromEntries(recolhe.map((c) => [c.id, valorDe(c.id)]));
   const descartar = (id: string) => { apagarRascunho(armazemLocal(), acesso!.email, id); setRascunhos(lerRascunhos(armazemLocal(), acesso!.email)); };
@@ -138,9 +136,9 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
       {original?.extra?.alteradoEm && <p className="muted small">Última alteração: {dataHora(String(original.extra.alteradoEm))} · {String(original.extra.alteradoPor ?? '')}</p>}
       {msg && <div className={msg.tipo === 'ok' ? 'ok-box' : 'aviso'} role="status">{msg.texto}</div>}
       {contador && (
-        <Contador contagens={recolhe} ativa={contador} valores={valoresContador} rascunhoAtivo={!edicao && !!e.data && !!e.evento && !!e.comunidadeId}
+        <Contador contagens={recolhe} valores={valoresContador} rascunhoAtivo={!edicao && !!e.data && !!e.evento && !!e.comunidadeId} guardadoEm={comRascunho ? guardadoEm : undefined}
           contexto={`${e.data ? dataPt(e.data) : 'sem data'} · ${e.evento || 'evento por escolher'} · ${nomes.get(e.comunidadeId) ?? 'comunidade por escolher'}`}
-          aoMudar={(id, v) => mudar(id, String(v))} aoSomar={somar} aoEscolher={setContador} aoFechar={() => setContador(null)} />
+          aoSomar={somar} aoFechar={() => setContador(false)} />
       )}
       {outrosRascunhos.length > 0 && (
         <div className="nota rascunhos">
@@ -173,6 +171,13 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
             {comunidades.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         </label>
+      </div>
+      <div className="linha-contador">
+        <button type="button" className="sec" onClick={() => setContador(true)}>
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" style={{ verticalAlign: '-3px', marginRight: 6 }}><rect x="3" y="3" width="8" height="8" /><rect x="13" y="3" width="8" height="8" /><rect x="3" y="13" width="8" height="8" /><rect x="13" y="13" width="8" height="8" /></svg>
+          Abrir contador
+        </button>
+        <span className="small muted">Contar por toque, uma contagem por quadrado.</span>
       </div>
       <div className="grelha-num">
         {recolhe.map(campoNum)}
