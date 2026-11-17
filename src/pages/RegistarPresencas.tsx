@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
 import { auditar, gravarLote, lerConfigAssistencia, lerLote, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
@@ -6,6 +6,8 @@ import { domingosEmFalta } from '../lib/domingos';
 import { dataPT, hoje, norm, num } from '../lib/format';
 import { acrescentarRegisto, comunidadesDoUtilizador, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
 import { recalcularAno } from '../lib/recalcular';
+import { apagarRascunho, armazemLocal, deveGuardarRascunho, guardarRascunho, idRascunho, lerRascunhos } from '../lib/rascunhos';
+import { Contador } from './Contador';
 import { IDS_BASE, catalogoContagens, descreverQuando, eventoPorNome, eventosEfetivos, eventosParaData, type Contagem } from '../lib/eventos';
 import type { Comunidade, Lote } from '../lib/types';
 
@@ -45,6 +47,11 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   const [sucesso, setSucesso] = useState<{ entrada: EntradaPresenca; comunidade: string; nota: string; contagens: Contagem[] } | null>(null);
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
   const [aGuardar, setAGuardar] = useState(false);
+  const [contador, setContador] = useState<string | null>(null);
+  const [rascunhos, setRascunhos] = useState(() => (edicao ? [] : lerRascunhos(armazemLocal(), acesso?.email ?? '')));
+  // Rascunho no dispositivo: guarda a cada alteração, quando já há data, evento, comunidade e alguma contagem.
+  const comRascunho = !edicao && deveGuardarRascunho(e);
+  useEffect(() => { if (comRascunho && acesso) guardarRascunho(armazemLocal(), acesso.email, e); }, [e, comRascunho, acesso]);
   const eventos = eventosEfetivos(config.dados);
   const opcoes = eventosParaData(eventos, e.data);
   const evSel = eventoPorNome(eventos, e.evento);
@@ -55,7 +62,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   const nomes = new Map(comunidades.map((c) => [c.id, c.nome]));
   const eOutra = evSel ? !!evSel.pedeDescricao : norm(e.evento) === 'outra';
   const podeRecalcular = acesso?.papel === 'master' || acesso?.papel === 'caf';
-  const n = (k: keyof EntradaPresenca) => (v: string) => setE({ ...e, [k]: v === '' ? NaN : Number(v) });
+  const n = (k: keyof EntradaPresenca) => (v: string) => setE((p) => ({ ...p, [k]: v === '' ? NaN : Number(v) }));
 
   async function guardarCorrecao() {
     setMsg(null);
@@ -89,6 +96,8 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
       await auditar(acesso!.email, 'registar presenças', `${dataPt(e.data)} · ${e.evento}${e.descricao ? ` (${e.descricao})` : ''} · ${nomes.get(e.comunidadeId) ?? e.comunidadeId} · ${e.adultos} jovens e adultos`);
       if (podeRecalcular) await recalcularAno(acesso!, Number(e.data.slice(0, 4)));
       setSucesso({ contagens: recolhe, entrada: e, comunidade: nomes.get(e.comunidadeId) ?? e.comunidadeId, nota: podeRecalcular ? 'Resumos recalculados.' : 'Já aparece no mapa de presenças e nos domingos em falta; as médias atualizam no próximo cálculo.' });
+      apagarRascunho(armazemLocal(), acesso!.email, idRascunho(e));
+      setRascunhos(lerRascunhos(armazemLocal(), acesso!.email));
       setE({ ...vazio(e.comunidadeId), data: e.data });
       await aposGravar();
     } catch (err) { setMsg({ tipo: 'erro', texto: mensagemErro(err) }); }
@@ -99,11 +108,27 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   const mudar = (id: string, v: string) => {
     const x = v === '' ? NaN : Number(v);
     if (IDS_BASE.includes(id)) n(id as keyof EntradaPresenca)(v);
-    else setE({ ...e, outras: { ...(e.outras ?? {}), [id]: x } });
+    else setE((p) => ({ ...p, outras: { ...(p.outras ?? {}), [id]: x } }));
   };
+  const somar = (id: string, d: number) => setE((p) => {
+    const atual = (v: number | undefined) => (v == null || Number.isNaN(v) ? 0 : v);
+    if (IDS_BASE.includes(id)) return { ...p, [id]: Math.max(0, atual(p[id as 'adultos']) + d) };
+    return { ...p, outras: { ...(p.outras ?? {}), [id]: Math.max(0, atual(p.outras?.[id]) + d) } };
+  });
   const campoNum = (c: Contagem) => (
-    <label key={c.id} className="campo">{`${c.nome} *`}<input type="number" inputMode="numeric" min={0} step={1} value={Number.isNaN(valorDe(c.id)) ? '' : valorDe(c.id)} onChange={(ev) => mudar(c.id, ev.target.value)} /></label>
+    <div key={c.id} className="campo campo-contagem">
+      <label htmlFor={`cont-${c.id}`}>{`${c.nome} *`}</label>
+      <div className="campo-data-linha">
+        <input id={`cont-${c.id}`} type="number" inputMode="numeric" min={0} step={1} value={Number.isNaN(valorDe(c.id)) ? '' : valorDe(c.id)} onChange={(ev) => mudar(c.id, ev.target.value)} />
+        <button type="button" className="botao-calendario" aria-label={`Contador de ${c.nome}`} title="Contar com o contador (+1)" onClick={() => setContador(c.id)}>
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="13" r="8" /><path d="M12 9v8M8 13h8M10 2h4" /></svg>
+        </button>
+      </div>
+    </div>
   );
+  const valoresContador = Object.fromEntries(recolhe.map((c) => [c.id, valorDe(c.id)]));
+  const descartar = (id: string) => { apagarRascunho(armazemLocal(), acesso!.email, id); setRascunhos(lerRascunhos(armazemLocal(), acesso!.email)); };
+  const outrosRascunhos = rascunhos.filter((r) => r.id !== (comRascunho ? idRascunho(e) : '') && nomes.has(r.entrada.comunidadeId));
 
   if (config.aCarregar) return <Estado aCarregar erro={null} />;
   if (!comunidades.length && !edicao) return <div className="aviso">Não tem comunidades atribuídas. Peça ao administrador do portal que lhe dê acesso a uma comunidade.</div>;
@@ -112,6 +137,24 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
       {sucesso && <ResumoRegistoGuardado contagens={sucesso.contagens} entrada={sucesso.entrada} comunidade={sucesso.comunidade} nota={sucesso.nota} aoFechar={() => setSucesso(null)} />}
       {original?.extra?.alteradoEm && <p className="muted small">Última alteração: {dataHora(String(original.extra.alteradoEm))} · {String(original.extra.alteradoPor ?? '')}</p>}
       {msg && <div className={msg.tipo === 'ok' ? 'ok-box' : 'aviso'} role="status">{msg.texto}</div>}
+      {contador && (
+        <Contador contagens={recolhe} ativa={contador} valores={valoresContador} rascunhoAtivo={!edicao && !!e.data && !!e.evento && !!e.comunidadeId}
+          contexto={`${e.data ? dataPt(e.data) : 'sem data'} · ${e.evento || 'evento por escolher'} · ${nomes.get(e.comunidadeId) ?? 'comunidade por escolher'}`}
+          aoMudar={(id, v) => mudar(id, String(v))} aoSomar={somar} aoEscolher={setContador} aoFechar={() => setContador(null)} />
+      )}
+      {outrosRascunhos.length > 0 && (
+        <div className="nota rascunhos">
+          <b>Rascunhos neste dispositivo</b>
+          {outrosRascunhos.map((r) => (
+            <div key={r.id} className="rascunho-linha">
+              <span>{dataPt(r.entrada.data)} · {r.entrada.evento} · {nomes.get(r.entrada.comunidadeId)}{Number.isFinite(r.entrada.adultos) ? ` · ${num(r.entrada.adultos)} jovens e adultos` : ''} <span className="muted">(guardado {dataHora(r.atualizadoEm)})</span></span>
+              <span><button className="link" onClick={() => { setE(r.entrada); setMsg(null); }}>Retomar</button>{' '}
+                <button className="link" onClick={() => { if (confirm('Descartar este rascunho? As contagens perdem-se.')) descartar(r.id); }}>Descartar</button></span>
+            </div>
+          ))}
+        </div>
+      )}
+      {comRascunho && <p className="small muted">Rascunho guardado neste dispositivo. Só fica registado ao carregar em Guardar registo.</p>}
       <div className="grelha-form">
         <CampoData rotulo={edicao ? 'Data do evento (no mesmo mês)' : 'Data do evento'} obrigatorio valor={e.data} max={hoje()} onChange={(d) => setE({ ...e, data: d })} />
         <label className="campo">Evento *
@@ -139,7 +182,11 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
         <button onClick={() => void guardar()} disabled={aGuardar}>{aGuardar ? 'A guardar…' : edicao ? 'Guardar correção' : 'Guardar registo'}</button>
         {edicao
           ? <button className="sec" onClick={aoFechar}>Cancelar</button>
-          : <button className="sec" onClick={() => { setE(vazio(e.comunidadeId)); setMsg(null); }}>Limpar</button>}
+          : <button className="sec" onClick={() => {
+            if (comRascunho && !confirm('Limpar o formulário e descartar o rascunho?')) return;
+            if (comRascunho) descartar(idRascunho(e));
+            setE(vazio(e.comunidadeId)); setMsg(null);
+          }}>Limpar</button>}
       </div>
       <p className="muted small" style={{ marginTop: 8 }}>Campos com * são obrigatórios.{edicao ? ' A correção fica registada no registo e na auditoria (o quê, quem e quando). O Jotform não é alterado.' : ''}</p>
     </div>

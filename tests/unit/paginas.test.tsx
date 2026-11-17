@@ -252,5 +252,18 @@ describe('páginas', () => {
     for (const t of ['Eventos do registo de presenças', 'Celebração Domingo', 'Domingo · dia todo', 'Qualquer dia · dia todo', 'Jovens e adultos, Jump (12-14), Crianças (3-11), Connect', 'Novo evento', 'Contagens', 'Editar']) expect(html).toContain(t);
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/config-eventos.html', html);
   });
+
+  it('Contador manual: número grande, +1, −1 e atalhos para outras contagens', async () => {
+    const { Contador } = await import('../../src/pages/Contador');
+    const html = renderToString(<Contador contagens={[{ id: 'adultos', nome: 'Jovens e adultos' }, { id: 'criancas', nome: 'Crianças (3-11)' }]} ativa="criancas" valores={{ adultos: 37, criancas: 12 }} contexto="15/11/2026 · Celebração Domingo · Almada" aoMudar={() => {}} aoSomar={() => {}} aoEscolher={() => {}} aoFechar={() => {}} />);
+    for (const t of ['Crianças (3-11)', '>12<', '+1', '−1', 'Jovens e adultos', '37', 'Voltar ao registo', 'Celebração Domingo', 'Rascunho guardado neste dispositivo']) expect(html).toContain(t);
+    if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/contador.html', html);
+  });
+
+  it('Formulário: botão Contador em cada contagem', async () => {
+    const { FormularioPresencas } = await import('../../src/pages/RegistarPresencas');
+    const html = renderToString(<FormularioPresencas comunidades={[{ id: 'almada', nome: 'Almada', ordem: 1 }]} lotes={[]} aposGravar={async () => {}} />);
+    expect(html.match(/aria-label="Contador de /g)?.length).toBe(4);
+  });
 });
 
