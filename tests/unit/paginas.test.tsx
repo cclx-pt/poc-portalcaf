@@ -160,7 +160,8 @@ describe('páginas', () => {
     const { default: RegistarPresencas } = await import('../../src/pages/RegistarPresencas');
     const html = renderToString(<RegistarPresencas />);
     CONFIG_ASS.atual = { eventoCelebracao: null };
-    for (const t of ['Data do evento', 'Evento', 'Comunidade', 'Jovens e adultos', 'Jump (12-14)', 'Crianças (3-11)', 'Connect&#x27;s', 'Observações', 'Celebração Domingo', 'Reunião Oração', 'ATOS', 'Outra', 'Almada', 'Porto']) expect(html).toContain(t);
+    // (a celebração só aparece se hoje for domingo: os eventos filtram-se pelo dia da semana da data)
+    for (const t of ['Data do evento', 'Evento', 'Comunidade', 'Jovens e adultos', 'Jump (12-14)', 'Crianças (3-11)', 'Connect&#x27;s', 'Observações', 'Reunião Oração', 'ATOS', 'Outra', 'Almada', 'Porto']) expect(html).toContain(t);
     expect(html).toContain('>Guardar registo<');
     expect(html).not.toMatch(/type="number"[^>]*value="0"/);
     expect(html).toContain('placeholder="dd/mm/aaaa"');
@@ -225,6 +226,31 @@ describe('páginas', () => {
     expect(html).toContain('value="15/11/2026"');
     expect(html).toContain('aria-label="Abrir calendário"');
     expect(html).toMatch(/type="date"[^>]*max="2026-11-17"/);
+  });
+
+  it('Formulário: mostra a descrição, quando ocorre e só as contagens do evento escolhido', async () => {
+    CONFIG_ASS.atual = { eventoCelebracao: 'Celebração Domingo', contagens: [{ id: 'online', nome: 'Online' }], eventosConfig: [
+      { id: 'celebracao-domingo', nome: 'Celebração Domingo', ativo: true, contagens: ['adultos', 'jump', 'criancas', 'connects'], dias: [0], horario: { diaTodo: false, inicio: '10:30', fim: '12:30' } },
+      { id: 'reuniao-oracao', nome: 'Reunião Oração', descricao: 'Oração semanal da comunidade', ativo: true, contagens: ['adultos', 'online'], dias: [2], horario: { diaTodo: false, inicio: '21:00' } },
+    ] } as never;
+    const { FormularioPresencas } = await import('../../src/pages/RegistarPresencas');
+    const html = renderToString(<FormularioPresencas comunidades={[{ id: 'almada', nome: 'Almada', ordem: 1 }]} lotes={[]} aposGravar={async () => {}} inicial={{ data: '2026-11-17', evento: 'Reunião Oração' }} />);
+    CONFIG_ASS.atual = { eventoCelebracao: null };
+    expect(html).toContain('Oração semanal da comunidade');
+    expect(html).toContain('Terça · 21:00');
+    expect(html).toContain('Online *');
+    expect(html).toContain('Jovens e adultos *');
+    expect(html).not.toContain('Jump (12-14) *');
+    expect(html).not.toContain('>Celebração Domingo<'); // não ocorre à terça
+  });
+
+  it('Configuração de eventos: lista com quando ocorre e o que recolhe', async () => {
+    CONFIG_ASS.atual = { eventoCelebracao: 'Celebração Domingo', eventos: ['Celebração Domingo', 'Reunião Oração', 'Outra'] } as never;
+    const { default: ConfigEventos } = await import('../../src/pages/ConfigEventos');
+    const html = renderToString(<ConfigEventos />);
+    CONFIG_ASS.atual = { eventoCelebracao: null };
+    for (const t of ['Eventos do registo de presenças', 'Celebração Domingo', 'Domingo · dia todo', 'Qualquer dia · dia todo', 'Jovens e adultos, Jump (12-14), Crianças (3-11), Connect', 'Novo evento', 'Contagens', 'Editar']) expect(html).toContain(t);
+    if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/config-eventos.html', html);
   });
 });
 

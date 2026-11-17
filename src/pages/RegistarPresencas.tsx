@@ -4,8 +4,9 @@ import { CampoData, Estado, Modal, mensagemErro, useCarregar } from '../componen
 import { auditar, gravarLote, lerConfigAssistencia, lerLote, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
 import { domingosEmFalta } from '../lib/domingos';
 import { dataPT, hoje, norm, num } from '../lib/format';
-import { EVENTOS_INICIAIS, acrescentarRegisto, comunidadesDoUtilizador, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
+import { acrescentarRegisto, comunidadesDoUtilizador, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
 import { recalcularAno } from '../lib/recalcular';
+import { IDS_BASE, catalogoContagens, descreverQuando, eventoPorNome, eventosEfetivos, eventosParaData, type Contagem } from '../lib/eventos';
 import type { Comunidade, Lote } from '../lib/types';
 
 const dataPt = dataPT;
@@ -38,13 +39,21 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   const config = useCarregar(lerConfigAssistencia, []);
   const unica = comunidades.length === 1 ? comunidades[0].id : '';
   const original = edicao?.lote.registos.find((r) => r.id === edicao.registoId);
-  const [e, setE] = useState<EntradaPresenca>(original ? entradaDeRegisto(original, edicao!.lote.comunidadeId) : { ...vazio(unica), ...inicial });
-  const [sucesso, setSucesso] = useState<{ entrada: EntradaPresenca; comunidade: string; nota: string } | null>(null);
+  const catalogo = catalogoContagens(config.dados);
+  const idsExtra = catalogo.filter((c) => !IDS_BASE.includes(c.id)).map((c) => c.id);
+  const [e, setE] = useState<EntradaPresenca>(original ? entradaDeRegisto(original, edicao!.lote.comunidadeId, idsExtra) : { ...vazio(unica), ...inicial });
+  const [sucesso, setSucesso] = useState<{ entrada: EntradaPresenca; comunidade: string; nota: string; contagens: Contagem[] } | null>(null);
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
   const [aGuardar, setAGuardar] = useState(false);
-  const eventos = config.dados?.eventos?.length ? config.dados.eventos : EVENTOS_INICIAIS;
+  const eventos = eventosEfetivos(config.dados);
+  const opcoes = eventosParaData(eventos, e.data);
+  const evSel = eventoPorNome(eventos, e.evento);
+  // Correção de um registo com um evento que já não está na configuração (ex.: vindo do Jotform): mantém-se.
+  const opcoesNomes = [...opcoes.map((x) => x.nome), ...(e.evento && !opcoes.some((x) => norm(x.nome) === norm(e.evento)) ? [e.evento] : [])];
+  const recolhe = (evSel?.contagens ?? IDS_BASE).map((id) => catalogo.find((c) => c.id === id) ?? { id, nome: id });
+  const nomesContagens = Object.fromEntries(catalogo.map((c) => [c.id, c.nome]));
   const nomes = new Map(comunidades.map((c) => [c.id, c.nome]));
-  const eOutra = norm(e.evento) === 'outra';
+  const eOutra = evSel ? !!evSel.pedeDescricao : norm(e.evento) === 'outra';
   const podeRecalcular = acesso?.papel === 'master' || acesso?.papel === 'caf';
   const n = (k: keyof EntradaPresenca) => (v: string) => setE({ ...e, [k]: v === '' ? NaN : Number(v) });
 
@@ -54,7 +63,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
     try {
       // Relê o lote para não perder alterações feitas entretanto por outra pessoa.
       const atual = (await lerLote(edicao!.lote.id)) ?? edicao!.lote;
-      const { lote, alteracoes } = corrigirRegisto(atual, edicao!.registoId, e, acesso!.email, hoje());
+      const { lote, alteracoes } = corrigirRegisto(atual, edicao!.registoId, e, acesso!.email, hoje(), undefined, evSel ? { ...evSel, dias: [] } : undefined, nomesContagens);
       await gravarLote(lote);
       const nome = nomes.get(lote.comunidadeId) ?? lote.comunidadeId;
       await auditar(acesso!.email, 'corrigir registo de presenças', `${dataPt(original!.data)} · ${original!.evento ?? ''} · ${nome} · ${alteracoes}`);
@@ -69,7 +78,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
     if (edicao) return guardarCorrecao();
     setMsg(null);
     if (e.comunidadeId && !nomes.has(e.comunidadeId)) { setMsg({ tipo: 'erro', texto: 'Não tem acesso a esta comunidade.' }); return; }
-    const erro = validarPresenca(e, hoje(), lotes);
+    const erro = validarPresenca(e, hoje(), lotes, undefined, evSel, nomesContagens);
     if (erro) { setMsg({ tipo: 'erro', texto: erro }); return; }
     setAGuardar(true);
     try {
@@ -79,22 +88,28 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
       await gravarLote(lote);
       await auditar(acesso!.email, 'registar presenças', `${dataPt(e.data)} · ${e.evento}${e.descricao ? ` (${e.descricao})` : ''} · ${nomes.get(e.comunidadeId) ?? e.comunidadeId} · ${e.adultos} jovens e adultos`);
       if (podeRecalcular) await recalcularAno(acesso!, Number(e.data.slice(0, 4)));
-      setSucesso({ entrada: e, comunidade: nomes.get(e.comunidadeId) ?? e.comunidadeId, nota: podeRecalcular ? 'Resumos recalculados.' : 'Já aparece no mapa de presenças e nos domingos em falta; as médias atualizam no próximo cálculo.' });
-      setE(vazio(e.comunidadeId));
+      setSucesso({ contagens: recolhe, entrada: e, comunidade: nomes.get(e.comunidadeId) ?? e.comunidadeId, nota: podeRecalcular ? 'Resumos recalculados.' : 'Já aparece no mapa de presenças e nos domingos em falta; as médias atualizam no próximo cálculo.' });
+      setE({ ...vazio(e.comunidadeId), data: e.data });
       await aposGravar();
     } catch (err) { setMsg({ tipo: 'erro', texto: mensagemErro(err) }); }
     finally { setAGuardar(false); }
   }
 
-  const campoNum = (rot: string, k: 'adultos' | 'jump' | 'criancas' | 'connects') => (
-    <label className="campo">{rot} *<input type="number" inputMode="numeric" min={0} step={1} value={Number.isNaN(e[k]) ? '' : e[k]} onChange={(ev) => n(k)(ev.target.value)} /></label>
+  const valorDe = (id: string) => (IDS_BASE.includes(id) ? (e[id as 'adultos'] as number) : e.outras?.[id] ?? NaN);
+  const mudar = (id: string, v: string) => {
+    const x = v === '' ? NaN : Number(v);
+    if (IDS_BASE.includes(id)) n(id as keyof EntradaPresenca)(v);
+    else setE({ ...e, outras: { ...(e.outras ?? {}), [id]: x } });
+  };
+  const campoNum = (c: Contagem) => (
+    <label key={c.id} className="campo">{`${c.nome} *`}<input type="number" inputMode="numeric" min={0} step={1} value={Number.isNaN(valorDe(c.id)) ? '' : valorDe(c.id)} onChange={(ev) => mudar(c.id, ev.target.value)} /></label>
   );
 
   if (config.aCarregar) return <Estado aCarregar erro={null} />;
   if (!comunidades.length && !edicao) return <div className="aviso">Não tem comunidades atribuídas. Peça ao administrador do portal que lhe dê acesso a uma comunidade.</div>;
   return (
     <div className={edicao ? 'form-presencas' : 'card sec form-presencas'}>
-      {sucesso && <ResumoRegistoGuardado entrada={sucesso.entrada} comunidade={sucesso.comunidade} nota={sucesso.nota} aoFechar={() => setSucesso(null)} />}
+      {sucesso && <ResumoRegistoGuardado contagens={sucesso.contagens} entrada={sucesso.entrada} comunidade={sucesso.comunidade} nota={sucesso.nota} aoFechar={() => setSucesso(null)} />}
       {original?.extra?.alteradoEm && <p className="muted small">Última alteração: {dataHora(String(original.extra.alteradoEm))} · {String(original.extra.alteradoPor ?? '')}</p>}
       {msg && <div className={msg.tipo === 'ok' ? 'ok-box' : 'aviso'} role="status">{msg.texto}</div>}
       <div className="grelha-form">
@@ -102,8 +117,10 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
         <label className="campo">Evento *
           <select value={e.evento} onChange={(ev) => setE({ ...e, evento: ev.target.value })}>
             <option value="">Escolha…</option>
-            {eventos.map((x) => <option key={x} value={x}>{x}</option>)}
+            {opcoesNomes.map((x) => <option key={x} value={x}>{x}</option>)}
           </select>
+          {evSel && <span className="small muted">{evSel.descricao ? `${evSel.descricao} · ` : ''}{descreverQuando(evSel)}</span>}
+          {!opcoes.length && <span className="small muted">Nenhum evento ocorre neste dia da semana.</span>}
         </label>
         {eOutra && <label className="campo">Descrição *<input value={e.descricao ?? ''} onChange={(ev) => setE({ ...e, descricao: ev.target.value })} /></label>}
         <label className="campo">Comunidade *
@@ -115,10 +132,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
         </label>
       </div>
       <div className="grelha-num">
-        {campoNum('Jovens e adultos', 'adultos')}
-        {campoNum('Jump (12-14)', 'jump')}
-        {campoNum('Crianças (3-11)', 'criancas')}
-        {campoNum("Connect's (antigos VIP's)", 'connects')}
+        {recolhe.map(campoNum)}
       </div>
       <label className="campo" style={{ marginTop: 12 }}>Observações<textarea rows={2} value={e.observacoes ?? ''} onChange={(ev) => setE({ ...e, observacoes: ev.target.value })} /></label>
       <div className="acoes" style={{ marginTop: 14 }}>
@@ -133,10 +147,11 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
 }
 
 /** Popup de confirmação depois de um registo novo, com o resumo do que ficou gravado. */
-export function ResumoRegistoGuardado({ entrada: e, comunidade, nota, aoFechar }: { entrada: EntradaPresenca; comunidade: string; nota?: string; aoFechar: () => void }) {
+export function ResumoRegistoGuardado({ entrada: e, comunidade, nota, aoFechar, contagens = catalogoContagens().filter((c) => IDS_BASE.includes(c.id)) }: { entrada: EntradaPresenca; comunidade: string; nota?: string; aoFechar: () => void; contagens?: Contagem[] }) {
+  const valor = (id: string) => { const v = IDS_BASE.includes(id) ? (e[id as 'adultos'] as number) : e.outras?.[id]; return v == null || Number.isNaN(v) ? 0 : v; };
   const linhas: [string, string][] = [
     ['Data', dataPt(e.data)], ['Evento', `${e.evento}${e.descricao?.trim() ? ` · ${e.descricao.trim()}` : ''}`], ['Comunidade', comunidade],
-    ['Jovens e adultos', num(e.adultos)], ['Jump (12-14)', num(e.jump)], ['Crianças (3-11)', num(e.criancas)], ["Connect's", num(e.connects)],
+    ...contagens.map((c) => [c.nome, num(valor(c.id))] as [string, string]),
   ];
   if (e.observacoes?.trim()) linhas.push(['Observações', e.observacoes.trim()]);
   return (
@@ -144,7 +159,7 @@ export function ResumoRegistoGuardado({ entrada: e, comunidade, nota, aoFechar }
       <div className="ok-box" role="status">✓ O registo de presenças ficou gravado.</div>
       <table className="resumo-registo"><tbody>
         {linhas.map(([k, v]) => <tr key={k}><th scope="row">{k}</th><td>{v}</td></tr>)}
-        <tr><th scope="row">Total de pessoas</th><td><b>{num(e.adultos + e.jump + e.criancas + e.connects)}</b></td></tr>
+        <tr><th scope="row">Total de pessoas</th><td><b>{num(contagens.reduce((s, c) => s + valor(c.id), 0))}</b></td></tr>
       </tbody></table>
       {nota && <p className="muted small">{nota}</p>}
       <div className="acoes" style={{ marginTop: 12 }}><button onClick={aoFechar}>Novo registo</button></div>
@@ -191,6 +206,8 @@ export function ListaPresencas({ lotes, comunidades, soPortal, aposApagar }: { l
   const { acesso, pode } = useAuth();
   const [erro, setErro] = useState<string | null>(null);
   const [aCorrigir, setACorrigir] = useState<{ lote: Lote; registoId: string } | null>(null);
+  const config = useCarregar(lerConfigAssistencia, []);
+  const extras = catalogoContagens(config.dados).filter((c) => !IDS_BASE.includes(c.id));
   const nomes = new Map(comunidades.map((c) => [c.id, c.nome]));
   const podeRecalcular = acesso?.papel === 'master' || acesso?.papel === 'caf';
   const podeApagar = (r: Lote['registos'][number]) => eRegistoDoPortal(r) && (podeRecalcular || r.extra?.registadoPor === acesso?.email);
@@ -214,11 +231,12 @@ export function ListaPresencas({ lotes, comunidades, soPortal, aposApagar }: { l
     <>
       {erro && <div className="aviso">{erro}</div>}
       <div className="tabela"><table className="tabela-presencas">
-        <thead><tr><th>Data</th><th>Evento</th><th>Comunidade</th><th className="num">Jovens e adultos</th><th className="num">Jump</th><th className="num">Crianças</th><th className="num">Connect's</th><th>Origem</th><th>Última alteração</th><th /></tr></thead>
+        <thead><tr><th>Data</th><th>Evento</th><th>Comunidade</th><th className="num">Jovens e adultos</th><th className="num">Jump</th><th className="num">Crianças</th><th className="num">Connect's</th>{extras.map((c) => <th key={c.id} className="num">{c.nome}</th>)}<th>Origem</th><th>Última alteração</th><th /></tr></thead>
         <tbody>{linhas.map(({ l, r }) => (
           <tr key={r.id}>
             <td data-rotulo="Data">{dataPt(r.data)}</td><td data-rotulo="Evento">{r.evento}{r.descricao ? ` · ${r.descricao}` : ''}</td><td data-rotulo="Comunidade">{nomes.get(l.comunidadeId) ?? l.comunidadeId}</td>
             <td className="num" data-rotulo="Jovens e adultos">{num(r.valor)}</td><td className="num" data-rotulo="Jump">{num(Number(r.extra?.jump ?? 0))}</td><td className="num" data-rotulo="Crianças">{num(Number(r.extra?.criancas ?? 0))}</td><td className="num" data-rotulo="Connect's">{num(Number(r.extra?.connects ?? 0))}</td>
+            {extras.map((c) => <td key={c.id} className="num" data-rotulo={c.nome}>{r.extra?.[c.id] != null ? num(Number(r.extra[c.id])) : '—'}</td>)}
             <td className="small muted" data-rotulo="Origem">{eRegistoDoPortal(r) ? `Portal · ${String(r.extra?.registadoPor ?? '')}` : 'Jotform'}</td>
             <td className="small muted" data-rotulo="Última alteração">{r.extra?.alteradoEm ? `${dataHora(String(r.extra.alteradoEm))} · ${String(r.extra.alteradoPor ?? '')}` : '—'}</td>
             <td className="acoes-linha">

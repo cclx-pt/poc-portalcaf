@@ -9,7 +9,8 @@ import { formatarIban, ibanValido, limparIban } from '../lib/iban';
 import { usosCategoria, usosComunidade, usosConta } from '../lib/uso';
 import { dataPT, parseData, slug } from '../lib/format';
 import { eDomingo } from '../lib/domingos';
-import { EVENTOS_INICIAIS } from '../lib/presencas';
+import { eventosEfetivos } from '../lib/eventos';
+import ConfigEventos from './ConfigEventos';
 import type { ExcecaoAssistencia } from '../lib/types';
 import { testarChave, type ResultadoTeste } from '../lib/jotform';
 import { sincronizarAgora } from '../lib/syncWeb';
@@ -114,19 +115,8 @@ export default function Configuracao() {
     await auditar(acesso!.email, 'apagar exceção de assistência', `${dataPT(e.data)} · ${e.ambito}`);
     await excecoes.recarregar();
   }
-  // Tipos de evento do formulário de presenças do portal.
-  const eventosCfg = configAss.dados?.eventos?.length ? configAss.dados.eventos : EVENTOS_INICIAIS;
-  const [novoEvento, setNovoEvento] = useState('');
-  const [msgEventos, setMsgEventos] = useState<string | null>(null);
-  async function guardarEventos(lista: string[]) {
-    setMsgEventos(null);
-    try {
-      await gravarConfigAssistencia({ ...(configAss.dados ?? { eventoCelebracao: null }), eventos: lista, atualizadoPor: acesso!.email, atualizadoEm: new Date().toISOString() });
-      await auditar(acesso!.email, 'tipos de evento de presenças', lista.join(', '));
-      await configAss.recarregar(); setNovoEvento('');
-      setMsgEventos('Lista guardada.');
-    } catch (e) { setMsgEventos(mensagemErro(e)); }
-  }
+  // Eventos configurados (Configuração → Assistência → Eventos), para o tipo de celebração.
+  const eventosCfg = eventosEfetivos(configAss.dados).map((e) => e.nome);
   const [teste, setTeste] = useState<ResultadoTeste | null>(null);
   const [aTestar, setATestar] = useState(false);
   async function testarJotform() {
@@ -360,25 +350,7 @@ export default function Configuracao() {
         {msgTipo && <p className="small" style={{ marginTop: 8 }}>{msgTipo}</p>}
       </div>
 
-      <div className="sec card">
-        <h2>Tipos de evento do registo de presenças</h2>
-        <p className="small">Opções do campo "Evento" no formulário <b>Registar presenças</b> do portal. Por omissão são as do Jotform. "Outra" pede uma descrição.</p>
-        {acesso?.papel === 'master' ? <>
-          <div className="linha" style={{ alignItems: 'center' }}>
-            {eventosCfg.map((t) => (
-              <span key={t} className="etiqueta" style={{ fontSize: 12, textTransform: 'none', letterSpacing: 0, padding: '4px 8px' }}>
-                {t}{t === configAss.dados?.eventoCelebracao && <b> · celebração</b>}
-                {eventosCfg.length > 1 && <button className="link" style={{ marginLeft: 8 }} aria-label={`Remover ${t}`} onClick={() => { if (confirm(`Remover "${t}" da lista? Os registos já feitos não mudam.`)) void guardarEventos(eventosCfg.filter((x) => x !== t)); }}>×</button>}
-              </span>
-            ))}
-          </div>
-          <div className="linha" style={{ marginTop: 10 }}>
-            <label className="campo">Novo tipo de evento<input value={novoEvento} onChange={(e) => setNovoEvento(e.target.value)} style={{ width: 240 }} /></label>
-            <button className="sec" disabled={!novoEvento.trim() || eventosCfg.some((x) => x.toLowerCase() === novoEvento.trim().toLowerCase())} onClick={() => void guardarEventos([...eventosCfg, novoEvento.trim()])}>Acrescentar</button>
-          </div>
-          {msgEventos && <p className="small" style={{ marginTop: 6 }}>{msgEventos}</p>}
-        </> : <p className="muted">{eventosCfg.join(' · ')}. Só o Master altera.</p>}
-      </div>
+      <ConfigEventos />
 
       <div className="sec">
         <h2>Domingos sem assistência esperada (exceções)</h2>

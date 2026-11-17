@@ -82,5 +82,20 @@ describe('registo de presenças no portal', () => {
       expect(() => corrigirRegisto(jot, 'j1', base, 'a@x.pt', '2026-11-17', AGORA)).toThrow(/Não há alterações/);
     });
   });
+
+  describe('com eventos configurados', () => {
+    const oracao = { id: 'reuniao-oracao', nome: 'Reunião Oração', ativo: true, contagens: ['adultos', 'online'], dias: [2], horario: { diaTodo: true as const } };
+    const e = { data: '2026-11-17', evento: 'Reunião Oração', comunidadeId: 'almada', adultos: 12, jump: NaN, criancas: NaN, connects: NaN, outras: { online: 30 } };
+    it('só exige as contagens do evento e respeita os dias da semana', () => {
+      expect(validarPresenca(e, '2026-11-17', [], undefined, oracao)).toBeNull();
+      expect(validarPresenca({ ...e, outras: {} }, '2026-11-17', [], undefined, oracao)).toMatch(/online/i);
+      expect(validarPresenca({ ...e, data: '2026-11-15' }, '2026-11-17', [], undefined, oracao)).toBe('"Reunião Oração" só ocorre: terça.');
+    });
+    it('grava as contagens extra e põe a 0 as que o evento não recolhe', () => {
+      const r = novoRegistoPresenca(e, 'ana@x.pt');
+      expect(r).toMatchObject({ valor: 12, extra: { jump: 0, criancas: 0, connects: 0, online: 30 } });
+      expect(entradaDeRegisto(r, 'almada', ['online']).outras).toEqual({ online: 30 });
+    });
+  });
 });
 

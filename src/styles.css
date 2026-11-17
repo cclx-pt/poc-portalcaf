@@ -182,3 +182,7 @@ input[aria-invalid="true"] { border-color: #d03b3b; }
 .campo-data-linha input[type="text"] { flex: 1; min-width: 0; }
 .botao-calendario { background: var(--branco); color: var(--preto); margin: 0; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; min-width: 40px; }
 .calendario-oculto { position: absolute; right: 0; bottom: 0; width: 40px; height: 100%; opacity: 0; pointer-events: none; border: 0; padding: 0; }
+.grupo-campos { border: 1px solid var(--claro); margin: 12px 0 0; padding: 8px 12px 10px; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.grupo-campos legend { font-size: 12px; color: var(--grafite); padding: 0 4px; }
+.grupo-campos > .linha { flex-basis: 100%; }
+.opcao { font-size: 13px; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; }
