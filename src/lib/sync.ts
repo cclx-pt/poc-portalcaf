@@ -14,6 +14,7 @@ import { FONTES, construirLotes, mapearLinhas, sugerirMapa } from './fontes';
 import { lerSubmissoes, type JotConfig } from './jotform';
 import { JOTFORM_FORMS } from './seed';
 import { r2 } from './format';
+import { eRegistoDoPortal } from './presencas';
 import type { Lote, Origem } from './types';
 
 /** Data de referência por omissão: o início dos dados tratados no portal. */
@@ -155,17 +156,35 @@ async function sincronizarOrigem(
       if (temConf) ops.push({ col: 'lotes_conf', id: c.id, lote: fundirLote(confEx.get(c.id), c).lote });
     }
   } else {
+    // Modo completo: os lotes dos meses abertos são substituídos pelo Jotform, mas os registos feitos
+    // no portal (id "portal-…") são preservados; um lote que só tenha registos do portal não é apagado.
     const ids = new Set(priv.map((l) => l.id));
+    const existentes = await arm.listarIdsLotes(origem);
+    const abertosEx = existentes.filter((l) => !fechados.has(l.periodo));
+    const privEx = await arm.lerLotes('lotes', abertosEx.map((l) => l.id));
+    const doPortal = (l?: Lote) => (l?.registos ?? []).filter(eRegistoDoPortal);
+    const juntar = (novo: Lote, portal: Lote['registos']): Lote => {
+      if (!portal.length) return novo;
+      const registos = [...novo.registos, ...portal].sort((a, b) => a.data.localeCompare(b.data));
+      return { ...novo, registos, total: r2(registos.reduce((s, r) => s + r.valor, 0)), n: registos.length };
+    };
     for (const { p, c } of abertos) {
       anosTocados.add(p.ano);
-      ops.push({ col: 'lotes', id: p.id, lote: p });
+      ops.push({ col: 'lotes', id: p.id, lote: juntar(p, doPortal(privEx.get(p.id))) });
       if (temConf) ops.push({ col: 'lotes_conf', id: c.id, lote: c });
     }
     novos = abertos.reduce((s, { p }) => s + p.registos.length, 0);
-    for (const l of await arm.listarIdsLotes(origem)) {
-      if (ids.has(l.id) || fechados.has(l.periodo)) continue;
-      removidos++;
+    for (const l of abertosEx) {
+      if (ids.has(l.id)) continue;
+      const portal = doPortal(privEx.get(l.id));
       anosTocados.add(Number(l.periodo.slice(0, 4)));
+      if (portal.length) {
+        // Deixou de haver submissões Jotform neste mês: fica só com os registos do portal.
+        const ex = privEx.get(l.id)!;
+        if (portal.length !== ex.registos.length) ops.push({ col: 'lotes', id: l.id, lote: juntar({ ...ex, registos: [] }, portal) });
+        continue;
+      }
+      removidos++;
       ops.push({ col: 'lotes', id: l.id, apagar: true });
       if (temConf) ops.push({ col: 'lotes_conf', id: l.id, apagar: true });
     }

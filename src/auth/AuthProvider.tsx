@@ -14,10 +14,11 @@ interface Estado {
   temNivel: (n: Nivel) => boolean;
 }
 
-export type Acao = 'importar' | 'bancos' | 'aprovar' | 'configurar' | 'utilizadores' | 'publicar' | 'auditoria' | 'exportar' | 'custos';
+export type Acao = 'importar' | 'bancos' | 'aprovar' | 'configurar' | 'utilizadores' | 'publicar' | 'auditoria' | 'exportar' | 'custos' | 'registar';
 
 const PERMISSOES: Record<Acao, Papel[]> = {
   importar: ['master', 'caf'],
+  registar: ['master', 'caf'], // registo de presenças no portal (acessos a rever)
   custos: ['master', 'caf'],
   bancos: ['master', 'caf'],
   aprovar: ['master', 'caf'],

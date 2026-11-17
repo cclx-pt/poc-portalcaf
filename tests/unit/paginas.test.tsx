@@ -40,6 +40,7 @@ vi.mock('../../src/lib/db', () => ({
   listarResumos: (_a: unknown, ano: number) => sync(ano === 2026 ? RESUMOS : []),
   listarCustosFixos: () => sync([{ id: 'ss', comunidadeId: 'almada', rubrica: 'Segurança Social', valorMensal: 1, inicio: '2026-01', fim: null, nivel: 'privado', notas: 'Valor pendente de confirmação.' }]),
   lerConfigAssistencia: () => sync(CONFIG_ASS.atual),
+  lerLote: () => sync(null), gravarLote: vi.fn(),
   gravarConfigAssistencia: vi.fn(),
   listarExcecoes: () => sync([{ id: '2026-03-22_cclx', data: '2026-03-22', ambito: 'cclx', motivo: 'Culto conjunto', criadoPor: 'caf@x.pt', criadoEm: '' }]),
   gravarExcecao: vi.fn(), apagarExcecao: vi.fn(), auditar: vi.fn(),
@@ -150,5 +151,16 @@ describe('páginas', () => {
     const c = renderToString(<RegistoEvento registo="conversoes" />);
     expect(c).toContain('Conversões');
     expect(c).toContain('Em desenvolvimento');
+  });
+
+  it('Registar presenças: os campos do formulário Jotform', async () => {
+    CONFIG_ASS.atual = { eventoCelebracao: 'Celebração Domingo', eventos: ['Celebração Domingo', 'Reunião Oração', 'ATOS', 'Outra'] } as never;
+    const { default: RegistarPresencas } = await import('../../src/pages/RegistarPresencas');
+    const html = renderToString(<RegistarPresencas />);
+    CONFIG_ASS.atual = { eventoCelebracao: null };
+    for (const t of ['Data do evento', 'Evento', 'Comunidade', 'Jovens e adultos', 'Jump (12-14)', 'Crianças (3-11)', 'Connect&#x27;s', 'Observações', 'Celebração Domingo', 'Reunião Oração', 'ATOS', 'Outra', 'Almada', 'Porto']) expect(html).toContain(t);
+    expect(html).toContain('>Guardar registo<');
+    expect(html).not.toContain('€');
+    if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/registar.html', html);
   });
 });

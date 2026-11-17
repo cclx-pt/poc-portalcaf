@@ -120,6 +120,13 @@ export async function lerConfigAssistencia(): Promise<ConfigAssistencia> {
 }
 export const gravarConfigAssistencia = (c: ConfigAssistencia) => setDoc(doc(db, 'config', 'assistencia'), c);
 
+// ---------- lotes individuais (registo de presenças no portal) ----------
+export async function lerLote(id: string): Promise<Lote | null> {
+  const s = await getDoc(doc(db, 'lotes', id));
+  return s.exists() ? (s.data() as Lote) : null;
+}
+export const gravarLote = (l: Lote) => setDoc(doc(db, 'lotes', l.id), l);
+
 // ---------- exceções de assistência ----------
 export const listarExcecoes = async () => (await lista<ExcecaoAssistencia>('assistencia_excecoes')).sort((a, b) => a.data.localeCompare(b.data));
 export const gravarExcecao = (e: ExcecaoAssistencia) => setDoc(doc(db, 'assistencia_excecoes', e.id), e);
