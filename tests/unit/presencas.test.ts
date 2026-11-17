@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EVENTOS_INICIAIS, ID_PORTAL, comunidadesDoUtilizador, acrescentarRegisto, novoRegistoPresenca, removerRegisto, validarPresenca } from '../../src/lib/presencas';
+import { EVENTOS_INICIAIS, ID_PORTAL, comunidadesDoUtilizador, corrigirRegisto, entradaDeRegisto, eCorrigido, acrescentarRegisto, novoRegistoPresenca, removerRegisto, validarPresenca } from '../../src/lib/presencas';
 import type { Lote } from '../../src/lib/types';
 
 const entrada = { data: '2026-11-15', evento: 'Celebração Domingo', comunidadeId: 'almada', adultos: 120, jump: 8, criancas: 20, connects: 5, observacoes: 'Culto com visitas' };
@@ -51,6 +51,36 @@ describe('registo de presenças no portal', () => {
     expect(comunidadesDoUtilizador(todas, ['porto']).map((c) => c.id)).toEqual(['porto']);
     expect(comunidadesDoUtilizador(todas, ['moita', 'bolsa-geral'])).toEqual([]);
     expect(comunidadesDoUtilizador(todas, [])).toEqual([]);
+  });
+
+  describe('corrigir registos anteriores', () => {
+    const jot: Lote = { id: 'assistencia_2026_11_almada', origem: 'assistencia', ano: 2026, mes: 11, periodo: '2026-11', comunidadeId: 'almada',
+      registos: [
+        { id: 'j1', data: '2026-11-08', valor: 100, categoria: 'Assistência', evento: 'Celebração Domingo', extra: { jump: 4, criancas: 10 } },
+        { id: 'j2', data: '2026-11-15', valor: 90, categoria: 'Assistência', evento: 'Celebração Domingo' },
+      ], total: 190, n: 2, atualizadoEm: '', atualizadoPor: '' };
+    const AGORA = '2026-11-17T14:00:00.000Z';
+
+    it('preenche o formulário a partir do registo (campos vazios do Jotform contam 0)', () => {
+      expect(entradaDeRegisto(jot.registos[0], 'almada')).toMatchObject({ data: '2026-11-08', evento: 'Celebração Domingo', comunidadeId: 'almada', adultos: 100, jump: 4, criancas: 10, connects: 0 });
+    });
+    it('corrige, guarda quem e quando alterou e descreve a alteração', () => {
+      const e = { ...entradaDeRegisto(jot.registos[0], 'almada'), adultos: 105, observacoes: 'Contagem revista' };
+      const r = corrigirRegisto(jot, 'j1', e, 'ana@x.pt', '2026-11-17', AGORA);
+      const c = r.lote.registos.find((x) => x.id === 'j1')!;
+      expect(c).toMatchObject({ valor: 105, extra: { jump: 4, criancas: 10, connects: 0, observacoes: 'Contagem revista', alteradoPor: 'ana@x.pt', alteradoEm: AGORA } });
+      expect(eCorrigido(c)).toBe(true);
+      expect(r.lote.total).toBe(195);
+      expect(r.lote.atualizadoPor).toBe('ana@x.pt');
+      expect(r.alteracoes).toBe('Jovens e adultos: 100 → 105; Observações: (vazio) → Contagem revista');
+    });
+    it('não aceita mudar de mês nem duplicar outro registo; sem alterações não grava', () => {
+      const base = entradaDeRegisto(jot.registos[0], 'almada');
+      expect(() => corrigirRegisto(jot, 'j1', { ...base, data: '2026-10-25' }, 'a@x.pt', '2026-11-17', AGORA)).toThrow(/mesmo mês/);
+      expect(() => corrigirRegisto(jot, 'j1', { ...base, data: '2026-11-15' }, 'a@x.pt', '2026-11-17', AGORA)).toThrow(/Já existe/);
+      expect(() => corrigirRegisto(jot, 'j1', { ...base, adultos: NaN }, 'a@x.pt', '2026-11-17', AGORA)).toThrow(/jovens e adultos/);
+      expect(() => corrigirRegisto(jot, 'j1', base, 'a@x.pt', '2026-11-17', AGORA)).toThrow(/Não há alterações/);
+    });
   });
 });
 

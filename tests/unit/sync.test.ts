@@ -198,6 +198,23 @@ describe('sincronização incremental', () => {
     expect(m.cols.lotes.get('assistencia_2026_10_porto')!.registos.map((r) => r.id)).toEqual(['portal-2026-10-04-y']);
   });
 
+  it('reler tudo mantém as correções feitas no portal a registos do Jotform', async () => {
+    const A = JOTFORM_FORMS.assistencia.id;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, status: 200, json: async () => ({ responseCode: 200, content: !url.includes(A) ? [] : [
+      { id: 'j1', created_at: '2026-11-08 12:00:00', status: 'ACTIVE', answers: { '1': { text: 'Dia', type: 'control_datetime', answer: { day: '08', month: '11', year: '2026' } }, '2': { text: 'Comunidade', answer: 'Almada' }, '3': { text: 'Jovens e Adultos', answer: '100' }, '4': { text: 'Evento', answer: 'Celebração Domingo' } } },
+    ] }) }) as Response));
+    const m = armazemMemoria();
+    const corrigido: Lote = { id: 'assistencia_2026_11_almada', origem: 'assistencia', ano: 2026, mes: 11, periodo: '2026-11', comunidadeId: 'almada',
+      registos: [{ id: 'j1', data: '2026-11-08', valor: 105, categoria: 'Assistência', evento: 'Celebração Domingo', extra: { alteradoPor: 'ana@x.pt', alteradoEm: '2026-11-17T10:00:00.000Z' } }], total: 105, n: 1, atualizadoEm: '', atualizadoPor: 'ana@x.pt' };
+    await m.arm.gravarLotes([{ col: 'lotes', id: corrigido.id, lote: corrigido }]);
+
+    await sincronizar(m.arm, CFG, 'teste', { modo: 'completo' });
+    const l = m.cols.lotes.get('assistencia_2026_11_almada')!;
+    expect(l.registos).toHaveLength(1);
+    expect(l.registos[0]).toMatchObject({ id: 'j1', valor: 105, extra: { alteradoPor: 'ana@x.pt' } });
+    expect(l.total).toBe(105);
+  });
+
   it('não toca em meses fechados', async () => {
     vi.stubGlobal('fetch', jotformFalso({ [F]: [{ id: 'a', created_at: '2026-03-02 10:00:00', comunidade: 'Almada', valor: '50', nome: 'Ana' }] }).fetchFalso);
     const m = armazemMemoria(['2026-03']);
