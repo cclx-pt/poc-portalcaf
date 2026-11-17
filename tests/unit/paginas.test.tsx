@@ -266,5 +266,11 @@ describe('páginas', () => {
     expect(html).toContain('Abrir contador');
   });
 
+
+  it('Custos fixos: incidência, valor imputado, âmbito e importação do Excel', async () => {
+    const { default: CustosFixos } = await import('../../src/pages/CustosFixos');
+    const html = renderToString(<CustosFixos />);
+    for (const t of ['Incidência', 'Imputado', 'Importar do Excel', '01/2026']) expect(html).toContain(t);
+  });
 });
 

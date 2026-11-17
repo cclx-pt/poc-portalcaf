@@ -42,6 +42,18 @@ describe('repartição dos gerais', () => {
     expect(mes(rs, 'almada', 3).adultosMedia12m).toBe(100);
   });
 
+  it('custo fixo com âmbito geral (ex.: lançado na Sede) é repartido pela assistência, com a incidência', () => {
+    const cf: CustoFixo = { id: 'g', comunidadeId: 'sede', rubrica: 'Vencimento Multimédia', valorMensal: 600, incidencia: 50, ambito: 'geral', inicio: '2026-03', fim: '2026-03', nivel: 'confidencial' };
+    const rs = calcularResumos(base({
+      custosFixos: [cf],
+      assistencia: [lote('assistencia', 'almada', 2026, 3, [{ valor: 100 }]), lote('assistencia', 'porto', 2026, 3, [{ valor: 50 }])],
+    }));
+    expect(mes(rs, 'almada', 3).geralSaidas).toBe(200);
+    expect(mes(rs, 'porto', 3).geralSaidas).toBe(100);
+    expect(mes(rs, 'sede', 3).saidas).toBe(0);
+    expect(mes(rs, 'almada', 3).rubricas.saida[OUTROS_FUNCIONAMENTO].geral).toBe(200); // confidencial: agregado
+  });
+
   it('só os registos de domingo contam para as médias e os pesos', () => {
     const sabado: Lote = { ...lote('assistencia', 'porto', 2026, 3, [{ valor: 1000 }]) };
     sabado.registos = sabado.registos.map((r) => ({ ...r, data: '2026-03-07' })); // sábado
