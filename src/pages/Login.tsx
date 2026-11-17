@@ -8,6 +8,8 @@ import { Rodape } from '../components/ui';
 
 const BASE = import.meta.env.BASE_URL;
 const CHAVE_EMAIL = 'caf-portal:email-login';
+/** Página onde a pessoa estava ao pedir o link (ex.: #/registar), para voltar lá depois do login. */
+const CHAVE_DESTINO = 'caf-portal:destino-login';
 
 function traduzir(e: unknown) {
   const c = (e as { code?: string }).code ?? '';
@@ -38,7 +40,9 @@ export default function Login() {
   async function concluirLink(endereco: string) {
     await signInWithEmailLink(auth, endereco, window.location.href);
     window.localStorage.removeItem(CHAVE_EMAIL);
-    window.history.replaceState(null, '', urlRegresso());
+    const destino = window.localStorage.getItem(CHAVE_DESTINO) ?? '';
+    window.localStorage.removeItem(CHAVE_DESTINO);
+    window.history.replaceState(null, '', `${urlRegresso()}${destino.startsWith('#/') ? destino : ''}`);
   }
 
   // Ao abrir o link recebido por email, conclui o login.
@@ -87,6 +91,7 @@ export default function Login() {
             const endereco = email.trim().toLowerCase();
             await sendSignInLinkToEmail(auth, endereco, { url: urlRegresso(), handleCodeInApp: true });
             window.localStorage.setItem(CHAVE_EMAIL, endereco);
+            window.localStorage.setItem(CHAVE_DESTINO, window.location.hash);
             setEnviado(true);
           })}>Enviar link de acesso</button>
         </>}

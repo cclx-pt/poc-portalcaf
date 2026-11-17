@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EVENTOS_INICIAIS, ID_PORTAL, acrescentarRegisto, novoRegistoPresenca, removerRegisto, validarPresenca } from '../../src/lib/presencas';
+import { EVENTOS_INICIAIS, ID_PORTAL, comunidadesDoUtilizador, acrescentarRegisto, novoRegistoPresenca, removerRegisto, validarPresenca } from '../../src/lib/presencas';
 import type { Lote } from '../../src/lib/types';
 
 const entrada = { data: '2026-11-15', evento: 'Celebração Domingo', comunidadeId: 'almada', adultos: 120, jump: 8, criancas: 20, connects: 5, observacoes: 'Culto com visitas' };
@@ -17,6 +17,10 @@ describe('registo de presenças no portal', () => {
     expect(validarPresenca({ ...entrada, comunidadeId: '' }, '2026-11-16')).toMatch(/comunidade/i);
     expect(validarPresenca({ ...entrada, adultos: -1 }, '2026-11-16')).toMatch(/jovens e adultos/i);
     expect(validarPresenca({ ...entrada, criancas: 2.5 }, '2026-11-16')).toMatch(/crianças/i);
+  });
+  it('campos numéricos começam em branco e são obrigatórios (0 escreve-se)', () => {
+    expect(validarPresenca({ ...entrada, adultos: NaN }, '2026-11-16')).toBe('Indique o número de jovens e adultos (0 se não houve).');
+    expect(validarPresenca({ ...entrada, connects: NaN }, '2026-11-16')).toBe("Indique o número de Connect's (0 se não houve).");
   });
   it('cria um registo com a forma dos registos do Jotform', () => {
     const r = novoRegistoPresenca({ ...entrada, evento: 'Outra', descricao: 'Vigília' }, 'ana@x.pt');
@@ -40,4 +44,13 @@ describe('registo de presenças no portal', () => {
     expect(validarPresenca(entrada, '2026-11-16', [lote])).toMatch(/já existe/i);
     expect(validarPresenca({ ...entrada, evento: 'ATOS' }, '2026-11-16', [lote])).toBeNull();
   });
+
+  it('só oferece as comunidades a que o utilizador tem acesso', () => {
+    const todas = [{ id: 'almada', nome: 'Almada', ordem: 1 }, { id: 'porto', nome: 'Porto', ordem: 2 }, { id: 'moita', nome: 'Moita', ordem: 3, ativo: false }, { id: 'bolsa-geral', nome: 'Bolsa', ordem: 9, especial: true }];
+    expect(comunidadesDoUtilizador(todas, ['*']).map((c) => c.id)).toEqual(['almada', 'porto']);
+    expect(comunidadesDoUtilizador(todas, ['porto']).map((c) => c.id)).toEqual(['porto']);
+    expect(comunidadesDoUtilizador(todas, ['moita', 'bolsa-geral'])).toEqual([]);
+    expect(comunidadesDoUtilizador(todas, [])).toEqual([]);
+  });
 });
+

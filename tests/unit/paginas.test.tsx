@@ -23,7 +23,9 @@ const LOTES: Record<string, Lote[]> = {
   ],
 };
 
-vi.mock('../../src/auth/AuthProvider', () => ({ useAuth: () => ({ acesso: { email: 'm@x.pt', papel: 'master' }, pode: () => true, temNivel: () => true }) }));
+const MASTER_ACESSO = { email: 'm@x.pt', papel: 'master', nivel: 'confidencial', comunidades: ['*'] };
+const AUTH: { atual: Record<string, unknown> } = { atual: { acesso: MASTER_ACESSO, pode: () => true, temNivel: () => true } };
+vi.mock('../../src/auth/AuthProvider', () => ({ useAuth: () => AUTH.atual }));
 const CONFIG_ASS: { atual: { eventoCelebracao: string | null } } = { atual: { eventoCelebracao: null } };
 const mesR = (m: number, x: Record<string, unknown> = {}) => ({
   mes: m, contribuir: 0, coletas: 0, transferencias: 0, quotaBolsa: 0, entradas: 0, custosFixos: 0, despesas: 0, saidas: 0, saldo: 0,
@@ -160,7 +162,29 @@ describe('páginas', () => {
     CONFIG_ASS.atual = { eventoCelebracao: null };
     for (const t of ['Data do evento', 'Evento', 'Comunidade', 'Jovens e adultos', 'Jump (12-14)', 'Crianças (3-11)', 'Connect&#x27;s', 'Observações', 'Celebração Domingo', 'Reunião Oração', 'ATOS', 'Outra', 'Almada', 'Porto']) expect(html).toContain(t);
     expect(html).toContain('>Guardar registo<');
+    expect(html).not.toMatch(/type="number"[^>]*value="0"/);
+    expect(html).toContain('placeholder="dd/mm/aaaa"');
     expect(html).not.toContain('€');
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/registar.html', html);
   });
+
+  it('Registar presenças: só as comunidades a que o utilizador tem acesso', async () => {
+    AUTH.atual = { acesso: { email: 'r@x.pt', papel: 'registos', nivel: 'publico', comunidades: ['porto'] }, pode: (a: string) => a === 'registar', temNivel: () => false, sair: vi.fn() };
+    const { default: RegistarPresencas } = await import('../../src/pages/RegistarPresencas');
+    const html = renderToString(<RegistarPresencas />);
+    AUTH.atual = { acesso: MASTER_ACESSO, pode: () => true, temNivel: () => true };
+    expect(html).toContain('Porto');
+    expect(html).not.toContain('Almada');
+  });
+
+  it('Link direto /registar: separadores Novo registo e Consultar, sem dados financeiros', async () => {
+    AUTH.atual = { acesso: { email: 'r@x.pt', papel: 'registos', nivel: 'publico', comunidades: ['porto'] }, pode: (a: string) => a === 'registar', temNivel: () => false, sair: vi.fn() };
+    const { default: RegistoRapido } = await import('../../src/pages/RegistoRapido');
+    const html = renderToString(<RegistoRapido />);
+    AUTH.atual = { acesso: MASTER_ACESSO, pode: () => true, temNivel: () => true };
+    for (const t of ['Novo registo', 'Consultar', 'Registo de presenças', 'r@x.pt', 'Sair', 'Guardar registo', 'Porto']) expect(html).toContain(t);
+    for (const t of ['Almada', '€', 'Entradas', 'Painel']) expect(html).not.toContain(t);
+    if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/registo-rapido.html', html);
+  });
 });
+

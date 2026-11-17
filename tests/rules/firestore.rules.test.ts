@@ -14,6 +14,7 @@ const MASTER = 'tesouraria@cclx.pt';
 const CAF = 'caf@exemplo.pt';
 const TES_CDR = 'tes.caldas@exemplo.pt';
 const LEITOR = 'leitor@exemplo.pt';
+const REG_CDR = 'registos.caldas@exemplo.pt';
 
 function as(email: string, verified = true) {
   return env.authenticatedContext(email, { email, email_verified: verified }).firestore();
@@ -34,6 +35,9 @@ beforeEach(async () => {
     await setDoc(doc(db, 'users', CAF), { papel: 'caf', nivel: 'confidencial', comunidades: ['*'], ativo: true });
     await setDoc(doc(db, 'users', TES_CDR), { papel: 'tesoureiro', nivel: 'privado', comunidades: ['caldas-da-rainha'], ativo: true });
     await setDoc(doc(db, 'users', LEITOR), { papel: 'leitura', nivel: 'publico', comunidades: ['*'], ativo: true });
+    await setDoc(doc(db, 'users', REG_CDR), { papel: 'registos', nivel: 'publico', comunidades: ['caldas-da-rainha'], ativo: true });
+    await setDoc(doc(db, 'lotes', 'assistencia_2026_03_caldas-da-rainha'), { origem: 'assistencia', comunidadeId: 'caldas-da-rainha', periodo: '2026-03', registos: [] });
+    await setDoc(doc(db, 'lotes', 'assistencia_2026_03_almada'), { origem: 'assistencia', comunidadeId: 'almada', periodo: '2026-03', registos: [] });
     await setDoc(doc(db, 'lotes_conf', 'contribuir_2026_03_caldas-da-rainha'), { comunidadeId: 'caldas-da-rainha', periodo: '2026-03', registos: [] });
     await setDoc(doc(db, 'lotes', 'contribuir_2026_03_caldas-da-rainha'), { comunidadeId: 'caldas-da-rainha', periodo: '2026-03', registos: [] });
     await setDoc(doc(db, 'lotes', 'contribuir_2026_03_almada'), { comunidadeId: 'almada', periodo: '2026-03', registos: [] });
@@ -173,5 +177,33 @@ describe('desconhecido', () => {
   it('auditoria só aceita o próprio email', async () => {
     await assertFails(setDoc(doc(as(CAF), 'auditoria', 'a1'), { quem: 'outro@exemplo.pt', acao: 'x' }));
     await assertSucceeds(setDoc(doc(as(CAF), 'auditoria', 'a2'), { quem: CAF, acao: 'x' }));
+  });
+});
+
+describe('registos (presenças da sua comunidade)', () => {
+  const ass = (c: string, p = '2026-04') => ({ origem: 'assistencia', comunidadeId: c, periodo: p, registos: [] });
+  it('lê presenças da sua comunidade, não de outras', async () => {
+    await assertSucceeds(getDoc(doc(as(REG_CDR), 'lotes', 'assistencia_2026_03_caldas-da-rainha')));
+    await assertFails(getDoc(doc(as(REG_CDR), 'lotes', 'assistencia_2026_03_almada')));
+    await assertSucceeds(getDocs(query(collection(as(REG_CDR), 'lotes'), where('origem', '==', 'assistencia'), where('comunidadeId', 'in', ['caldas-da-rainha']))));
+  });
+  it('lê um lote ainda inexistente (para criar o primeiro registo do mês)', async () => {
+    await assertSucceeds(getDoc(doc(as(REG_CDR), 'lotes', 'assistencia_2026_04_caldas-da-rainha')));
+  });
+  it('não lê dados financeiros nem resumos', async () => {
+    await assertFails(getDoc(doc(as(REG_CDR), 'lotes', 'contribuir_2026_03_caldas-da-rainha')));
+    await assertFails(getDoc(doc(as(REG_CDR), 'lotes_conf', 'contribuir_2026_03_caldas-da-rainha')));
+    await assertFails(getDoc(doc(as(REG_CDR), 'custos_fixos', 'cdr-renda')));
+    await assertFails(getDoc(doc(as(REG_CDR), 'banco_lotes', 'qualquer')));
+  });
+  it('regista presenças só na sua comunidade e em meses abertos', async () => {
+    await assertSucceeds(setDoc(doc(as(REG_CDR), 'lotes', 'assistencia_2026_04_caldas-da-rainha'), ass('caldas-da-rainha')));
+    await assertFails(setDoc(doc(as(REG_CDR), 'lotes', 'assistencia_2026_04_almada'), ass('almada')));
+    await assertFails(setDoc(doc(as(REG_CDR), 'lotes', 'assistencia_2026_01_caldas-da-rainha'), ass('caldas-da-rainha', '2026-01')));
+  });
+  it('não escreve outras origens nem transforma lotes financeiros', async () => {
+    await assertFails(setDoc(doc(as(REG_CDR), 'lotes', 'contribuir_2026_04_caldas-da-rainha'), { origem: 'contribuir', comunidadeId: 'caldas-da-rainha', periodo: '2026-04', registos: [] }));
+    await assertFails(setDoc(doc(as(REG_CDR), 'lotes', 'contribuir_2026_03_caldas-da-rainha'), ass('caldas-da-rainha', '2026-03')));
+    await assertFails(setDoc(doc(as(REG_CDR), 'resumos', '2026_caldas-da-rainha'), { meses: [] }));
   });
 });

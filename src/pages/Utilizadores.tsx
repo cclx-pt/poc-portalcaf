@@ -4,7 +4,7 @@ import { Estado, mensagemErro, useCarregar } from '../components/ui';
 import { apagarPerfil, auditar, gravarPerfil, listarComunidades, listarPerfis } from '../lib/db';
 import { MASTER_EMAILS, NIVEIS, NIVEL_LABEL, PAPEL_LABEL, type Nivel, type Papel, type Perfil } from '../lib/types';
 
-const NIVEL_DEFEITO: Record<Papel, Nivel> = { master: 'confidencial', caf: 'confidencial', tesoureiro: 'privado', leitura: 'publico' };
+const NIVEL_DEFEITO: Record<Papel, Nivel> = { master: 'confidencial', caf: 'confidencial', tesoureiro: 'privado', leitura: 'publico', registos: 'publico' };
 const novo = (): Perfil => ({ email: '', papel: 'leitura', nivel: 'publico', comunidades: ['*'], ativo: true });
 
 export default function Utilizadores() {
@@ -35,7 +35,7 @@ export default function Utilizadores() {
       <div className="linha" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <h1>Utilizadores</h1>
-          <p className="muted">Master (fixos): {MASTER_EMAILS.join(', ')}. O CAF vê toda a organização; o tesoureiro e a leitura veem tudo ou só as comunidades escolhidas; a leitura só consulta, até ao nível definido.</p>
+          <p className="muted">Master (fixos): {MASTER_EMAILS.join(', ')}. O CAF vê toda a organização; o tesoureiro e a leitura veem tudo ou só as comunidades escolhidas; a leitura só consulta, até ao nível definido. O perfil Registos só regista e consulta presenças das suas comunidades, sem dados financeiros; entra pelo link direto <b>portalcaf.cclx.pt/#/registar</b> (telemóvel ou computador).</p>
         </div>
         <button onClick={() => setEdit(novo())}>Novo utilizador</button>
       </div>
@@ -63,19 +63,19 @@ export default function Utilizadores() {
               <label className="campo">Email (conta Google ou email/senha)<input type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></label>
               <label className="campo">Perfil
                 <select value={edit.papel} onChange={(e) => { const papel = e.target.value as Papel; setEdit({ ...edit, papel, nivel: NIVEL_DEFEITO[papel], comunidades: papel === 'caf' ? ['*'] : edit.comunidades }); }}>
-                  {(['caf', 'tesoureiro', 'leitura'] as Papel[]).map((p) => <option key={p} value={p}>{PAPEL_LABEL[p]}</option>)}
+                  {(['caf', 'tesoureiro', 'leitura', 'registos'] as Papel[]).map((p) => <option key={p} value={p}>{PAPEL_LABEL[p]}</option>)}
                 </select>
               </label>
-              <label className="campo">Nível máximo de privacidade
+              {edit.papel !== 'registos' && <label className="campo">Nível máximo de privacidade
                 <select value={edit.nivel} onChange={(e) => setEdit({ ...edit, nivel: e.target.value as Nivel })}>{NIVEIS.map((n) => <option key={n} value={n}>{NIVEL_LABEL[n]}</option>)}</select>
-              </label>
+              </label>}
               <label className="campo">Estado
                 <select value={edit.ativo ? '1' : '0'} onChange={(e) => setEdit({ ...edit, ativo: e.target.value === '1' })}><option value="1">Ativo</option><option value="0">Inativo</option></select>
               </label>
             </div>
             {edit.papel !== 'caf' && (
               <fieldset style={{ marginTop: 12, border: '1px solid #e6e6e6' }}>
-                <legend className="small">Comunidades cujos dados pode ver</legend>
+                <legend className="small">{edit.papel === 'registos' ? 'Comunidades onde pode registar e consultar presenças' : 'Comunidades cujos dados pode ver'}</legend>
                 <label className="small" style={{ marginRight: 12 }}><input type="checkbox" checked={edit.comunidades.includes('*')} onChange={(e) => setEdit({ ...edit, comunidades: e.target.checked ? ['*'] : [] })} /> <b>Ver tudo (todas as comunidades)</b></label>
                 {!edit.comunidades.includes('*') && (coms.dados ?? []).filter((c) => !c.especial && (c.ativo !== false || edit.comunidades.includes(c.id))).map((c) => (
                   <label key={c.id} className="small" style={{ marginRight: 12, whiteSpace: 'nowrap' }}>

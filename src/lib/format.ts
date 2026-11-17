@@ -80,3 +80,24 @@ export const slug = (s: string) => norm(s).replace(/ /g, '-');
 
 export const hoje = () => new Date().toISOString().slice(0, 10);
 export const agoraISO = () => new Date().toISOString();
+
+// ---------- datas no formato português (dd/mm/aaaa) ----------
+/** AAAA-MM-DD → dd/mm/aaaa. */
+export const dataPT = (iso: string | null | undefined) => {
+  const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+};
+/** dd/mm/aaaa → AAAA-MM-DD, ou null se não for uma data válida. */
+export function lerDataPT(texto: string): string | null {
+  const m = texto.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const [d, mes, a] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const dt = new Date(Date.UTC(a, mes - 1, d));
+  if (dt.getUTCFullYear() !== a || dt.getUTCMonth() !== mes - 1 || dt.getUTCDate() !== d) return null;
+  return `${a}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+/** Formata o que se escreve como dd/mm/aaaa, inserindo as barras. */
+export function mascaraDataPT(texto: string): string {
+  const dig = texto.replace(/\D/g, '').slice(0, 8);
+  return [dig.slice(0, 2), dig.slice(2, 4), dig.slice(4, 8)].filter(Boolean).join('/');
+}

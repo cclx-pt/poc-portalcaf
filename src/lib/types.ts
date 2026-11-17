@@ -1,10 +1,10 @@
-export type Papel = 'master' | 'caf' | 'tesoureiro' | 'leitura';
+export type Papel = 'master' | 'caf' | 'tesoureiro' | 'leitura' | 'registos';
 export type Nivel = 'publico' | 'privado' | 'confidencial';
 export type Origem = 'contribuir' | 'depositos' | 'despesas' | 'assistencia';
 
 export const NIVEIS: Nivel[] = ['publico', 'privado', 'confidencial'];
 export const NIVEL_LABEL: Record<Nivel, string> = { publico: 'Público', privado: 'Privado', confidencial: 'Confidencial' };
-export const PAPEL_LABEL: Record<Papel, string> = { master: 'Master', caf: 'CAF', tesoureiro: 'Tesoureiro', leitura: 'Leitura' };
+export const PAPEL_LABEL: Record<Papel, string> = { master: 'Master', caf: 'CAF', tesoureiro: 'Tesoureiro', leitura: 'Leitura', registos: 'Registos' };
 export const nivelNum = (n: Nivel) => NIVEIS.indexOf(n);
 
 // Contas Master fixas (iguais às das regras de segurança).

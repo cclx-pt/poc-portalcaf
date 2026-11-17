@@ -4,13 +4,19 @@
  * em falta funcionarem sem distinção entre Jotform e portal.
  */
 import { norm, periodo, r2 } from './format';
-import type { Lote, Registo } from './types';
+import type { Comunidade, Lote, Registo } from './types';
 
 /** Tipos de evento do formulário Jotform; a lista configurada pode alterá-los. */
 export const EVENTOS_INICIAIS = ['Celebração Domingo', 'Reunião Oração', 'ATOS', 'Outra'];
 /** Prefixo dos IDs dos registos feitos no portal (distingue-os das submissões Jotform). */
 export const ID_PORTAL = 'portal-';
 export const eRegistoDoPortal = (r: Pick<Registo, 'id'>) => r.id.startsWith(ID_PORTAL);
+
+/** Comunidades onde o utilizador pode registar e consultar presenças: ativas, não especiais e dentro do seu âmbito ('*' = todas). */
+export function comunidadesDoUtilizador<C extends Pick<Comunidade, 'id' | 'especial' | 'ativo'>>(todas: C[], ambito: string[]): C[] {
+  const tudo = ambito.includes('*');
+  return todas.filter((c) => !c.especial && c.ativo !== false && (tudo || ambito.includes(c.id)));
+}
 
 export interface EntradaPresenca {
   data: string; // AAAA-MM-DD
@@ -33,6 +39,8 @@ export function validarPresenca(e: EntradaPresenca, hoje: string, existentes: Lo
   if (!e.evento?.trim()) return 'Escolha o evento.';
   if (norm(e.evento) === 'outra' && !e.descricao?.trim()) return 'Indique a descrição do evento.';
   if (!e.comunidadeId) return 'Escolha a comunidade.';
+  const campos: [number, string, string][] = [[e.adultos, 'jovens e adultos', 'Jovens e adultos'], [e.jump, 'Jump (12-14)', 'Jump (12-14)'], [e.criancas, 'crianças (3-11)', 'Crianças (3-11)'], [e.connects, "Connect's", "Connect's"]];
+  for (const [v, nome] of campos) if (v == null || Number.isNaN(v)) return `Indique o número de ${nome} (0 se não houve).`;
   if (!inteiro(e.adultos)) return 'Jovens e adultos: número inteiro, 0 ou mais.';
   if (!inteiro(e.jump)) return 'Jump (12-14): número inteiro, 0 ou mais.';
   if (!inteiro(e.criancas)) return 'Crianças (3-11): número inteiro, 0 ou mais.';
