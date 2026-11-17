@@ -228,6 +228,10 @@ export interface ConfigAssistencia {
   eventoCelebracao: string | null;
   /** Tipos de evento disponíveis no formulário de presenças do portal (por omissão, os do Jotform). */
   eventos?: string[];
+  /** Eventos configurados (nome, descrição, contagens, dias, horário). Sem isto, derivam de `eventos`. */
+  eventosConfig?: import('./eventos').EventoConfig[];
+  /** Contagens acrescentadas às base (adultos, jump, crianças, connects). */
+  contagens?: import('./eventos').Contagem[];
   atualizadoPor?: string;
   atualizadoEm?: string;
 }
