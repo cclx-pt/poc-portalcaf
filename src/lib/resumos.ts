@@ -73,6 +73,9 @@ export function mesesDecorridos(ano: number, hoje: string): number {
   return Number(hoje.slice(5, 7));
 }
 
+/** Valor mensal imputado à comunidade: valor total × incidência (por omissão 100%). */
+export const valorImputado = (c: Pick<CustoFixo, 'valorMensal' | 'incidencia'>) => r2(c.valorMensal * (c.incidencia ?? 100) / 100);
+
 export function custoAtivo(c: CustoFixo, p: string) {
   return c.inicio <= p && (!c.fim || c.fim >= p);
 }
@@ -104,8 +107,9 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
   type Tipo = 'entrada' | 'saida';
   const bolo = Array.from({ length: 12 }, () => ({ entrada: {} as Record<string, number>, saida: {} as Record<string, number> }));
   const bolsaRub = Array.from({ length: 12 }, () => ({} as Record<string, number>));
-  const registar = (com: string, mes: number, tipo: Tipo, categoria: string, valor: number, confidencial = false, custoFixo = false) => {
-    const k = classificar(categoria, tipo);
+  const registar = (com: string, mes: number, tipo: Tipo, categoria: string, valor: number, confidencial = false, custoFixo = false, geral = false) => {
+    const c0 = classificar(categoria, tipo);
+    const k = geral ? { ...c0, ambito: 'geral' as const } : c0;
     const rubrica = k.confidencial || confidencial ? OUTROS_FUNCIONAMENTO : k.rubrica;
     // Entradas sem comunidade (bolsa geral): rubrica "Outros rendimentos", seja qual for a categoria (decisão do CAF).
     if (com === 'bolsa-geral' && tipo === 'entrada') { soma(bolsaRub[mes - 1], 'Outros rendimentos', valor); return; }
@@ -153,10 +157,11 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
     const p = periodo(d.ano, mes);
     if (!custoAtivo(cf, p)) continue;
     const x = m(cf.comunidadeId, mes);
-    x.custosFixos = r2(x.custosFixos + cf.valorMensal);
-    soma(x.custosRubricas, cf.nivel === 'confidencial' ? 'Outros custos de funcionamento' : cf.rubrica, cf.valorMensal);
+    const valor = valorImputado(cf);
+    x.custosFixos = r2(x.custosFixos + valor);
+    soma(x.custosRubricas, cf.nivel === 'confidencial' ? 'Outros custos de funcionamento' : cf.rubrica, valor);
     // Custo fixo confidencial: nunca aparece com a sua rubrica própria.
-    registar(cf.comunidadeId, mes, 'saida', cf.rubrica, cf.valorMensal, cf.nivel === 'confidencial', true);
+    registar(cf.comunidadeId, mes, 'saida', cf.rubrica, valor, cf.nivel === 'confidencial', true, cf.ambito === 'geral');
   }
 
   // Distribuição da bolsa geral (média de adultos do mesmo mês), também por rubrica.

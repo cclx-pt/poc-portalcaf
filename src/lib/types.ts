@@ -115,7 +115,12 @@ export interface CustoFixo {
   id: string;
   comunidadeId: string;
   rubrica: string;
+  /** Valor total mensal do custo (antes da incidência). */
   valorMensal: number;
+  /** Parte do custo imputada a esta comunidade, em % (por omissão 100). Para custos partilhados. */
+  incidencia?: number;
+  /** "geral": custo partilhado por toda a CCLX, repartido pelas comunidades conforme a assistência. Por omissão, local. */
+  ambito?: 'local' | 'geral';
   inicio: string; // YYYY-MM
   fim: string | null;
   nivel: Nivel;

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dec, eur, eurContab, parseData, parseNumero } from '../../src/lib/format';
 import { FONTES, construirLotes, mapearLinhas, resolverComunidade, sugerirMapa } from '../../src/lib/fontes';
-import { calcularPublico, calcularPublicoSite, calcularResumos, somarMeses } from '../../src/lib/resumos';
+import { calcularPublico, calcularPublicoSite, calcularResumos, somarMeses, valorImputado } from '../../src/lib/resumos';
 import { mapearExtrato, sugerir, sugerirMapaBanco } from '../../src/lib/banco';
 import { achatar } from '../../src/lib/jotform';
 import { COMUNIDADES, CUSTOS_FIXOS_CDR } from '../../src/lib/seed';
@@ -113,6 +113,20 @@ describe('resumos (caso real de Caldas da Rainha, 2026 até 13/11)', () => {
     expect(t.custosFixos).toBe(17579.54);
     expect(t.saldo).toBe(-7847.65);
     expect(t.custosRubricas['Outros custos de funcionamento']).toBe(9493.55); // vencimentos + SS ficam agregados
+  });
+
+  it('custos fixos com incidência: só a percentagem da comunidade entra nos resumos', () => {
+    const renda = { id: 'r', comunidadeId: 'caldas-da-rainha', rubrica: 'Renda', valorMensal: 1000, incidencia: 50, inicio: '2026-01', fim: null, nivel: 'privado' as const };
+    expect(valorImputado(renda)).toBe(500);
+    expect(valorImputado({ ...renda, incidencia: undefined })).toBe(1000); // por omissão 100%
+    expect(valorImputado({ ...renda, valorMensal: 626.69, incidencia: 33.33 })).toBe(208.88);
+    const resumos = calcularResumos({
+      ano: 2026, comunidades: COMUNIDADES, contribuir: [], depositos: [], despesas: [], assistencia: [], banco: [],
+      custosFixos: [renda], mesesFechados: new Set(), hoje: '2026-03-15',
+    });
+    const t = somarMeses(resumos.find((r) => r.comunidadeId === 'caldas-da-rainha')!.meses);
+    expect(t.custosFixos).toBe(1500); // jan, fev e mar a 500
+    expect(t.custosRubricas.Renda).toBe(1500);
   });
 
   it('distribui a bolsa geral pela média de adultos do mesmo mês', () => {
