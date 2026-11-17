@@ -186,5 +186,17 @@ describe('páginas', () => {
     for (const t of ['Almada', '€', 'Entradas', 'Painel']) expect(html).not.toContain(t);
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/registo-rapido.html', html);
   });
+
+  it('Lista de presenças: Corrigir em cada registo e última alteração com quem', async () => {
+    const { ListaPresencas } = await import('../../src/pages/RegistarPresencas');
+    const l = lote('assistencia', 'almada', 11, [
+      { data: '2026-11-08', valor: 105, evento: 'Celebração Domingo', extra: { alteradoPor: 'ana@x.pt', alteradoEm: '2026-11-17T14:05:00.000Z' } },
+      { data: '2026-11-15', valor: 90, evento: 'Celebração Domingo' },
+    ]);
+    const html = renderToString(<ListaPresencas lotes={[l]} comunidades={[{ id: 'almada', nome: 'Almada', ordem: 1 }]} soPortal={false} aposApagar={async () => {}} />);
+    expect(html).toContain('Última alteração');
+    expect(html).toMatch(/17\/11\/2026 \d{2}:05 · ana@x\.pt/);
+    expect(html.match(/>Corrigir</g)?.length).toBe(2);
+  });
 });
 

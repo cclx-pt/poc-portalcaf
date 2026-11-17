@@ -14,7 +14,7 @@ import { FONTES, construirLotes, mapearLinhas, sugerirMapa } from './fontes';
 import { lerSubmissoes, type JotConfig } from './jotform';
 import { JOTFORM_FORMS } from './seed';
 import { r2 } from './format';
-import { eRegistoDoPortal } from './presencas';
+import { eCorrigido, eRegistoDoPortal } from './presencas';
 import type { Lote, Origem } from './types';
 
 /** Data de referência por omissão: o início dos dados tratados no portal. */
@@ -157,15 +157,17 @@ async function sincronizarOrigem(
     }
   } else {
     // Modo completo: os lotes dos meses abertos são substituídos pelo Jotform, mas os registos feitos
-    // no portal (id "portal-…") são preservados; um lote que só tenha registos do portal não é apagado.
+    // no portal (id "portal-…") e as correções feitas no portal a registos do Jotform são preservados;
+    // um lote que só tenha registos do portal não é apagado.
     const ids = new Set(priv.map((l) => l.id));
     const existentes = await arm.listarIdsLotes(origem);
     const abertosEx = existentes.filter((l) => !fechados.has(l.periodo));
     const privEx = await arm.lerLotes('lotes', abertosEx.map((l) => l.id));
-    const doPortal = (l?: Lote) => (l?.registos ?? []).filter(eRegistoDoPortal);
+    const doPortal = (l?: Lote) => (l?.registos ?? []).filter((r) => eRegistoDoPortal(r) || eCorrigido(r));
     const juntar = (novo: Lote, portal: Lote['registos']): Lote => {
       if (!portal.length) return novo;
-      const registos = [...novo.registos, ...portal].sort((a, b) => a.data.localeCompare(b.data));
+      const manter = new Set(portal.map((r) => r.id));
+      const registos = [...novo.registos.filter((r) => !manter.has(r.id)), ...portal].sort((a, b) => a.data.localeCompare(b.data));
       return { ...novo, registos, total: r2(registos.reduce((s, r) => s + r.valor, 0)), n: registos.length };
     };
     for (const { p, c } of abertos) {

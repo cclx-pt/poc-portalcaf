@@ -167,3 +167,5 @@ input[aria-invalid="true"] { border-color: #d03b3b; }
   .tabela-presencas td { border: none; padding: 2px 0; text-align: left; }
   .tabela-presencas td[data-rotulo]::before { content: attr(data-rotulo); display: block; font-size: 10px; color: var(--cinza); text-transform: uppercase; letter-spacing: .06em; }
 }
+.acoes-linha { white-space: nowrap; }
+.acoes-linha .link + .link { margin-left: 10px; }
