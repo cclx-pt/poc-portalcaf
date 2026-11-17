@@ -198,5 +198,25 @@ describe('páginas', () => {
     expect(html).toMatch(/17\/11\/2026 \d{2}:05 · ana@x\.pt/);
     expect(html.match(/>Corrigir</g)?.length).toBe(2);
   });
+
+  it('Domingos em falta (telemóvel): por comunidade do utilizador, a tocar abre o registo', async () => {
+    const { DomingosEmFaltaLista } = await import('../../src/pages/RegistarPresencas');
+    const html = renderToString(<DomingosEmFaltaLista ano={2026} hoje="2026-03-22" comunidades={[{ id: 'almada', nome: 'Almada', ordem: 1 }]} lotes={LOTES.assistencia} aoEscolher={() => {}} />);
+    expect(html).toContain('Domingos em falta');
+    expect(html).toContain('Almada');
+    expect(html).not.toContain('Porto');
+    // Almada tem registos a 01, 08, 14(sáb.) e 21/03 (sáb.)... os domingos sem registo de jan e fev aparecem
+    expect(html).toContain('04/01/2026');
+    expect(html).not.toContain('01/03/2026');
+    expect(html).toContain('Registar');
+    if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/domingos-falta.html', html);
+  });
+
+  it('Popup de sucesso com o resumo do registo', async () => {
+    const { ResumoRegistoGuardado } = await import('../../src/pages/RegistarPresencas');
+    const html = renderToString(<ResumoRegistoGuardado entrada={{ data: '2026-11-15', evento: 'Celebração Domingo', comunidadeId: 'almada', adultos: 120, jump: 8, criancas: 20, connects: 0, observacoes: 'Visitas' }} comunidade="Almada" aoFechar={() => {}} />);
+    for (const t of ['Registo guardado com sucesso', '15/11/2026', 'Celebração Domingo', 'Almada', '120', 'Jump (12-14)', 'Visitas', 'Novo registo']) expect(html).toContain(t);
+    if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/popup.html', html);
+  });
 });
 

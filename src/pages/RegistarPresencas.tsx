@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
-import { auditar, gravarLote, lerConfigAssistencia, lerLote, listarComunidades, listarLotes } from '../lib/db';
+import { auditar, gravarLote, lerConfigAssistencia, lerLote, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
+import { domingosEmFalta } from '../lib/domingos';
 import { dataPT, hoje, norm, num } from '../lib/format';
 import { EVENTOS_INICIAIS, acrescentarRegisto, comunidadesDoUtilizador, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
 import { recalcularAno } from '../lib/recalcular';
@@ -26,8 +27,10 @@ export function useLotesPresencas(ano: number) {
 }
 
 /** Formulário de registo, equivalente ao Jotform "CCLX : Registo de Presenças". Só grava no portal. */
-export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, aoFechar }: {
+export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, aoFechar, inicial }: {
   comunidades: Comunidade[]; lotes: Lote[]; aposGravar: () => Promise<void>;
+  /** Valores iniciais de um registo novo (ex.: um domingo em falta escolhido na consulta). */
+  inicial?: Partial<EntradaPresenca>;
   /** Corrigir um registo existente (do portal ou do Jotform), no mesmo mês e comunidade. */
   edicao?: { lote: Lote; registoId: string }; aoFechar?: () => void;
 }) {
@@ -35,7 +38,8 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   const config = useCarregar(lerConfigAssistencia, []);
   const unica = comunidades.length === 1 ? comunidades[0].id : '';
   const original = edicao?.lote.registos.find((r) => r.id === edicao.registoId);
-  const [e, setE] = useState<EntradaPresenca>(original ? entradaDeRegisto(original, edicao!.lote.comunidadeId) : vazio(unica));
+  const [e, setE] = useState<EntradaPresenca>(original ? entradaDeRegisto(original, edicao!.lote.comunidadeId) : { ...vazio(unica), ...inicial });
+  const [sucesso, setSucesso] = useState<{ entrada: EntradaPresenca; comunidade: string; nota: string } | null>(null);
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
   const [aGuardar, setAGuardar] = useState(false);
   const eventos = config.dados?.eventos?.length ? config.dados.eventos : EVENTOS_INICIAIS;
@@ -75,7 +79,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
       await gravarLote(lote);
       await auditar(acesso!.email, 'registar presenças', `${dataPt(e.data)} · ${e.evento}${e.descricao ? ` (${e.descricao})` : ''} · ${nomes.get(e.comunidadeId) ?? e.comunidadeId} · ${e.adultos} jovens e adultos`);
       if (podeRecalcular) await recalcularAno(acesso!, Number(e.data.slice(0, 4)));
-      setMsg({ tipo: 'ok', texto: `Registo guardado: ${e.evento} em ${dataPt(e.data)}, ${nomes.get(e.comunidadeId) ?? e.comunidadeId}.${podeRecalcular ? ' Resumos recalculados.' : ' Já aparece no mapa de presenças; as médias atualizam no próximo cálculo.'}` });
+      setSucesso({ entrada: e, comunidade: nomes.get(e.comunidadeId) ?? e.comunidadeId, nota: podeRecalcular ? 'Resumos recalculados.' : 'Já aparece no mapa de presenças e nos domingos em falta; as médias atualizam no próximo cálculo.' });
       setE(vazio(e.comunidadeId));
       await aposGravar();
     } catch (err) { setMsg({ tipo: 'erro', texto: mensagemErro(err) }); }
@@ -90,6 +94,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   if (!comunidades.length && !edicao) return <div className="aviso">Não tem comunidades atribuídas. Peça ao administrador do portal que lhe dê acesso a uma comunidade.</div>;
   return (
     <div className={edicao ? 'form-presencas' : 'card sec form-presencas'}>
+      {sucesso && <ResumoRegistoGuardado entrada={sucesso.entrada} comunidade={sucesso.comunidade} nota={sucesso.nota} aoFechar={() => setSucesso(null)} />}
       {original?.extra?.alteradoEm && <p className="muted small">Última alteração: {dataHora(String(original.extra.alteradoEm))} · {String(original.extra.alteradoPor ?? '')}</p>}
       {msg && <div className={msg.tipo === 'ok' ? 'ok-box' : 'aviso'} role="status">{msg.texto}</div>}
       <div className="grelha-form">
@@ -123,6 +128,60 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
           : <button className="sec" onClick={() => { setE(vazio(e.comunidadeId)); setMsg(null); }}>Limpar</button>}
       </div>
       <p className="muted small" style={{ marginTop: 8 }}>Campos com * são obrigatórios.{edicao ? ' A correção fica registada no registo e na auditoria (o quê, quem e quando). O Jotform não é alterado.' : ''}</p>
+    </div>
+  );
+}
+
+/** Popup de confirmação depois de um registo novo, com o resumo do que ficou gravado. */
+export function ResumoRegistoGuardado({ entrada: e, comunidade, nota, aoFechar }: { entrada: EntradaPresenca; comunidade: string; nota?: string; aoFechar: () => void }) {
+  const linhas: [string, string][] = [
+    ['Data', dataPt(e.data)], ['Evento', `${e.evento}${e.descricao?.trim() ? ` · ${e.descricao.trim()}` : ''}`], ['Comunidade', comunidade],
+    ['Jovens e adultos', num(e.adultos)], ['Jump (12-14)', num(e.jump)], ['Crianças (3-11)', num(e.criancas)], ["Connect's", num(e.connects)],
+  ];
+  if (e.observacoes?.trim()) linhas.push(['Observações', e.observacoes.trim()]);
+  return (
+    <Modal titulo="Registo guardado com sucesso" onFechar={aoFechar}>
+      <div className="ok-box" role="status">✓ O registo de presenças ficou gravado.</div>
+      <table className="resumo-registo"><tbody>
+        {linhas.map(([k, v]) => <tr key={k}><th scope="row">{k}</th><td>{v}</td></tr>)}
+        <tr><th scope="row">Total de pessoas</th><td><b>{num(e.adultos + e.jump + e.criancas + e.connects)}</b></td></tr>
+      </tbody></table>
+      {nota && <p className="muted small">{nota}</p>}
+      <div className="acoes" style={{ marginTop: 12 }}><button onClick={aoFechar}>Novo registo</button></div>
+    </Modal>
+  );
+}
+
+/** Domingos sem registo de celebração, por comunidade do utilizador. Tocar num domingo abre o registo desse dia. */
+export function DomingosEmFaltaLista({ ano, hoje: hojeIso, comunidades, lotes, aoEscolher }: {
+  ano: number; hoje: string; comunidades: Comunidade[]; lotes: Lote[]; aoEscolher: (data: string, comunidadeId: string) => void;
+}) {
+  const config = useCarregar(lerConfigAssistencia, []);
+  const excecoes = useCarregar(listarExcecoes, []);
+  if (config.aCarregar || excecoes.aCarregar) return null;
+  const evento = config.dados?.eventoCelebracao ?? null;
+  const falta = domingosEmFalta({ ano, hoje: hojeIso, comunidades, assistencia: lotes, excecoes: excecoes.dados ?? [], evento });
+  const nomes = new Map(comunidades.map((c) => [c.id, c.nome]));
+  return (
+    <div className="sec domingos-falta">
+      <h2>Domingos em falta</h2>
+      <p className="muted small">Domingos até hoje sem registo {evento ? `de "${evento}"` : 'de presenças'}. Não contam as exceções (cultos conjuntos, retiros). Toque num domingo para o registar.</p>
+      {falta.map((f) => (
+        <div key={f.comunidadeId} className="card df-comunidade">
+          <div className="df-cabeca"><b>{nomes.get(f.comunidadeId) ?? f.comunidadeId}</b>
+            <span className={f.emFalta.length ? 'neg' : 'muted'}>{f.emFalta.length ? `${num(f.emFalta.length)} em falta` : 'Tudo registado'}</span>
+            <span className="muted small">{num(f.comRegisto)} de {num(f.esperados)} domingos</span>
+          </div>
+          {f.emFalta.length > 0 && (
+            <div className="df-datas">
+              {[...f.emFalta].reverse().map((d) => (
+                <button key={d} className="df-data" onClick={() => aoEscolher(d, f.comunidadeId)} aria-label={`Registar ${dataPt(d)} em ${nomes.get(f.comunidadeId) ?? f.comunidadeId}`}>{dataPt(d)} <span className="small">Registar</span></button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      {!falta.length && <p className="muted">Sem domingos esperados neste período.</p>}
     </div>
   );
 }

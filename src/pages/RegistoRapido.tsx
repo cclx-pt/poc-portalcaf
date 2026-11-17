@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado } from '../components/ui';
 import { PAPEL_LABEL } from '../lib/types';
-import { FormularioPresencas, ListaPresencas, useComunidadesDoUtilizador, useLotesPresencas } from './RegistarPresencas';
+import { hoje } from '../lib/format';
+import type { EntradaPresenca } from '../lib/presencas';
+import { DomingosEmFaltaLista, FormularioPresencas, ListaPresencas, useComunidadesDoUtilizador, useLotesPresencas } from './RegistarPresencas';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -17,6 +19,7 @@ export default function RegistoRapido() {
   const anoAtual = new Date().getFullYear();
   const [ano, setAno] = useState(anoAtual);
   const [comunidade, setComunidade] = useState('todas');
+  const [inicial, setInicial] = useState<{ chave: number; v: Partial<EntradaPresenca> }>({ chave: 0, v: {} });
   const coms = useComunidadesDoUtilizador();
   const lotes = useLotesPresencas(aba === 'novo' ? anoAtual : ano);
   const comunidades = coms.dados ?? [];
@@ -42,7 +45,7 @@ export default function RegistoRapido() {
       </div>
       <Estado aCarregar={coms.aCarregar} erro={coms.erro} />
       {!coms.aCarregar && aba === 'novo' && (
-        <FormularioPresencas comunidades={comunidades} lotes={lotes.dados ?? []} aposGravar={lotes.recarregar} />
+        <FormularioPresencas key={inicial.chave} inicial={inicial.v} comunidades={comunidades} lotes={lotes.dados ?? []} aposGravar={lotes.recarregar} />
       )}
       {!coms.aCarregar && aba === 'consultar' && (
         <>
@@ -62,6 +65,11 @@ export default function RegistoRapido() {
             )}
           </div>
           <Estado aCarregar={lotes.aCarregar} erro={lotes.erro} />
+          {!lotes.aCarregar && (
+            <DomingosEmFaltaLista ano={ano} hoje={hoje()} comunidades={filtradas} lotes={lotes.dados ?? []}
+              aoEscolher={(data, comunidadeId) => { setInicial({ chave: Date.now(), v: { data, comunidadeId } }); setAba('novo'); window.scrollTo?.(0, 0); }} />
+          )}
+          {!lotes.aCarregar && <h2 className="sec">Registos</h2>}
           {!lotes.aCarregar && <ListaPresencas lotes={lotes.dados ?? []} comunidades={filtradas} soPortal={false} aposApagar={lotes.recarregar} />}
           <p className="muted small" style={{ marginTop: 8 }}>Inclui os registos do Jotform e os feitos no portal. Só pode apagar os registos que fez no portal.</p>
         </>
