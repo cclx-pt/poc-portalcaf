@@ -218,5 +218,13 @@ describe('páginas', () => {
     for (const t of ['Registo guardado com sucesso', '15/11/2026', 'Celebração Domingo', 'Almada', '120', 'Jump (12-14)', 'Visitas', 'Novo registo']) expect(html).toContain(t);
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/popup.html', html);
   });
+
+  it('Campo de data: escreve-se em dd/mm/aaaa e tem botão de calendário', async () => {
+    const { CampoData } = await import('../../src/components/ui');
+    const html = renderToString(<CampoData rotulo="Data do evento" valor="2026-11-15" max="2026-11-17" onChange={() => {}} />);
+    expect(html).toContain('value="15/11/2026"');
+    expect(html).toContain('aria-label="Abrir calendário"');
+    expect(html).toMatch(/type="date"[^>]*max="2026-11-17"/);
+  });
 });
 

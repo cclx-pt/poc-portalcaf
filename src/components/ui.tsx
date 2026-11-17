@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { dataPT, eur, eurK, lerDataPT, mascaraDataPT, num } from '../lib/format';
 import { CATEGORICAS, CORES } from '../lib/cores';
@@ -136,14 +136,29 @@ export function Frescura({ calculadoEm, ate, ano }: { calculadoEm?: string; ate:
 /** Data escrita como dd/mm/aaaa; devolve AAAA-MM-DD (ou '' enquanto incompleta/inválida). */
 export function CampoData({ rotulo, valor, onChange, max, obrigatorio }: { rotulo: string; valor: string; onChange: (iso: string) => void; max?: string; obrigatorio?: boolean }) {
   const [texto, setTexto] = useState(dataPT(valor));
+  const calendario = useRef<HTMLInputElement>(null);
   useEffect(() => { if ((lerDataPT(texto) ?? '') !== valor) setTexto(dataPT(valor)); }, [valor]); // eslint-disable-line react-hooks/exhaustive-deps
   const iso = lerDataPT(texto);
   const erro = texto.length === 10 && !iso ? 'Data inválida' : iso && max && iso > max ? `Não pode ser depois de ${dataPT(max)}` : null;
+  const abrirCalendario = () => {
+    const el = calendario.current;
+    if (!el) return;
+    try { el.showPicker(); } catch { el.focus(); el.click(); }
+  };
   return (
-    <label className="campo">{rotulo}{obrigatorio ? ' *' : ''}
-      <input type="text" inputMode="numeric" placeholder="dd/mm/aaaa" maxLength={10} autoComplete="off" value={texto} aria-invalid={!!erro}
-        onChange={(e) => { const t = mascaraDataPT(e.target.value); setTexto(t); const d = lerDataPT(t); onChange(d && (!max || d <= max) ? d : ''); }} />
+    <div className="campo campo-data">
+      <label>{rotulo}{obrigatorio ? ' *' : ''}</label>
+      <div className="campo-data-linha">
+        <input type="text" inputMode="numeric" placeholder="dd/mm/aaaa" maxLength={10} autoComplete="off" value={texto} aria-invalid={!!erro} aria-label={rotulo}
+          onChange={(e) => { const t = mascaraDataPT(e.target.value); setTexto(t); const d = lerDataPT(t); onChange(d && (!max || d <= max) ? d : ''); }} />
+        <button type="button" className="botao-calendario" aria-label="Abrir calendário" title="Escolher no calendário" onClick={abrirCalendario}>
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="5" width="18" height="16" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>
+        </button>
+        {/* Calendário do sistema (telemóvel ou computador); o campo continua a mostrar dd/mm/aaaa. */}
+        <input ref={calendario} type="date" className="calendario-oculto" tabIndex={-1} aria-hidden="true" value={iso ?? ''} max={max}
+          onChange={(e) => { const d = e.target.value; if (!d) return; setTexto(dataPT(d)); onChange(!max || d <= max ? d : ''); }} />
+      </div>
       {erro && <span className="small erro-campo">{erro}</span>}
-    </label>
+    </div>
   );
 }

@@ -94,7 +94,7 @@ input[type=number], input[inputmode=decimal] { text-align: right; }
 .esqueleto .bloco { height: 84px; background: var(--branco); border: 1px solid var(--claro); border-top: 3px solid var(--claro); }
 .esqueleto .linha-e { height: 30px; background: var(--branco); border: 1px solid var(--claro); }
 .frescura { font-size: 11px; color: var(--grafite); border-left: 3px solid var(--claro); padding: 4px 10px; margin: 0 0 14px; }
-label.campo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--grafite); }
+label.campo, div.campo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--grafite); }
 .linha { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
 .acoes { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 12px; }
 
@@ -178,3 +178,7 @@ input[aria-invalid="true"] { border-color: #d03b3b; }
 .df-data { min-height: 40px; margin: 0; background: var(--branco); color: var(--preto); }
 .df-data .small { color: var(--cinza); margin-left: 4px; }
 @media (max-width: 600px) { .df-data { flex: 1 1 calc(50% - 8px); min-height: 44px; } .modal { padding: 16px; } }
+.campo-data-linha { position: relative; display: flex; gap: 6px; align-items: stretch; }
+.campo-data-linha input[type="text"] { flex: 1; min-width: 0; }
+.botao-calendario { background: var(--branco); color: var(--preto); margin: 0; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; min-width: 40px; }
+.calendario-oculto { position: absolute; right: 0; bottom: 0; width: 40px; height: 100%; opacity: 0; pointer-events: none; border: 0; padding: 0; }
