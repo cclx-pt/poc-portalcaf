@@ -189,7 +189,7 @@ export default function Bancos() {
                 <td>
                   <select value={m.categoria ?? ''} onChange={(e) => alterar(m.loteId, m.id, { categoria: e.target.value || undefined })}>
                     <option value="">—</option>
-                    {(cats.dados ?? []).filter((c) => (c.ativo !== false || c.nome === m.categoria) && (m.valor > 0 ? c.tipo === 'entrada' : c.tipo === 'saida')).map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                    {(cats.dados ?? []).filter((c) => (c.ativo !== false || c.nome === m.categoria) && (c.tipo === 'financeiro' || (m.valor > 0 ? c.tipo === 'entrada' : c.tipo === 'saida'))).map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
                   </select>
                 </td>
                 <td><input type="checkbox" checked={m.contabilizar} disabled={!!m.conciliadoCom} onChange={(e) => alterar(m.loteId, m.id, { contabilizar: e.target.checked })} aria-label="Contabilizar movimento" /></td>

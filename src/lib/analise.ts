@@ -1,6 +1,6 @@
 /** Agregações para as páginas de análise (demonstração de resultados e comparação). Só leem resumos. */
 import { r2 } from './format';
-import { OUTROS_FUNCIONAMENTO, RUBRICAS_ENTRADA, RUBRICAS_SAIDA } from './rubricas';
+import { OUTROS_FUNCIONAMENTO, POR_CLASSIFICAR, RUBRICAS_ENTRADA, RUBRICAS_SAIDA } from './rubricas';
 import type { Resumo, ResumoMes } from './types';
 
 export type TipoDR = 'entrada' | 'saida';
@@ -17,10 +17,13 @@ const rub = (x: ResumoMes, tipo: TipoDR) => x.rubricas?.[tipo] ?? {};
 
 /** Rubricas de um tipo, pela ordem do desenho, mais as que aparecerem nos dados (ex.: Outros custos de funcionamento). */
 function ordemRubricas(resumos: Resumo[], tipo: TipoDR): string[] {
-  const base: string[] = [...(tipo === 'entrada' ? RUBRICAS_ENTRADA : RUBRICAS_SAIDA)];
-  const extra = new Set<string>();
-  for (const r of resumos) for (const x of r.meses) for (const k of Object.keys(rub(x, tipo))) if (!base.includes(k)) extra.add(k);
-  const extras = [...extra].sort((a, b) => (a === OUTROS_FUNCIONAMENTO ? -1 : b === OUTROS_FUNCIONAMENTO ? 1 : a.localeCompare(b, 'pt')));
+  const legado: string[] = [...(tipo === 'entrada' ? RUBRICAS_ENTRADA : RUBRICAS_SAIDA)];
+  const presentes = new Set<string>();
+  for (const r of resumos) for (const x of r.meses) for (const k of Object.keys(rub(x, tipo))) presentes.add(k);
+  // Com o plano financeiro, as rubricas têm código (01…, R1…) e ordenam-se por ele; o desenho antigo só se usa se os dados o tiverem.
+  const base = !presentes.size || legado.some((b) => presentes.has(b)) ? legado : [];
+  const ultimo = (k: string) => (k === POR_CLASSIFICAR ? 2 : k === OUTROS_FUNCIONAMENTO ? 1 : 0);
+  const extras = [...presentes].filter((k) => !base.includes(k)).sort((a, b) => ultimo(a) - ultimo(b) || a.localeCompare(b, 'pt'));
   return [...base, ...extras];
 }
 
