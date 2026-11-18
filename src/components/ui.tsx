@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { dataPT, eur, eurK, lerDataPT, mascaraDataPT, num } from '../lib/format';
 import { CATEGORICAS, CORES } from '../lib/cores';
+import { estadoMeses, textoMeses } from '../lib/resumos';
+import type { Resumo } from '../lib/types';
 
 // ---------- filtros globais (ano e comunidade) ----------
 interface Filtros { ano: number; setAno: (a: number) => void; comunidade: string; setComunidade: (c: string) => void }
@@ -62,7 +64,8 @@ export function Kpi({ titulo, valor, sub, negativo }: { titulo: string; valor: s
 export const TONS = CATEGORICAS;
 export interface Serie { key: string; nome: string; stack?: string; cor?: keyof typeof CORES | string }
 export function GraficoBarras({ dados, series, altura = 280, empilhado, unidade = 'eur' }: {
-  dados: Record<string, string | number>[];
+  /** Linhas com `_previsao: true` (mês aberto) aparecem em tom claro e tracejado. */
+  dados: Record<string, string | number | boolean | undefined>[];
   series: Serie[];
   altura?: number;
   empilhado?: boolean;
@@ -74,21 +77,30 @@ export function GraficoBarras({ dados, series, altura = 280, empilhado, unidade 
   const cor = (s: Serie, i: number) => (s.cor && s.cor in CORES ? CORES[s.cor as keyof typeof CORES] : s.cor ?? CATEGORICAS[i % CATEGORICAS.length]);
   // Cantos arredondados só no topo de cada barra (na última série de cada pilha).
   const ultimaDaPilha = (s: Serie, i: number) => !empilhado || series.slice(i + 1).every((x) => (x.stack ?? 'a') !== (s.stack ?? 'a'));
+  const temPrevisao = dados.some((d) => d._previsao === true);
   return (
-    <div role="img" aria-label={'Gráfico: ' + series.map((s) => s.nome).join(', ')} style={{ width: '100%', height: altura }}>
+    <div>
+    <div role="img" aria-label={'Gráfico: ' + series.map((s) => s.nome).join(', ') + (temPrevisao ? ' (barras claras: previsão dos custos fixos)' : '')} style={{ width: '100%', height: altura }}>
       <ResponsiveContainer>
         <BarChart data={dados} margin={{ top: 10, right: 10, left: 10, bottom: 0 }} barCategoryGap="30%" barGap={4}>
           <CartesianGrid stroke={CORES.grelha} vertical={false} />
           <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.texto }} axisLine={{ stroke: CORES.eixo }} tickLine={false} />
           <YAxis tickFormatter={(v) => fmtEixo(Number(v))} tick={{ fontSize: 11, fill: CORES.texto }} axisLine={false} tickLine={false} width={80} />
-          <Tooltip cursor={{ fill: '#f2f2f2' }} formatter={(v) => fmtDica(Number(v))} contentStyle={{ border: '1px solid #333', borderRadius: 0, fontSize: 12 }} />
+          <Tooltip cursor={{ fill: '#f2f2f2' }} formatter={(v) => fmtDica(Number(v))}
+            labelFormatter={(l, p) => (p?.[0]?.payload?._previsao ? `${l} · previsão (mês aberto)` : String(l))} contentStyle={{ border: '1px solid #333', borderRadius: 0, fontSize: 12 }} />
           {series.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} iconType="square" formatter={(v) => <span style={{ color: CORES.texto }}>{v}</span>} />}
           {series.map((s, i) => (
             <Bar key={s.key} dataKey={s.key} name={s.nome} fill={cor(s, i)} stackId={empilhado ? s.stack ?? 'a' : undefined}
-              maxBarSize={36} radius={ultimaDaPilha(s, i) ? [4, 4, 0, 0] : 0} stroke="#fff" strokeWidth={empilhado ? 1 : 0} isAnimationActive={false} />
+              maxBarSize={36} radius={ultimaDaPilha(s, i) ? [4, 4, 0, 0] : 0} stroke="#fff" strokeWidth={empilhado ? 1 : 0} isAnimationActive={false}>
+              {temPrevisao && dados.map((d, j) => (d._previsao
+                ? <Cell key={j} fillOpacity={0.3} stroke={cor(s, i)} strokeDasharray="3 2" strokeWidth={1} />
+                : <Cell key={j} />))}
+            </Bar>
           ))}
         </BarChart>
       </ResponsiveContainer>
+    </div>
+    {temPrevisao && <p className="nota-previsao">Barras claras e tracejadas: meses abertos, só com a previsão dos custos fixos (sem valores reais).</p>}
     </div>
   );
 }
@@ -121,14 +133,18 @@ export function Rodape() {
  * Linha comum às páginas de análise: até quando vão os valores, quando foram calculados os resumos
  * e quando foi a última sincronização com o Jotform.
  */
-export function Frescura({ calculadoEm, ate, ano }: { calculadoEm?: string; ate: number; ano: number }) {
+export function Frescura({ calculadoEm, ate, ano, resumos }: { calculadoEm?: string; ate: number; ano: number; resumos?: Pick<Resumo, 'meses'>[] }) {
   const sync = useCarregar(async () => (await import('../lib/db')).lerEstadoSync(), []);
   const dt = (s?: string) => (s ? new Date(s).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' }) : '—');
   const MES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  const regra = textoMeses(ano, estadoMeses(resumos ?? []));
   return (
+    <>
+    {regra && <p className="aviso-previsao" role="note">{regra}</p>}
     <p className="frescura">
-      Valores {ate ? `até ${MES[ate - 1]} de ${ano}` : `de ${ano}`} · resumos calculados em {dt(calculadoEm)} · última sincronização com o Jotform: {dt(sync.dados?.fim)} · fonte: Jotform e tabela de custos fixos
+      {regra ? 'Resumos' : <>Valores {ate ? `até ${MES[ate - 1]} de ${ano}` : `de ${ano}`} · resumos</>} calculados em {dt(calculadoEm)} · última sincronização com o Jotform: {dt(sync.dados?.fim)} · fonte: Jotform, extratos bancários e tabela de custos fixos
     </p>
+    </>
   );
 }
 

@@ -30,7 +30,7 @@ describe('proposta de classificação dos custos fixos com o plano', () => {
   });
   it('nos resultados, um custo fixo com categoria do plano usa a rubrica dessa categoria', () => {
     const cf: CustoFixo = { id: 'r', comunidadeId: 'almada', rubrica: 'Renda', categoria: '02.01 Rendas e condomínios', valorMensal: 500, ano: 2026, inicio: '2026-01', fim: '2026-12', nivel: 'privado' };
-    const rs = calcularResumos({ ano: 2026, comunidades: [{ id: 'almada', nome: 'Almada', ordem: 1 }], contribuir: [], depositos: [], despesas: [], assistencia: [], banco: [], custosFixos: [cf], mesesFechados: new Set(), hoje: '2026-03-15', categorias: cats, assistenciaAnterior: [] });
+    const rs = calcularResumos({ ano: 2026, comunidades: [{ id: 'almada', nome: 'Almada', ordem: 1 }], contribuir: [], depositos: [], despesas: [], assistencia: [], banco: [], custosFixos: [cf], mesesFechados: new Set(), regraFechados: false, hoje: '2026-03-15', categorias: cats, assistenciaAnterior: [] });
     expect(rs[0].meses[0].rubricas.saida['02 Instalações'].local).toBe(500);
   });
 });

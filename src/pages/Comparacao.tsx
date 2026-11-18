@@ -100,7 +100,7 @@ export default function Comparacao() {
   return (
     <>
       <h1>Comparação entre comunidades {ano}</h1>
-      <Frescura ano={ano} ate={mesesDecorridos(ano, hoje())} calculadoEm={resumos.dados?.[0]?.calculadoEm} />
+      <Frescura ano={ano} ate={mesesDecorridos(ano, hoje())} calculadoEm={resumos.dados?.[0]?.calculadoEm} resumos={resumos.dados ?? []} />
       <p className="muted">Entradas e saídas de cada comunidade, já com a parte dos custos e proveitos gerais (repartidos pela média de jovens e adultos dos últimos 12 meses). "Por pessoa" divide pelo número médio de jovens e adultos por registo de assistência no período.</p>
 
       <div className="card sec">

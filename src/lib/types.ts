@@ -201,6 +201,8 @@ export interface ResumoMes {
   adultosMedia12m: number | null;
   /** O que foi registado aqui em categorias gerais e saiu para a repartição. */
   cedidoGeral: { entradas: number; custosFixos: number; despesas: number };
+  /** Mês aberto: só a previsão dos custos fixos (os valores reais contam quando o mês fechar). */
+  previsao?: boolean;
 }
 
 export interface ParteRubrica { local: number; geral: number }

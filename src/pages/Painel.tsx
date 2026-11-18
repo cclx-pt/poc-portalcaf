@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros, mensagemErro, Frescura } from '../components/ui';
 import { listarComunidades, listarResumos } from '../lib/db';
 import { recalcularAno } from '../lib/recalcular';
-import { somarMeses, partesMes, GERAIS_POR_REPARTIR, mesesDecorridos } from '../lib/resumos';
+import { somarMeses, partesMes, GERAIS_POR_REPARTIR, mesesDecorridos, estadoMeses } from '../lib/resumos';
 import { dec, eur, MESES_CURTOS, pct, hoje } from '../lib/format';
 import Publico from './Publico';
 
@@ -26,6 +26,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
   const selecionados = todos.filter((x) => (comunidade === 'todas' ? x.comunidadeId !== 'bolsa-geral' : x.comunidadeId === comunidade));
   const porMes = Array.from({ length: 12 }, (_, i) => somarMeses(selecionados.map((s) => s.meses[i])));
   const tot = somarMeses(porMes);
+  const abertos = new Set(estadoMeses(selecionados).abertos);
   const p = partesMes(tot); // custos e despesas que ficaram + parte dos gerais (somam ao saldo)
   const bolsa = todos.find((x) => x.comunidadeId === 'bolsa-geral');
   const bolsaTot = bolsa ? somarMeses(bolsa.meses) : null;
@@ -50,13 +51,13 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
         </div>
         {podeRecalcular && <button disabled={ocupado} onClick={recalcular}>{ocupado ? 'A recalcular…' : 'Recalcular resumos'}</button>}
       </div>
-      <Frescura ano={ano} ate={mesesDecorridos(ano, hoje())} calculadoEm={calculado} />
+      <Frescura ano={ano} ate={mesesDecorridos(ano, hoje())} calculadoEm={calculado} resumos={selecionados} />
       {msg && <div className="nota">{msg}</div>}
       <Estado aCarregar={r.aCarregar} erro={r.erro} vazio={!todos.length} />
       {!!todos.length && <>
         <div className="cards">
           <Kpi titulo="Entradas" valor={eur(tot.entradas)} sub={<>Contribuir {eur(tot.contribuir)} · coletas {eur(tot.coletas)}{tot.quotaBolsa ? ` · bolsa ${eur(tot.quotaBolsa)}` : ''}</>} />
-          <Kpi titulo="Custos fixos" valor={eur(p.custosFixos)} sub="Meses já decorridos" />
+          <Kpi titulo="Custos fixos" valor={eur(p.custosFixos)} sub={abertos.size ? "Meses fechados: reais · meses abertos: previsão" : "Meses fechados"} />
           <Kpi titulo="Despesas e reembolsos" valor={eur(p.despesas)} />
           {!!p.gerais && <Kpi titulo="Parte dos gerais" valor={eur(p.gerais)} sub="Custos gerais repartidos pela assistência" />}
           <Kpi titulo="Saldo" valor={eur(tot.saldo)} negativo={tot.saldo < 0} sub={tot.saldo < 0 ? 'Défice coberto pelo orçamento geral' : undefined} />
@@ -67,7 +68,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
           <h2>Entradas e saídas por mês</h2>
           <GraficoBarras empilhado dados={porMes.map((m, i) => {
             const pm = partesMes(m);
-            return { rotulo: MESES_CURTOS[i], Contribuir: m.contribuir, Coletas: m.coletas + m.transferencias + m.quotaBolsa, 'Custos fixos': pm.custosFixos, Despesas: pm.despesas, Gerais: pm.gerais };
+            return { rotulo: MESES_CURTOS[i], _previsao: abertos.has(i + 1), Contribuir: m.contribuir, Coletas: m.coletas + m.transferencias + m.quotaBolsa, 'Custos fixos': pm.custosFixos, Despesas: pm.despesas, Gerais: pm.gerais };
           })} series={[
             { key: 'Contribuir', nome: 'Contribuir', stack: 'e', cor: 'entradas' },
             { key: 'Coletas', nome: 'Coletas, transferências e bolsa', stack: 'e', cor: 'entradas2' },

@@ -1,4 +1,4 @@
-import { periodo, r2 } from './format';
+import { MESES, periodo, r2 } from './format';
 import { OUTROS_FUNCIONAMENTO, classificador } from './rubricas';
 import { contaParaMedia } from './domingos';
 import type { BancoLote, Categoria, Comunidade, CustoFixo, Lote, ParteRubrica, Publico, PublicoMes, PublicoSite, Resumo, ResumoMes } from './types';
@@ -13,6 +13,12 @@ export interface DadosCalculo {
   banco: BancoLote[];
   custosFixos: CustoFixo[];
   mesesFechados: Set<string>;
+  /**
+   * Regra dos meses fechados (decisão do CAF, 18/11/2026; ativa por omissão): nos meses fechados contam os valores
+   * reais (Jotform e banco) e não os custos fixos; nos meses abertos conta só a previsão dos custos fixos (previsao = true).
+   * false: comportamento antigo (tudo, com custos fixos até ao mês corrente).
+   */
+  regraFechados?: boolean;
   hoje: string; // YYYY-MM-DD
   /** Categorias configuradas (rubrica e âmbito). Sem elas, tudo é local. */
   categorias?: Categoria[];
@@ -56,6 +62,7 @@ const vazio = (mes: number): ResumoMes => ({
   n: { contribuir: 0, coletas: 0, transferencias: 0, despesas: 0 },
   rubricas: { entrada: {}, saida: {} }, geralEntradas: 0, geralSaidas: 0, pesoGeral: null, adultosMedia12m: null,
   cedidoGeral: { entradas: 0, custosFixos: 0, despesas: 0 },
+  previsao: false,
 });
 
 const somaParte = (o: Record<string, ParteRubrica>, rubrica: string, parte: keyof ParteRubrica, v: number) => {
@@ -100,7 +107,10 @@ export function comunidadeAtiva(c: Comunidade, p: string) {
  * A bolsa geral é distribuída pela média de assistência de adultos de cada comunidade no mesmo mês.
  */
 export function calcularResumos(d: DadosCalculo): Resumo[] {
-  const ate = mesesDecorridos(d.ano, d.hoje);
+  const regra = d.regraFechados !== false;
+  const fechado = (mes: number) => !regra || d.mesesFechados.has(periodo(d.ano, mes));
+  // Com a regra, a previsão dos custos fixos cobre os meses abertos do ano todo; sem ela, os meses decorridos.
+  const ate = regra ? 12 : mesesDecorridos(d.ano, d.hoje);
   const mapa = new Map<string, ResumoMes[]>();
   for (const c of d.comunidades) mapa.set(c.id, Array.from({ length: 12 }, (_, i) => vazio(i + 1)));
   const m = (c: string, mes: number) => {
@@ -135,6 +145,7 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
   // Taxa IFTHENPAY: 03.07 Taxas (decisão do CAF); sem ela, 03.03 Bancos e pagamentos.
   const nomeComissao = (d.categorias ?? []).find((c) => c.codigo === '03.07')?.nome ?? (d.categorias ?? []).find((c) => c.codigo === '03.03')?.nome ?? 'Comissões bancárias';
   for (const l of d.contribuir) for (const r of l.registos) {
+    if (!fechado(l.mes)) continue;
     const x = m(l.comunidadeId, l.mes); x.contribuir = r2(x.contribuir + r.valor); x.n.contribuir++; soma(x.entradasPorCategoria, r.categoria || 'Sem categoria', r.valor);
     registar(l.comunidadeId, l.mes, 'entrada', r.categoria || 'Sem categoria', r.valor);
     // Comissão IFTHENPAY: diferença entre o valor e o líquido recebido.
@@ -146,10 +157,12 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
     }
   }
   for (const l of d.depositos) for (const r of l.registos) {
+    if (!fechado(l.mes)) continue;
     const x = m(l.comunidadeId, l.mes); x.coletas = r2(x.coletas + r.valor); x.n.coletas++; soma(x.entradasPorCategoria, 'Coletas em dinheiro', r.valor);
     registar(l.comunidadeId, l.mes, 'entrada', 'Coletas em dinheiro', r.valor);
   }
   for (const l of d.despesas) for (const r of l.registos) {
+    if (!fechado(l.mes)) continue;
     const x = m(l.comunidadeId, l.mes); x.despesas = r2(x.despesas + r.valor); x.n.despesas++; soma(x.despesasPorCategoria, r.categoria || 'Sem categoria', r.valor);
     registar(l.comunidadeId, l.mes, 'saida', r.categoria || 'Sem categoria', r.valor);
   }
@@ -161,7 +174,7 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
       // Movimentos financeiros (depósitos, transferências internas…) não são receita nem despesa.
       if (r.categoria && classificar(r.categoria, r.valor > 0 ? 'entrada' : 'saida').financeiro) continue;
       const mes = Number(r.data.slice(5, 7));
-      if (Number(r.data.slice(0, 4)) !== d.ano) continue;
+      if (Number(r.data.slice(0, 4)) !== d.ano || !fechado(mes)) continue;
       const x = m(r.comunidadeId, mes);
       if (r.valor > 0) { x.transferencias = r2(x.transferencias + r.valor); x.n.transferencias++; soma(x.entradasPorCategoria, r.categoria || 'Transferências', r.valor); registar(r.comunidadeId, mes, 'entrada', r.categoria || 'Transferências', r.valor); }
       else { x.despesas = r2(x.despesas - r.valor); x.n.despesas++; soma(x.despesasPorCategoria, r.categoria || 'Débitos bancários', -r.valor); registar(r.comunidadeId, mes, 'saida', r.categoria || 'Débitos bancários', -r.valor); }
@@ -180,6 +193,8 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
   for (const cf of d.custosFixos) for (let mes = 1; mes <= ate; mes++) {
     const p = periodo(d.ano, mes);
     if (!custoAtivo(cf, p)) continue;
+    // Mês fechado: conta o pagamento real (banco), não a previsão.
+    if (regra && fechado(mes)) continue;
     const x = m(cf.comunidadeId, mes);
     const valor = valorImputado(cf);
     x.custosFixos = r2(x.custosFixos + valor);
@@ -242,6 +257,7 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
       x.entradas = r2(x.contribuir + x.coletas + x.transferencias - c.entradas + x.quotaBolsa + x.geralEntradas);
       x.saidas = r2(x.custosFixos + x.despesas - c.custosFixos - c.despesas + x.geralSaidas);
       x.saldo = r2(x.entradas - x.saidas);
+      if (regra) x.previsao = !fechado(x.mes);
     }
     out.push({ id: `${d.ano}_${comunidadeId}`, ano: d.ano, comunidadeId, meses, calculadoEm: agora, calculadoPor: '' });
   }
@@ -337,4 +353,33 @@ export function somarMeses(ms: ResumoMes[]) {
     t.n.contribuir += x.n.contribuir; t.n.coletas += x.n.coletas; t.n.transferencias += x.n.transferencias; t.n.despesas += x.n.despesas;
   }
   return t;
+}
+
+/** Que meses estão fechados (valores reais) e abertos (só previsão dos custos fixos). */
+export function estadoMeses(resumos: Pick<Resumo, 'meses'>[]): { regra: boolean; fechados: number[]; abertos: number[] } {
+  const prev = new Map<number, boolean>();
+  for (const r of resumos) for (const m of r.meses) if (typeof m.previsao === 'boolean') prev.set(m.mes, (prev.get(m.mes) ?? false) || m.previsao);
+  if (!prev.size) return { regra: false, fechados: [], abertos: [] };
+  const meses = [...prev.keys()].sort((a, b) => a - b);
+  return { regra: true, fechados: meses.filter(m => !prev.get(m)), abertos: meses.filter(m => prev.get(m)) };
+}
+
+function intervalos(meses: number[]): string {
+  const runs: [number, number][] = [];
+  for (const m of meses) {
+    const u = runs[runs.length - 1];
+    if (u && u[1] === m - 1) u[1] = m; else runs.push([m, m]);
+  }
+  const partes = runs.map(([a, b]) => (a === b ? MESES[a - 1] : `${MESES[a - 1]} a ${MESES[b - 1]}`));
+  return partes.length > 1 ? `${partes.slice(0, -1).join(', ')} e ${partes[partes.length - 1]}` : partes[0] ?? '';
+}
+
+/** Frase clara para os gráficos: até onde há valores reais e o que é previsão. */
+export function textoMeses(ano: number, e: ReturnType<typeof estadoMeses>): string {
+  if (!e.regra) return '';
+  if (!e.fechados.length) return `Ainda não há meses fechados em ${ano}: os valores são só a previsão dos custos fixos.`;
+  const reais = `Valores reais: meses fechados (${intervalos(e.fechados)} de ${ano}).`;
+  if (!e.abertos.length) return reais;
+  const ab = intervalos(e.abertos);
+  return `${reais} ${ab.charAt(0).toUpperCase()}${ab.slice(1)} (meses abertos): só a previsão dos custos fixos.`;
 }

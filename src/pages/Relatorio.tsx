@@ -4,7 +4,7 @@ import { lerConfigAssistencia, listarComunidades, listarCustosFixos, listarExcec
 import { contaParaMedia, domingosEmFalta } from '../lib/domingos';
 import { dec, eur, hoje, MESES, MESES_CURTOS, num, pct, r2 } from '../lib/format';
 import { mesesDoRelatorio, resumoAnual, type ResumoAnual } from '../lib/relatorio';
-import { mesesDecorridos } from '../lib/resumos';
+import { estadoMeses, mesesDecorridos } from '../lib/resumos';
 import type { Lote, Resumo } from '../lib/types';
 
 const BASE = import.meta.env.BASE_URL;
@@ -50,6 +50,7 @@ export default function Relatorio() {
   const A: ResumoAnual = resumoAnual(atual, ate);
   const P: ResumoAnual | null = antes.length ? resumoAnual(antes, 12) : null;
   const meses = mesesDoRelatorio(atual, ate);
+  const abertosRel = new Set(estadoMeses(atual).abertos);
   const lotesAss = (ass.dados ?? []).filter((l) => comunidade === 'todas' || l.comunidadeId === comunidade);
   const pessoas = pessoasPorMes(lotesAss, tipo);
   const dom = domingosEmFalta({
@@ -98,7 +99,7 @@ export default function Relatorio() {
       </div>
       <div className="kicker" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.12em', color: 'var(--cinza)' }}>{`RELATÓRIO FINANCEIRO · ${nomeCom.toUpperCase()}`}</div>
       <h1>Custos x entradas e assistência {ano}</h1>
-      <Frescura ano={ano} ate={ate} calculadoEm={rAtual.dados?.[0]?.calculadoEm} />
+      <Frescura ano={ano} ate={ate} calculadoEm={rAtual.dados?.[0]?.calculadoEm} resumos={atual} />
 
       <Estado aCarregar={aCarregar} erro={rAtual.erro || ass.erro} vazio={!atual.length} />
       {!aCarregar && !!atual.length && <>
@@ -132,7 +133,7 @@ export default function Relatorio() {
 
         <div className="card sec">
           <h2>Entradas e saídas por mês ({ano})</h2>
-          <GraficoBarras altura={230} dados={meses.map((m) => ({ rotulo: MESES_CURTOS[m.mes - 1], Entradas: m.entradas, Saídas: m.saidas }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas' }]} />
+          <GraficoBarras altura={230} dados={meses.map((m) => ({ rotulo: MESES_CURTOS[m.mes - 1], _previsao: abertosRel.has(m.mes), Entradas: m.entradas, Saídas: m.saidas }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas' }]} />
         </div>
 
         <div className="sec quebra-antes">
@@ -177,7 +178,7 @@ export default function Relatorio() {
         <div className="sec">
           <h2>Pressupostos e notas</h2>
           <ul>
-            <li>Período: {periodo}. Os custos fixos contam só os meses já decorridos.</li>
+            <li>Período: {periodo}. Os meses fechados (fecho mensal) contam os valores reais, sem custos fixos; os meses abertos contam só a previsão dos custos fixos e aparecem em tom claro nos gráficos.</li>
             <li>Entradas do contribuir.cclx.pt só com o campo Pago preenchido ("PAGO"); coletas em dinheiro pelos depósitos registados.</li>
             <li>Os custos e proveitos gerais da CCLX são repartidos pelas comunidades conforme a média de jovens e adultos dos últimos 12 meses.</li>
             <li>Vencimentos e Segurança Social aparecem agregados em "Outros custos de funcionamento".</li>
