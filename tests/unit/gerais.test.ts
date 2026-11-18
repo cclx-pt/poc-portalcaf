@@ -200,3 +200,19 @@ describe('comunidade Geral (bolsa-geral) nos custos fixos', () => {
     expect(mes(rs, 'bolsa-geral', 3).saidas).toBe(0);
   });
 });
+
+describe('plano financeiro nos resultados', () => {
+  it('movimentos do banco: categorias do plano dão a rubrica; os financeiros não entram nos resultados', async () => {
+    const { categoriasDoPlano } = await import('../../src/lib/plano');
+    const mov = (id: string, valor: number, categoria: string) => ({ id, data: '2026-03-10', descricao: id, valor, categoria, comunidadeId: 'almada', contabilizar: true });
+    const banco = [{ id: 'b', contaId: 'cgd', ano: 2026, mes: 3, periodo: '2026-03', atualizadoEm: '', atualizadoPor: '', registos: [
+      mov('net', -45, '02.03 Comunicações'), mov('dep', 500, 'F1.02 Depósitos de numerário'), mov('of', 100, 'R1.02 Ofertas gerais'),
+    ] }];
+    const rs = calcularResumos(base({ categorias: categoriasDoPlano(), banco }));
+    const m = mes(rs, 'almada', 3);
+    expect(m.rubricas.saida['02 Instalações'].local).toBe(45);
+    expect(m.rubricas.entrada['R1 Dízimos e ofertas'].local).toBe(100);
+    expect(m.transferencias).toBe(100);
+    expect(m.despesas).toBe(45);
+  });
+});

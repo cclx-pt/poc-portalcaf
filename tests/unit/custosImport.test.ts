@@ -49,7 +49,7 @@ describe('importação de custos fixos (Excel por comunidade)', () => {
     expect(r.avisos.join('\n')).toMatch(/Barreiro.*2027/);
     expect(r.custos.filter((c) => c.rubrica === 'Controlo de pragas (Anticimex)')).toHaveLength(3);
     const barreiro = r.custos.filter((c) => c.comunidadeId === 'barreiro');
-    expect(barreiro.map((c) => [c.inicio, c.fim])).toEqual([['2025-01', '2025-12'], ['2026-01', '2026-10']]);
+    expect(barreiro.map((c) => [c.inicio, c.fim])).toEqual([['2025-01', '2025-12'], ['2026-01', '2026-07']]);
   });
 
   it('ids estáveis (reimportar substitui em vez de duplicar)', () => {

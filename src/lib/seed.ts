@@ -10,7 +10,7 @@ export const COMUNIDADES: Comunidade[] = [
   { id: 'coruche', nome: 'Coruche', ordem: 5 },
   { id: 'sede', nome: 'Sede', ordem: 6 },
   { id: 'caldas-da-rainha', nome: 'Caldas da Rainha', ordem: 7 },
-  { id: 'barreiro', nome: 'Barreiro', ordem: 8, fim: '2026-10-31' },
+  { id: 'barreiro', nome: 'Barreiro', ordem: 8, fim: '2026-07-18' },
   { id: 'bolsa-geral', nome: 'Geral', ordem: 99, especial: true },
 ];
 

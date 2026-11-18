@@ -29,6 +29,20 @@ export interface Comunidade {
   ativo?: boolean; // false = desativada (mantém o histórico)
 }
 
+/** Dimensões do plano financeiro usadas na classificação dos extratos e dos custos fixos. */
+export interface Dimensao {
+  id: string;
+  tipo: 'centro' | 'projeto' | 'fornecedor' | 'conta';
+  nome: string;
+  /** Centros de custo: CC01…; opcional nos outros. */
+  codigo?: string;
+  /** Centros de custo: Central, Local, Ministério… */
+  ambito?: string;
+  /** Contas analíticas: código da categoria a que pertencem. */
+  categoria?: string;
+  ativo?: boolean;
+}
+
 export interface Conta {
   id: string;
   nome: string;
@@ -42,7 +56,12 @@ export interface Conta {
 export interface Categoria {
   id: string;
   nome: string;
-  tipo: 'entrada' | 'saida';
+  /** financeiro: depósitos, transferências internas, empréstimos, adiantamentos; não entra nos resultados. */
+  tipo: 'entrada' | 'saida' | 'financeiro';
+  /** Código do plano financeiro (ex.: 02.03). */
+  codigo?: string;
+  /** Outros nomes que correspondem a esta categoria (ex.: categorias do Jotform). */
+  sinonimos?: string[];
   atividade: string;
   nivel: Nivel;
   snc?: string;

@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { SyncEstado } from '../components/SyncEstado';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
-import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
-import { CATEGORIAS, COMUNIDADES, CONTAS, CUSTOS_FIXOS_CDR, JOTFORM_FORMS } from '../lib/seed';
-import { NIVEIS, NIVEL_LABEL, type Categoria, type Comunidade, type Conta, type Nivel } from '../lib/types';
+import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarDimensoes, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
+import { COMUNIDADES, CONTAS, JOTFORM_FORMS } from '../lib/seed';
+import { categoriasDoPlano, dimensoesDoPlano } from '../lib/plano';
+import { NIVEIS, NIVEL_LABEL, type Categoria, type Comunidade, type Conta, type Dimensao, type Nivel } from '../lib/types';
 import { formatarIban, ibanValido, limparIban } from '../lib/iban';
 import { usosCategoria, usosComunidade, usosConta } from '../lib/uso';
 import { dataPT, parseData, slug } from '../lib/format';
@@ -14,13 +15,18 @@ import ConfigEventos from './ConfigEventos';
 import type { ExcecaoAssistencia } from '../lib/types';
 import { testarChave, type ResultadoTeste } from '../lib/jotform';
 import { sincronizarAgora } from '../lib/syncWeb';
-import { RUBRICAS_ENTRADA, RUBRICAS_SAIDA, categoriasEmFalta, rubricaInicial } from '../lib/rubricas';
+import { categoriasEmFalta, rubricaInicial } from '../lib/rubricas';
 import { recalcularAno } from '../lib/recalcular';
 
 type Edicao =
   | { tipo: 'comunidade'; novo: boolean; v: Comunidade }
   | { tipo: 'conta'; novo: boolean; v: Conta }
-  | { tipo: 'categoria'; novo: boolean; v: Categoria };
+  | { tipo: 'categoria'; novo: boolean; v: Categoria }
+  | { tipo: 'dimensao'; novo: boolean; v: Dimensao };
+
+const TIPO_CAT: Record<Categoria['tipo'], string> = { saida: 'Despesa', entrada: 'Receita', financeiro: 'Financeiro' };
+const TIPO_DIM: Record<Dimensao['tipo'], string> = { centro: 'Centros de custo', projeto: 'Projetos e eventos', fornecedor: 'Fornecedores', conta: 'Contas analíticas' };
+const colecao = (t: Edicao['tipo']) => (t === 'comunidade' ? 'comunidades' : t === 'conta' ? 'contas' : t === 'dimensao' ? 'dimensoes' : 'categorias');
 
 const ativoTxt = (a?: boolean) => (a === false ? <span className="etiqueta">Inativa</span> : null);
 
@@ -29,6 +35,8 @@ export default function Configuracao() {
   const coms = useCarregar(listarComunidades, []);
   const contas = useCarregar(listarContas, []);
   const cats = useCarregar(listarCategorias, []);
+  const dims = useCarregar(listarDimensoes, []);
+  const [tipoDim, setTipoDim] = useState<Dimensao['tipo']>('centro');
   const [msg, setMsg] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [edit, setEdit] = useState<Edicao | null>(null);
@@ -135,46 +143,48 @@ export default function Configuracao() {
     } catch (e) { setTeste({ ok: false, formularios: [], erro: mensagemErro(e) }); }
     finally { setATestar(false); }
   }
-  const [filtroCat, setFiltroCat] = useState<'todas' | 'entrada' | 'saida'>('todas');
-  const recarregar = () => Promise.all([coms.recarregar(), contas.recarregar(), cats.recarregar()]);
+  const [filtroCat, setFiltroCat] = useState<'todas' | Categoria['tipo']>('todas');
+  const recarregar = () => Promise.all([coms.recarregar(), contas.recarregar(), cats.recarregar(), dims.recarregar()]);
 
   async function inicializar() {
     setOcupado(true); setMsg(null);
     try {
       const comEx = new Set((coms.dados ?? []).map((c) => c.id));
       const contaEx = new Set((contas.dados ?? []).map((c) => c.id));
-      const catEx = new Set((cats.dados ?? []).map((c) => c.id));
       for (const c of COMUNIDADES) if (!comEx.has(c.id)) await gravar('comunidades', { ...c, ativo: true });
       for (const c of CONTAS) if (!contaEx.has(c.id)) await gravar('contas', { ...c, ativo: true });
-      for (const c of CATEGORIAS) if (!catEx.has(c.id)) await gravar('categorias', { ...c, ativo: true });
-      // Categorias existentes sem rubrica/âmbito (incluindo as do Jotform): proposta inicial, local.
-      for (const c of cats.dados ?? []) {
-        if (!c.rubrica || !c.ambito) await gravar('categorias', { ...c, rubrica: c.rubrica || rubricaInicial(c.nome, c.tipo), ambito: c.ambito ?? 'local' });
-      }
-      const cfEx = new Set((await listarCustosFixos(acesso!)).map((c) => c.id));
-      for (const c of CUSTOS_FIXOS_CDR) if (!cfEx.has(c.id)) await gravar('custos_fixos', c);
-      await auditar(acesso!.email, 'inicializar', 'Dados de referência (só os que faltavam)');
+      await auditar(acesso!.email, 'inicializar', 'Comunidades e contas (só as que faltavam)');
       await recarregar();
-      setMsg('Dados de referência criados. Os que já existiam não foram alterados.');
+      setMsg('Comunidades e contas criadas. As que já existiam não foram alteradas.');
     } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
 
-  /** Acrescenta à lista as categorias que aparecem nos dados (ex.: Jotform) e ainda não estão configuradas. */
-  async function adicionarDosDados() {
+  /** Cria as categorias e as dimensões do plano financeiro que ainda não existem (não altera as editadas). */
+  async function carregarPlano() {
+    setOcupado(true); setMsg(null);
+    try {
+      const catEx = new Set((cats.dados ?? []).map((c) => c.id));
+      const dimEx = new Set((dims.dados ?? []).map((d) => d.id));
+      const novasC = categoriasDoPlano().filter((c) => !catEx.has(c.id));
+      const novasD = dimensoesDoPlano().filter((d) => !dimEx.has(d.id));
+      for (let i = 0; i < novasC.length; i += 20) await Promise.all(novasC.slice(i, i + 20).map((c) => gravar('categorias', c)));
+      for (let i = 0; i < novasD.length; i += 20) await Promise.all(novasD.slice(i, i + 20).map((d) => gravar('dimensoes', d)));
+      await auditar(acesso!.email, 'carregar plano financeiro', `${novasC.length} categorias, ${novasD.length} dimensões`);
+      await recarregar();
+      setMsg(`Plano financeiro carregado: ${novasC.length} categorias e ${novasD.length} dimensões novas. O que já existia não foi alterado.`);
+    } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
+  }
+
+  /** Lista as categorias usadas nos dados (Jotform) que não correspondem a nenhuma categoria nem sinónimo. */
+  async function semCorrespondencia() {
     setOcupado(true); setMsg(null);
     try {
       const ano = new Date().getFullYear();
       const resumos = [...await listarResumos(acesso!, ano - 1), ...await listarResumos(acesso!, ano)];
       const faltam = categoriasEmFalta(cats.dados ?? [], resumos.flatMap((r) => r.meses));
-      for (const f of faltam) {
-        await gravar('categorias', {
-          id: `${f.tipo}-${slug(f.nome)}`, nome: f.nome, tipo: f.tipo, atividade: 'Jotform', nivel: 'privado' as Nivel,
-          snc: '', origem: 'jotform', ativo: true, rubrica: rubricaInicial(f.nome, f.tipo), ambito: 'local' as const,
-        });
-      }
-      if (faltam.length) await auditar(acesso!.email, 'adicionar categorias dos dados', faltam.map((f) => f.nome).join(', '));
-      await recarregar();
-      setMsg(faltam.length ? `${faltam.length} categoria(s) adicionada(s) a partir dos dados: ${faltam.map((f) => f.nome).join(', ')}. Ficam locais; reveja a rubrica e o âmbito.` : 'Todas as categorias usadas nos dados já estão configuradas.');
+      setMsg(faltam.length
+        ? `Sem correspondência no plano (${faltam.length}): ${faltam.map((f) => `${f.nome} (${f.tipo === 'entrada' ? 'receita' : 'despesa'})`).join('; ')}. Acrescente cada nome como sinónimo da categoria certa; até lá entram em "Por classificar".`
+        : 'Todas as categorias usadas nos dados correspondem a uma categoria ou sinónimo do plano. (Se os resumos ainda não foram calculados, calcule-os primeiro.)');
     } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
 
@@ -194,8 +204,14 @@ export default function Configuracao() {
         const v = { ...edit.v, iban, id: edit.novo ? slug(edit.v.nome) : edit.v.id };
         if (!v.nome.trim()) throw new Error('Indique o nome.');
         await gravar('contas', v);
+      } else if (edit.tipo === 'dimensao') {
+        const v = { ...edit.v, id: edit.novo ? `${edit.v.tipo}-${slug(edit.v.codigo || edit.v.nome)}` : edit.v.id };
+        if (!v.nome.trim()) throw new Error('Indique o nome.');
+        if (edit.novo && (dims.dados ?? []).some((d) => d.id === v.id)) throw new Error('Já existe.');
+        await gravar('dimensoes', v);
       } else {
-        const v = { ...edit.v, id: edit.novo ? `${edit.v.tipo}-${slug(edit.v.nome)}` : edit.v.id };
+        const v = { ...edit.v, id: edit.novo ? (edit.v.codigo ? `plano-${edit.v.codigo.replace('.', '-').toLowerCase()}` : `${edit.v.tipo}-${slug(edit.v.nome)}`) : edit.v.id };
+        v.sinonimos = (v.sinonimos ?? []).map((x) => x.trim()).filter(Boolean);
         if (!v.nome.trim()) throw new Error('Indique o nome.');
         if (edit.novo && (cats.dados ?? []).some((c) => c.id === v.id)) throw new Error('Já existe esta categoria.');
         const antes = (cats.dados ?? []).find((c) => c.id === v.id);
@@ -219,28 +235,28 @@ export default function Configuracao() {
   async function remover(tipo: Edicao['tipo'], id: string, nome: string) {
     setMsg(null);
     try {
-      const usos = tipo === 'comunidade' ? await usosComunidade(id) : tipo === 'conta' ? await usosConta(id) : await usosCategoria(nome);
+      const usos = tipo === 'comunidade' ? await usosComunidade(id) : tipo === 'conta' ? await usosConta(id) : tipo === 'dimensao' ? [] : await usosCategoria(nome);
       if (usos.length) {
         setMsg(`Não é possível apagar "${nome}": tem dados associados (${usos.join(', ')}). Pode desativá-la para deixar de aparecer, mantendo o histórico.`);
         return;
       }
       if (!confirm(`Apagar "${nome}"? Esta ação não se pode desfazer.`)) return;
-      await apagar(tipo === 'comunidade' ? 'comunidades' : tipo === 'conta' ? 'contas' : 'categorias', id);
+      await apagar(colecao(tipo), id);
       await auditar(acesso!.email, `apagar ${tipo}`, nome);
       await recarregar();
     } catch (e) { setMsg(mensagemErro(e)); }
   }
 
-  async function alternarAtivo(tipo: Edicao['tipo'], v: Comunidade | Conta | Categoria) {
+  async function alternarAtivo(tipo: Edicao['tipo'], v: Comunidade | Conta | Categoria | Dimensao) {
     try {
-      const col = tipo === 'comunidade' ? 'comunidades' : tipo === 'conta' ? 'contas' : 'categorias';
+      const col = colecao(tipo);
       await gravar(col, { ...v, ativo: v.ativo === false });
       await auditar(acesso!.email, v.ativo === false ? `ativar ${tipo}` : `desativar ${tipo}`, v.nome);
       await recarregar();
     } catch (e) { setMsg(mensagemErro(e)); }
   }
 
-  const acoes = (tipo: Edicao['tipo'], v: Comunidade | Conta | Categoria, especial = false) => (
+  const acoes = (tipo: Edicao['tipo'], v: Comunidade | Conta | Categoria | Dimensao, especial = false) => (
     <>
       <button className="link" onClick={() => setEdit({ tipo, novo: false, v } as Edicao)}>Editar</button>
       {!especial && <> · <button className="link" onClick={() => alternarAtivo(tipo, v)}>{v.ativo === false ? 'Ativar' : 'Desativar'}</button>
@@ -248,6 +264,8 @@ export default function Configuracao() {
     </>
   );
   const catsVis = (cats.dados ?? []).filter((c) => filtroCat === 'todas' || c.tipo === filtroCat);
+  const rubricas = [...new Set((cats.dados ?? []).map((c) => c.rubrica).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'pt'));
+  const dimsVis = (dims.dados ?? []).filter((d) => d.tipo === tipoDim);
 
   return (
     <>
@@ -263,9 +281,12 @@ export default function Configuracao() {
 
       {area === 'estrutura' && <>
       <div className="sec card">
-        <h2>Dados de referência</h2>
-        <p className="small">Cria só o que ainda não existe: comunidades (Barreiro até 31/10/2026), contas CGD e Santander, categorias por atividade e custos fixos reais de Caldas da Rainha. Não altera o que já foi editado.</p>
-        <button disabled={ocupado} onClick={inicializar}>Inicializar dados de referência</button>
+        <h2>Plano financeiro</h2>
+        <p className="small">Carrega as categorias com código (despesas 01 a 09, receitas R1 a R3, financeiro F1 a F3), os 15 centros de custo, os fornecedores e as contas analíticas da Proposta de Plano Financeiro (v2.1). Cria só o que ainda não existe; o que foi editado mantém-se. Tudo fica Privado, exceto vencimentos e donativos (Confidencial).</p>
+        <div className="acoes" style={{ margin: 0 }}>
+          <button disabled={ocupado} onClick={() => void carregarPlano()}>Carregar plano financeiro</button>
+          <button className="sec" disabled={ocupado} onClick={inicializar} title="Cria as comunidades e as contas bancárias que faltarem">Criar comunidades e contas em falta</button>
+        </div>
       </div>
 
       <div className="sec">
@@ -305,28 +326,54 @@ export default function Configuracao() {
 
       <div className="sec">
         <div className="linha" style={{ justifyContent: 'space-between' }}>
-          <h2>Categorias e níveis de privacidade</h2>
+          <h2>Categorias do plano e níveis de privacidade</h2>
           <div className="acoes" style={{ margin: 0 }}>
             <select value={filtroCat} onChange={(e) => setFiltroCat(e.target.value as typeof filtroCat)} aria-label="Filtrar categorias">
-              <option value="todas">Todas</option><option value="entrada">Entradas</option><option value="saida">Saídas</option>
+              <option value="todas">Todas</option><option value="saida">Despesas</option><option value="entrada">Receitas</option><option value="financeiro">Financeiro</option>
             </select>
-            <button onClick={() => setEdit({ tipo: 'categoria', novo: true, v: { id: '', nome: '', tipo: 'saida', atividade: '', nivel: 'privado', snc: '', origem: 'portal', ativo: true, ambito: 'local' } })}>Nova categoria</button>
-            <button className="sec" onClick={() => void adicionarDosDados()} disabled={ocupado} title="Acrescenta as categorias usadas no Jotform que ainda não estão na lista">Adicionar categorias dos dados</button>
+            <button onClick={() => setEdit({ tipo: 'categoria', novo: true, v: { id: '', codigo: '', nome: '', tipo: 'saida', atividade: '', nivel: 'privado', snc: '', origem: 'portal', ativo: true, ambito: 'local', sinonimos: [] } })}>Nova categoria</button>
+            <button className="sec" onClick={() => void semCorrespondencia()} disabled={ocupado} title="Mostra as categorias do Jotform que não correspondem a nenhuma categoria nem sinónimo">Ver categorias do Jotform sem correspondência</button>
           </div>
         </div>
-        <p className="muted">As categorias de reembolsos vindas do Jotform mantêm-se tal como estão. A conta SNC-ESNL fica para preencher com o contabilista.</p>
-        <div className="tabela"><table>
-          <thead><tr><th>Categoria</th><th>Tipo</th><th>Atividade</th><th>Rubrica</th><th>Âmbito</th><th>Nível</th><th>Conta SNC-ESNL</th><th>Estado</th><th /></tr></thead>
+        <p className="muted">Os <b>sinónimos</b> ligam os nomes usados no Jotform (ex.: Dízimos, Coletas em dinheiro, Limpeza) às categorias do plano. Movimentos <b>financeiros</b> (depósitos, transferências internas, empréstimos, adiantamentos) não entram nos resultados.</p>
+        <Estado aCarregar={cats.aCarregar} erro={cats.erro} vazio={!catsVis.length} />
+        {!!catsVis.length && <div className="tabela"><table>
+          <thead><tr><th>Categoria</th><th>Tipo</th><th>Rubrica</th><th>Âmbito</th><th>Nível</th><th>Sinónimos</th><th>Estado</th><th /></tr></thead>
           <tbody>{catsVis.map((c) => (
             <tr key={c.id}>
-              <td>{c.nome}</td><td>{c.tipo === 'entrada' ? 'Entrada' : 'Saída'}</td><td>{c.atividade}</td>
+              <td>{c.nome}</td><td>{TIPO_CAT[c.tipo]}</td>
               <td>{c.rubrica || <span className="muted">{rubricaInicial(c.nome, c.tipo)} (proposta)</span>}</td>
               <td>{c.ambito === 'geral' ? <span className="etiqueta preta">Geral</span> : 'Local'}</td>
               <td><span className={'etiqueta' + (c.nivel === 'confidencial' ? ' preta' : '')}>{NIVEL_LABEL[c.nivel]}</span></td>
-              <td>{c.snc || <span className="muted">—</span>}</td><td>{ativoTxt(c.ativo) ?? 'Ativa'}</td><td>{acoes('categoria', c)}</td>
+              <td className="small">{(c.sinonimos ?? []).join(', ') || <span className="muted">—</span>}</td>
+              <td>{ativoTxt(c.ativo) ?? 'Ativa'}</td><td>{acoes('categoria', c)}</td>
             </tr>
           ))}</tbody>
-        </table></div>
+        </table></div>}
+      </div>
+
+      <div className="sec">
+        <div className="linha" style={{ justifyContent: 'space-between' }}>
+          <h2>Dimensões do plano</h2>
+          <div className="acoes" style={{ margin: 0 }}>
+            <select value={tipoDim} onChange={(e) => setTipoDim(e.target.value as Dimensao['tipo'])} aria-label="Tipo de dimensão">
+              {(Object.keys(TIPO_DIM) as Dimensao['tipo'][]).map((t) => <option key={t} value={t}>{TIPO_DIM[t]}</option>)}
+            </select>
+            <button onClick={() => setEdit({ tipo: 'dimensao', novo: true, v: { id: '', tipo: tipoDim, nome: '', codigo: '', ativo: true } })}>Novo</button>
+          </div>
+        </div>
+        <p className="muted">Usadas na classificação dos extratos e dos custos fixos: centro de custo (finalidade ou área), projeto ou evento (iniciativa temporária), fornecedor (entidade) e conta analítica (detalhe da categoria).</p>
+        <Estado aCarregar={dims.aCarregar} erro={dims.erro} vazio={!dimsVis.length} />
+        {!!dimsVis.length && <div className="tabela"><table>
+          <thead><tr>{tipoDim === 'centro' && <th>Código</th>}<th>Nome</th>{tipoDim === 'centro' && <th>Âmbito</th>}{tipoDim === 'conta' && <th>Categoria</th>}<th>Estado</th><th /></tr></thead>
+          <tbody>{dimsVis.map((d) => (
+            <tr key={d.id}>
+              {tipoDim === 'centro' && <td>{d.codigo}</td>}<td>{d.nome}</td>{tipoDim === 'centro' && <td>{d.ambito}</td>}
+              {tipoDim === 'conta' && <td>{(cats.dados ?? []).find((c) => c.codigo === d.categoria)?.nome ?? d.categoria ?? '—'}</td>}
+              <td>{ativoTxt(d.ativo) ?? 'Ativa'}</td><td>{acoes('dimensao', d)}</td>
+            </tr>
+          ))}</tbody>
+        </table></div>}
       </div>
 
       </>}
@@ -431,7 +478,7 @@ export default function Configuracao() {
       </>}
 
       {edit && (
-        <Modal titulo={`${edit.novo ? 'Nova' : 'Editar'} ${edit.tipo === 'comunidade' ? 'comunidade' : edit.tipo === 'conta' ? 'conta bancária' : 'categoria'}`} onFechar={() => setEdit(null)}>
+        <Modal titulo={`${edit.novo ? 'Novo registo' : 'Editar'}: ${edit.tipo === 'comunidade' ? 'comunidade' : edit.tipo === 'conta' ? 'conta bancária' : edit.tipo === 'dimensao' ? TIPO_DIM[edit.v.tipo].toLowerCase() : 'categoria'}`} onFechar={() => setEdit(null)}>
           {msg && <div className="aviso">{msg}</div>}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
             {edit.tipo === 'comunidade' && <>
@@ -454,26 +501,35 @@ export default function Configuracao() {
               <label className="campo" style={{ gridColumn: '1 / -1' }}>Nota<input value={edit.v.etiqueta ?? ''} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, etiqueta: e.target.value } })} /></label>
             </>}
             {edit.tipo === 'categoria' && <>
-              <label className="campo">Nome<input value={edit.v.nome} disabled={!edit.novo} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, nome: e.target.value } })} /></label>
+              <label className="campo">Código<input value={edit.v.codigo ?? ''} disabled={!edit.novo} placeholder="02.03" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, codigo: e.target.value } })} /></label>
+              <label className="campo">Nome (com o código)<input value={edit.v.nome} disabled={!edit.novo} placeholder="02.03 Comunicações" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, nome: e.target.value } })} /></label>
               <label className="campo">Tipo
                 <select value={edit.v.tipo} disabled={!edit.novo} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, tipo: e.target.value as Categoria['tipo'] } })}>
-                  <option value="entrada">Entrada</option><option value="saida">Saída</option>
+                  <option value="saida">Despesa</option><option value="entrada">Receita</option><option value="financeiro">Financeiro</option>
                 </select></label>
-              <label className="campo">Atividade<input value={edit.v.atividade} list="atividades" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, atividade: e.target.value } })} />
-                <datalist id="atividades">{[...new Set((cats.dados ?? []).map((c) => c.atividade))].map((a) => <option key={a} value={a} />)}</datalist></label>
+              <label className="campo">Rubrica<input value={edit.v.rubrica ?? ''} list="rubricas-plano" placeholder="02 Instalações" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, rubrica: e.target.value } })} />
+                <datalist id="rubricas-plano">{rubricas.map((r) => <option key={r} value={r} />)}</datalist></label>
               <label className="campo">Nível de privacidade
                 <select value={edit.v.nivel} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, nivel: e.target.value as Nivel } })}>{NIVEIS.map((n) => <option key={n} value={n}>{NIVEL_LABEL[n]}</option>)}</select></label>
-              <label className="campo">Rubrica (demonstração de resultados)
-                <select value={edit.v.rubrica || rubricaInicial(edit.v.nome, edit.v.tipo)} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, rubrica: e.target.value } })}>
-                  {(edit.v.tipo === 'entrada' ? RUBRICAS_ENTRADA : RUBRICAS_SAIDA).map((r) => <option key={r} value={r}>{r}</option>)}
-                </select></label>
               <label className="campo">Âmbito
                 <select value={edit.v.ambito ?? 'local'} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, ambito: e.target.value as 'local' | 'geral' } })}>
                   <option value="local">Local (fica na comunidade)</option>
                   <option value="geral">Geral (reparte pela assistência dos últimos 12 meses)</option>
                 </select></label>
+              <label className="campo" style={{ gridColumn: '1 / -1' }}>Sinónimos (separados por ponto e vírgula)<input value={(edit.v.sinonimos ?? []).join('; ')} placeholder="Dízimos; Dízimo" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, sinonimos: e.target.value.split(';') } })} /></label>
               <label className="campo">Conta SNC-ESNL<input value={edit.v.snc ?? ''} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, snc: e.target.value } })} /></label>
-              {!edit.novo && <p className="muted" style={{ gridColumn: '1 / -1' }}>O nome e o tipo não mudam depois de criados, porque os registos importados usam o nome.</p>}
+              {!edit.novo && <p className="muted" style={{ gridColumn: '1 / -1' }}>O código, o nome e o tipo não mudam depois de criados, porque os movimentos classificados usam o nome.</p>}
+            </>}
+            {edit.tipo === 'dimensao' && <>
+              {edit.v.tipo === 'centro' && <label className="campo">Código<input value={edit.v.codigo ?? ''} disabled={!edit.novo} placeholder="CC16" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, codigo: e.target.value } })} /></label>}
+              <label className="campo">Nome<input value={edit.v.nome} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, nome: e.target.value } })} /></label>
+              {edit.v.tipo === 'centro' && <label className="campo">Âmbito<input value={edit.v.ambito ?? ''} list="ambitos-cc" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, ambito: e.target.value } })} />
+                <datalist id="ambitos-cc">{['Central', 'Local', 'Transversal', 'Ministério', 'Evento', 'Atividade', 'Projeto'].map((a) => <option key={a} value={a} />)}</datalist></label>}
+              {edit.v.tipo === 'conta' && <label className="campo">Categoria
+                <select value={edit.v.categoria ?? ''} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, categoria: e.target.value || undefined } })}>
+                  <option value="">—</option>
+                  {(cats.dados ?? []).filter((c) => c.codigo).map((c) => <option key={c.id} value={c.codigo}>{c.nome}</option>)}
+                </select></label>}
             </>}
           </div>
           <div className="acoes" style={{ marginTop: 14 }}>

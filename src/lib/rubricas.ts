@@ -9,7 +9,7 @@ export const OUTROS_FUNCIONAMENTO = 'Outros custos de funcionamento';
 
 type Tipo = Categoria['tipo'];
 
-const INICIAL: Record<Tipo, Record<string, string>> = {
+const INICIAL: Record<'entrada' | 'saida', Record<string, string>> = {
   entrada: {
     dizimos: 'Dízimos', ofertas: 'Ofertas', 'coletas em dinheiro': 'Ofertas',
     missoes: 'Outras contribuicoes', 'acao social': 'Outras contribuicoes', obras: 'Outras contribuicoes',
@@ -34,6 +34,7 @@ function chave(nome: string) {
 
 /** Rubrica proposta para uma categoria pelo nome (sem correspondência: "Outros rendimentos"/"Outros gastos"). */
 export function rubricaInicial(nome: string, tipo: Tipo): string {
+  if (tipo === 'financeiro') return 'Movimentos financeiros';
   const n = norm(nome);
   const t = INICIAL[tipo];
   const r = t[n] ?? t[chave(nome)] ?? Object.entries(t).find(([k]) => chave(k) === chave(nome))?.[1];
@@ -41,18 +42,43 @@ export function rubricaInicial(nome: string, tipo: Tipo): string {
   return POR_CHAVE[r] ?? r;
 }
 
-export interface Classificacao { rubrica: string; ambito: 'local' | 'geral'; confidencial: boolean }
+export interface Classificacao {
+  rubrica: string;
+  ambito: 'local' | 'geral';
+  confidencial: boolean;
+  /** Movimento financeiro (depósito, transferência interna…): não entra nos resultados. */
+  financeiro: boolean;
+  /** Nome da categoria configurada que correspondeu (sem correspondência: o nome recebido). */
+  categoria: string;
+}
+
+/** Rubrica dos movimentos sem categoria correspondente, quando o plano financeiro está carregado. */
+export const POR_CLASSIFICAR = 'Por classificar';
+
+/** Nome sem o código do plano: "02.03 Comunicações" → "Comunicações". */
+const semCodigo = (nome: string) => nome.replace(/^[A-Z]?\d+(\.\d+)?\s+/, '');
 
 /** Devolve uma função que classifica um nome de categoria (do Jotform, banco ou custo fixo) pela lista configurada. */
-export function classificador(categorias: Categoria[]): (nome: string, tipo: Tipo) => Classificacao {
+export function classificador(categorias: Categoria[]): (nome: string, tipo: 'entrada' | 'saida' | 'financeiro') => Classificacao {
   const mapa = new Map<string, Categoria>();
-  for (const c of categorias) mapa.set(`${c.tipo}|${chave(c.nome)}`, c);
+  const ativas = categorias.filter((c) => c.ativo !== false);
+  const plano = ativas.some((c) => c.codigo);
+  // Prioridade: nome completo, depois nome sem código, depois sinónimos (os primeiros a chegar ficam).
+  const pos = (tipo: string, nome: string, c: Categoria) => { const k = `${tipo}|${chave(nome)}`; if (!mapa.has(k)) mapa.set(k, c); };
+  for (const c of ativas) pos(c.tipo, c.nome, c);
+  for (const c of ativas) if (c.codigo) pos(c.tipo, semCodigo(c.nome), c);
+  for (const c of ativas) for (const s of c.sinonimos ?? []) pos(c.tipo, s, c);
+  // Categorias desativadas ainda classificam o histórico (sem entrar como sugestão).
+  for (const c of categorias) if (c.ativo === false) pos(c.tipo, c.nome, c);
   return (nome, tipo) => {
-    const c = mapa.get(`${tipo}|${chave(nome)}`);
+    const c = mapa.get(`${tipo}|${chave(nome)}`) ?? (tipo !== 'financeiro' ? mapa.get(`financeiro|${chave(nome)}`) : undefined);
+    const financeiro = c?.tipo === 'financeiro';
     return {
-      rubrica: c?.rubrica || rubricaInicial(c?.nome ?? nome, tipo),
+      rubrica: c?.rubrica || (plano ? POR_CLASSIFICAR : rubricaInicial(c?.nome ?? nome, tipo === 'entrada' ? 'entrada' : 'saida')),
       ambito: c?.ambito === 'geral' ? 'geral' : 'local',
       confidencial: c?.nivel === 'confidencial',
+      financeiro,
+      categoria: c?.nome ?? nome,
     };
   };
 }
@@ -65,7 +91,7 @@ export function categoriasEmFalta(
   categorias: Categoria[],
   meses: { entradasPorCategoria?: Record<string, number>; despesasPorCategoria?: Record<string, number> }[],
 ): { nome: string; tipo: Tipo }[] {
-  const existe = new Set(categorias.map((c) => `${c.tipo}|${chave(c.nome)}`));
+  const existe = new Set(categorias.flatMap((c) => [c.nome, semCodigo(c.nome), ...(c.sinonimos ?? [])].map((n) => `${c.tipo}|${chave(n)}`)));
   const out = new Map<string, { nome: string; tipo: Tipo }>();
   for (const m of meses) {
     for (const [tipo, o] of [['entrada', m.entradasPorCategoria], ['saida', m.despesasPorCategoria]] as const) {

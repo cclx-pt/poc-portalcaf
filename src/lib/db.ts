@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import type {
-  BancoLote, Categoria, Comunidade, Conta, CustoFixo, Fecho, Lote, Nivel, Orcamento, Origem, Perfil, Publico, PublicoSite, Resumo, ExcecaoAssistencia, ConfigAssistencia,
+  BancoLote, Categoria, Dimensao, Comunidade, Conta, CustoFixo, Fecho, Lote, Nivel, Orcamento, Origem, Perfil, Publico, PublicoSite, Resumo, ExcecaoAssistencia, ConfigAssistencia,
 } from './types';
 import { NIVEIS, nivelNum } from './types';
 
@@ -51,6 +51,7 @@ export const apagarPerfil = (email: string) => deleteDoc(doc(db, 'users', email.
 export const listarComunidades = async () => (await lista<Comunidade>('comunidades')).sort((a, b) => a.ordem - b.ordem);
 export const listarContas = () => lista<Conta>('contas');
 export const listarCategorias = async () => (await lista<Categoria>('categorias')).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+export const listarDimensoes = async () => (await lista<Dimensao>('dimensoes')).sort((a, b) => (a.codigo ?? a.nome).localeCompare(b.codigo ?? b.nome, 'pt'));
 export const gravar = <T extends { id: string }>(col: string, o: T) => setDoc(doc(db, col, o.id), o);
 export const apagar = (col: string, id: string) => deleteDoc(doc(db, col, id));
 

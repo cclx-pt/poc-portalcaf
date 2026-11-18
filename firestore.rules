@@ -59,6 +59,8 @@ service cloud.firestore {
     match /comunidades/{id} { allow read: if isActive(); allow write: if hasRole(['master', 'caf']); }
     match /contas/{id}      { allow read: if hasRole(['master', 'caf']); allow write: if hasRole(['master', 'caf']); }
     match /categorias/{id}  { allow read: if isActive(); allow write: if hasRole(['master', 'caf']); }
+    // Dimensões do plano financeiro: centros de custo, projetos, fornecedores, contas analíticas.
+    match /dimensoes/{id}   { allow read: if isActive(); allow write: if hasRole(['master', 'caf']); }
 
     // ---------- dados de origem (Jotform), em lotes mensais ----------
     // Confidencial: com nomes, NIF, email, IBAN.

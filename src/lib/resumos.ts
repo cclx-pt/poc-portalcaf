@@ -145,6 +145,8 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
   }
   for (const b of d.banco) for (const r of b.registos) {
     if (!r.contabilizar || !r.comunidadeId) continue;
+    // Movimentos financeiros (depósitos, transferências internas…) não são receita nem despesa.
+    if (r.categoria && classificar(r.categoria, r.valor > 0 ? 'entrada' : 'saida').financeiro) continue;
     const mes = Number(r.data.slice(5, 7));
     if (Number(r.data.slice(0, 4)) !== d.ano) continue;
     const x = m(r.comunidadeId, mes);

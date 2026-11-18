@@ -26,10 +26,10 @@ describe('rubricas', () => {
       cat('Dízimos', 'entrada', { rubrica: 'Dízimos' }),
       cat('Vencimentos', 'saida', { nivel: 'confidencial' }),
     ]);
-    expect(c('Renda', 'saida')).toEqual({ rubrica: 'Instalações', ambito: 'geral', confidencial: false });
-    expect(c('Dízimo', 'entrada')).toEqual({ rubrica: 'Dízimos', ambito: 'local', confidencial: false });
+    expect(c('Renda', 'saida')).toMatchObject({ rubrica: 'Instalações', ambito: 'geral', confidencial: false });
+    expect(c('Dízimo', 'entrada')).toMatchObject({ rubrica: 'Dízimos', ambito: 'local', confidencial: false });
     expect(c('vencimentos', 'saida').confidencial).toBe(true);
-    expect(c('Pagamentos Livraria', 'entrada')).toEqual({ rubrica: 'Outros rendimentos', ambito: 'local', confidencial: false });
+    expect(c('Pagamentos Livraria', 'entrada')).toMatchObject({ rubrica: 'Outros rendimentos', ambito: 'local', confidencial: false });
     expect(c('Renda', 'entrada').ambito).toBe('local'); // tipo diferente não corresponde
   });
 

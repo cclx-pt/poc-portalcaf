@@ -9,7 +9,7 @@ import { GERAIS_POR_REPARTIR, mesesDecorridos } from '../lib/resumos';
 
 type Colunas = 'comunidades' | 'meses';
 /** Vencimentos são confidenciais: entram em "Outros custos de funcionamento"; estas linhas só aparecem com valor. */
-const ESCONDER_A_ZERO = ['Vencimentos e encargos', OUTROS_FUNCIONAMENTO];
+const ESCONDER_A_ZERO = ['Vencimentos e encargos', '01 Pessoal', OUTROS_FUNCIONAMENTO];
 interface Coluna { id: string; nome: string }
 
 /** Demonstração de resultados por rubrica: colunas por comunidade (+ CCLX) ou por mês. */
