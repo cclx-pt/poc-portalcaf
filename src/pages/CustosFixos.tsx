@@ -6,7 +6,7 @@ import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../compone
 import { apagar, auditar, gravar, listarComunidades, listarCustosFixos } from '../lib/db';
 import { eur, eurK, periodo, r2 } from '../lib/format';
 import { custoAtivo, custoNoAno, mesesDecorridos, valorImputado } from '../lib/resumos';
-import { importarCustosFixos, type ResultadoImportacao } from '../lib/custosImport';
+import { COMUNIDADE_GERAL, importarCustosFixos, type ResultadoImportacao } from '../lib/custosImport';
 import { anoDoCusto, copiarAno, totaisPorRubrica } from '../lib/custosAno';
 import { lerFicheiro } from '../lib/ficheiros';
 import { NIVEIS, NIVEL_LABEL, type CustoFixo, type Nivel } from '../lib/types';
@@ -62,16 +62,22 @@ export default function CustosFixos() {
     } catch (e) { setMsg(mensagemErro(e)); }
     finally { setACopiar(false); }
   }
+  const [apagarSel, setApagarSel] = useState<{ ano: string; confirmo: boolean } | null>(null);
+  const [aApagar, setAApagar] = useState(false);
+  const ondeApagar = comunidade === 'todas' ? 'todas as comunidades' : nomes.get(comunidade) ?? comunidade;
+  const daComunidade = (cf.dados ?? []).filter((c) => comunidade === 'todas' || c.comunidadeId === comunidade);
+  const anosComLinhas = [...new Set(daComunidade.map(anoDoCusto))].sort((a, b) => a - b);
+  const alvoApagar = apagarSel?.ano ? daComunidade.filter((c) => anoDoCusto(c) === Number(apagarSel.ano)) : [];
   async function apagarAno() {
-    const alvo = linhas;
-    const onde = comunidade === 'todas' ? 'todas as comunidades' : nomes.get(comunidade) ?? comunidade;
-    if (!alvo.length || !confirm(`Apagar ${alvo.length} linhas de custos fixos de ${ano} (${onde})? Esta ação não se pode desfazer.`)) return;
+    if (!apagarSel?.ano || !apagarSel.confirmo || !alvoApagar.length) return;
+    setAApagar(true);
     try {
-      for (let i = 0; i < alvo.length; i += 20) await Promise.all(alvo.slice(i, i + 20).map((c) => apagar('custos_fixos', c.id)));
-      await auditar(acesso!.email, 'apagar custos fixos do ano', `${ano} (${onde}): ${alvo.length} linhas`);
-      setMsg(`Apagadas ${alvo.length} linhas de ${ano}. Recalcule os resumos (Configuração ou Calcular) para atualizar os mapas.`);
-      await cf.recarregar();
+      for (let i = 0; i < alvoApagar.length; i += 20) await Promise.all(alvoApagar.slice(i, i + 20).map((c) => apagar('custos_fixos', c.id)));
+      await auditar(acesso!.email, 'apagar custos fixos do ano', `${apagarSel.ano} (${ondeApagar}): ${alvoApagar.length} linhas`);
+      setMsg(`Apagadas ${alvoApagar.length} linhas de ${apagarSel.ano}. Recalcule os resumos (Configuração ou Calcular) para atualizar os mapas.`);
+      setApagarSel(null); await cf.recarregar();
     } catch (e) { setMsg(mensagemErro(e)); }
+    finally { setAApagar(false); }
   }
 
   async function lerImportacao(f: File) {
@@ -104,7 +110,7 @@ export default function CustosFixos() {
     try {
       const id = edit.id || `${edit.comunidadeId}-${edit.rubrica.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${edit.inicio}`;
       const incidencia = Math.min(100, Math.max(0, r2(Number(edit.incidencia ?? 100))));
-      await gravar('custos_fixos', { ...edit, id, ano: anoDoCusto(edit), valorMensal: r2(Number(edit.valorMensal)), incidencia, ambito: edit.ambito ?? 'local', fim: edit.fim || `${anoDoCusto(edit)}-12` });
+      await gravar('custos_fixos', { ...edit, id, ano: anoDoCusto(edit), valorMensal: r2(Number(edit.valorMensal)), incidencia, ambito: edit.comunidadeId === COMUNIDADE_GERAL ? 'geral' : edit.ambito ?? 'local', fim: edit.fim || `${anoDoCusto(edit)}-12` });
       await auditar(acesso!.email, 'custo fixo', `${edit.comunidadeId} · ${edit.rubrica} · ${edit.valorMensal} € × ${pct(incidencia)} desde ${mesPT(edit.inicio)}`);
       setEdit(null); await cf.recarregar();
     } catch (e) { setMsg(mensagemErro(e)); }
@@ -119,13 +125,13 @@ export default function CustosFixos() {
       <div className="linha" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <h1>Custos Fixos</h1>
-          <p className="muted">Uma linha por rubrica e ano (mostra o ano escolhido no filtro). Quando um valor muda a meio do ano, feche a linha anterior (mês de fim) e crie uma nova no mesmo ano. Para preparar um ano novo, use <b>Copiar ano</b>. Os vencimentos e a Segurança Social são confidenciais. A <b>incidência</b> é a parte do custo imputada a esta comunidade (custos partilhados); nos resultados entra o valor imputado. Os custos de âmbito <b>geral</b> repartem-se pelas comunidades conforme a assistência.</p>
+          <p className="muted">Uma linha por rubrica e ano (mostra o ano escolhido no filtro). Quando um valor muda a meio do ano, feche a linha anterior (mês de fim) e crie uma nova no mesmo ano. Para preparar um ano novo, use <b>Copiar ano</b>. Os vencimentos e a Segurança Social são confidenciais. A <b>incidência</b> é a parte do custo imputada a esta comunidade (custos partilhados); nos resultados entra o valor imputado. Os custos lançados na comunidade <b>Geral</b> (e os de âmbito geral) repartem-se por todas as comunidades conforme a assistência.</p>
         </div>
         {pode('custos') && <div className="acoes">
           <button className="sec" onClick={() => ficheiro.current?.click()}>Importar do Excel</button>
           <input ref={ficheiro} type="file" accept=".xlsx,.xls,.csv" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void lerImportacao(f); }} />
           <button className="sec" onClick={() => setCopia({ origem: ano, destino: ano + 1, atualizacao: '', todas: comunidade === 'todas', substituir: false })}>Copiar ano…</button>
-          {acesso!.papel === 'master' && <button className="sec" disabled={!linhas.length} onClick={() => void apagarAno()}>Apagar linhas de {ano}</button>}
+          {acesso!.papel === 'master' && <button className="sec" disabled={!anosComLinhas.length} onClick={() => setApagarSel({ ano: '', confirmo: false })}>Apagar ano…</button>}
           <button onClick={() => setEdit(vazio(comunidade === 'todas' ? (acesso!.comunidades[0] === '*' ? 'caldas-da-rainha' : acesso!.comunidades[0]) : comunidade, ano))}>Nova linha</button>
         </div>}
       </div>
@@ -182,6 +188,24 @@ export default function CustosFixos() {
           </div>
         </Modal>
       )}
+      {apagarSel && (
+        <Modal titulo="Apagar os custos fixos de um ano" onFechar={() => setApagarSel(null)}>
+          <label className="campo">{`Ano a apagar (${ondeApagar})`}
+            <select value={apagarSel.ano} onChange={(e) => setApagarSel({ ano: e.target.value, confirmo: false })}>
+              <option value="">Escolha o ano…</option>
+              {anosComLinhas.map((a) => <option key={a} value={String(a)}>{`${a} (${daComunidade.filter((c) => anoDoCusto(c) === a).length} linhas)`}</option>)}
+            </select>
+          </label>
+          {alvoApagar.length > 0 && <>
+            <div className="aviso">{`Vão ser apagadas ${alvoApagar.length} linhas de ${apagarSel.ano} (${ondeApagar}). Esta ação não se pode desfazer.`}</div>
+            <label className="opcao"><input type="checkbox" checked={apagarSel.confirmo} onChange={(e) => setApagarSel({ ...apagarSel, confirmo: e.target.checked })} /> Confirmo que quero apagar estas linhas</label>
+          </>}
+          <div className="acoes" style={{ marginTop: 12 }}>
+            <button disabled={aApagar || !apagarSel.confirmo || !alvoApagar.length} onClick={() => void apagarAno()}>{aApagar ? 'A apagar…' : alvoApagar.length ? `Apagar ${alvoApagar.length} linhas de ${apagarSel.ano}` : 'Apagar'}</button>
+            <button className="sec" onClick={() => setApagarSel(null)}>Cancelar</button>
+          </div>
+        </Modal>
+      )}
       {copia && (
         <Modal titulo="Copiar custos fixos de um ano para outro" onFechar={() => setCopia(null)}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
@@ -216,8 +240,8 @@ export default function CustosFixos() {
             <h2>{edit.id ? 'Editar custo fixo' : 'Novo custo fixo'}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
               <label className="campo">Comunidade
-                <select value={edit.comunidadeId} onChange={(e) => setEdit({ ...edit, comunidadeId: e.target.value })}>
-                  {(coms.dados ?? []).filter((c) => !c.especial && (c.ativo !== false || c.id === edit.comunidadeId) && (acesso!.comunidades.includes('*') || acesso!.comunidades.includes(c.id))).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                <select value={edit.comunidadeId} onChange={(e) => setEdit({ ...edit, comunidadeId: e.target.value, ...(e.target.value === COMUNIDADE_GERAL ? { ambito: 'geral' as const } : {}) })}>
+                  {(coms.dados ?? []).filter((c) => (!c.especial || c.id === COMUNIDADE_GERAL) && (c.ativo !== false || c.id === edit.comunidadeId) && (acesso!.comunidades.includes('*') || acesso!.comunidades.includes(c.id))).map((c) => <option key={c.id} value={c.id}>{c.id === COMUNIDADE_GERAL ? 'Geral (repartido por todas as comunidades)' : c.nome}</option>)}
                 </select>
               </label>
               <label className="campo">Rubrica
@@ -230,7 +254,7 @@ export default function CustosFixos() {
               <label className="campo">Valor mensal (€)<input type="number" inputMode="decimal" step="0.01" value={edit.valorMensal} onChange={(e) => setEdit({ ...edit, valorMensal: Number(e.target.value) })} /></label>
               <label className="campo">Incidência (%)<input type="number" inputMode="decimal" min={0} max={100} step="0.01" value={edit.incidencia ?? 100} onChange={(e) => setEdit({ ...edit, incidencia: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
               <label className="campo">Âmbito
-                <select value={edit.ambito ?? 'local'} onChange={(e) => setEdit({ ...edit, ambito: e.target.value as 'local' | 'geral' })}>
+                <select value={edit.comunidadeId === COMUNIDADE_GERAL ? 'geral' : edit.ambito ?? 'local'} disabled={edit.comunidadeId === COMUNIDADE_GERAL} onChange={(e) => setEdit({ ...edit, ambito: e.target.value as 'local' | 'geral' })}>
                   <option value="local">Local (só esta comunidade)</option>
                   <option value="geral">Geral (repartido pela assistência)</option>
                 </select>

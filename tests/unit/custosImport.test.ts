@@ -32,9 +32,9 @@ describe('importação de custos fixos (Excel por comunidade)', () => {
     expect(r.custos.map((c) => [c.valorMensal, c.inicio, c.fim, c.incidencia])).toEqual([[1248.07, '2025-01', '2025-12', 100], [2300, '2026-01', '2026-12', 100]]);
   });
 
-  it('"Geral" vai para a Sede com âmbito geral (repartido pela assistência)', () => {
-    const r = importarCustosFixos([L('Geral', 'Vencimendo Elemento Multimedia', 1, 0, 500, 512)], COMUNIDADES);
-    expect(r.custos.every((c) => c.comunidadeId === 'sede' && c.ambito === 'geral')).toBe(true);
+  it('"Geral" vai para a comunidade Geral com âmbito geral (repartido pela assistência)', () => {
+    const r = importarCustosFixos([L('Geral', 'Vencimendo Elemento Multimedia', 1, 0, 500, 512), L('CCLX Geral', 'Contabilidade', 1, 0, 100, 0)], COMUNIDADES);
+    expect(r.custos.map((c) => [c.comunidadeId, c.ambito])).toEqual([['bolsa-geral', 'geral'], ['bolsa-geral', 'geral'], ['bolsa-geral', 'geral']]);
   });
 
   it('avisa e não importa: comunidade desconhecida, linhas repetidas e anos depois do fim da comunidade', () => {

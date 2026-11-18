@@ -11,7 +11,7 @@ export const COMUNIDADES: Comunidade[] = [
   { id: 'sede', nome: 'Sede', ordem: 6 },
   { id: 'caldas-da-rainha', nome: 'Caldas da Rainha', ordem: 7 },
   { id: 'barreiro', nome: 'Barreiro', ordem: 8, fim: '2026-10-31' },
-  { id: 'bolsa-geral', nome: 'Bolsa geral (não atribuído)', ordem: 99, especial: true },
+  { id: 'bolsa-geral', nome: 'Geral', ordem: 99, especial: true },
 ];
 
 /** Nomes alternativos usados nos formulários Jotform. */

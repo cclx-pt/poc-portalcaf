@@ -23,7 +23,7 @@ export default function EntradasConjunto() {
   const deps = useCarregar(() => listarLotes(acesso!, 'depositos', ano, conf), [ano, conf, acesso?.email]);
   const coms = useCarregar(listarComunidades, []);
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
-  const nomeC = (id: string) => nomes.get(id) ?? (id === 'bolsa-geral' ? 'Bolsa geral (sem comunidade)' : id);
+  const nomeC = (id: string) => nomes.get(id) ?? (id === 'bolsa-geral' ? 'Geral (sem comunidade)' : id);
 
   // Filtros propostos
   const [origem, setOrigem] = useState<'todas' | OrigemEntrada>('todas');

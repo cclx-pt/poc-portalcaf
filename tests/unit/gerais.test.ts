@@ -186,3 +186,17 @@ describe('repartição dos gerais', () => {
     expect(partesMes(mes(rs, 'almada', 3)).gerais).toBe(200);
   });
 });
+
+describe('comunidade Geral (bolsa-geral) nos custos fixos', () => {
+  it('um custo fixo da Geral é sempre repartido pelas comunidades (nunca fica na Geral), mesmo sem âmbito definido', () => {
+    const cf: CustoFixo = { id: 'g1', comunidadeId: 'bolsa-geral', rubrica: 'Contabilidade', valorMensal: 300, ano: 2026, inicio: '2026-03', fim: '2026-03', nivel: 'privado' };
+    const rs = calcularResumos(base({
+      custosFixos: [cf],
+      assistencia: [lote('assistencia', 'almada', 2026, 3, [{ valor: 100 }]), lote('assistencia', 'porto', 2026, 3, [{ valor: 50 }])],
+    }));
+    expect(mes(rs, 'almada', 3).geralSaidas).toBe(200);
+    expect(mes(rs, 'porto', 3).geralSaidas).toBe(100);
+    expect(mes(rs, 'bolsa-geral', 3).geralSaidas).toBe(0);
+    expect(mes(rs, 'bolsa-geral', 3).saidas).toBe(0);
+  });
+});

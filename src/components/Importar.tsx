@@ -89,7 +89,7 @@ export function Importar({ origem, onFeito, onFechar }: { origem: Origem; onFeit
           <table>
             <thead><tr><th>Comunidade</th><th className="num">Registos</th><th className="num">{origem === 'assistencia' ? 'Soma de adultos' : 'Total'}</th></tr></thead>
             <tbody>{Object.entries(porComunidade).map(([c, x]) => (
-              <tr key={c}><td>{c === 'bolsa-geral' ? 'Bolsa geral (sem comunidade)' : c}</td><td className="num">{x.n}</td><td className="num">{origem === 'assistencia' ? x.total : eur(x.total)}</td></tr>
+              <tr key={c}><td>{c === 'bolsa-geral' ? 'Geral (sem comunidade)' : c}</td><td className="num">{x.n}</td><td className="num">{origem === 'assistencia' ? x.total : eur(x.total)}</td></tr>
             ))}</tbody>
           </table>
         </div>
