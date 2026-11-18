@@ -50,6 +50,16 @@ vi.mock('../../src/lib/db', () => ({
   listarLotes: (_a: unknown, origem: string) => sync(LOTES[origem] ?? []),
   listarComunidades: () => sync([{ id: 'almada', nome: 'Almada', ordem: 1 }, { id: 'porto', nome: 'Porto', ordem: 2 }]),
   lerEstadoSync: () => sync(null),
+  listarContas: () => sync([{ id: 'cgd-principal', nome: 'CGD · Conta principal', banco: 'Caixa Geral de Depósitos', tipo: 'principal' }, { id: 'santander', nome: 'Santander', banco: 'Santander', tipo: 'corrente' }]),
+  listarBanco: () => sync([
+    { id: 'cgd-principal_2026_11', contaId: 'cgd-principal', ano: 2026, mes: 11, periodo: '2026-11', atualizadoEm: '', atualizadoPor: '', registos: [
+      { id: 'c1', data: '2026-11-02', descricao: 'TRF MBWAY', valor: 100, saldo: 1100, ordem: 0, contabilizar: false },
+      { id: 'c2', data: '2026-11-05', descricao: 'CCLX ALMADA', valor: -50, saldo: 1050, ordem: 1, contabilizar: false, estorno: true },
+    ] },
+    { id: 'santander_2026_11', contaId: 'santander', ano: 2026, mes: 11, periodo: '2026-11', atualizadoEm: '', atualizadoPor: '', registos: [
+      { id: 's1', data: '2026-11-03', descricao: 'Garagem Almada', valor: -80, saldo: 420, ordem: 0, contabilizar: false },
+    ] },
+  ]),
 }));
 vi.mock('../../src/components/ui', async (orig) => ({
   ...(await orig<typeof import('../../src/components/ui')>()),
@@ -271,6 +281,15 @@ describe('páginas', () => {
     const { default: CustosFixos } = await import('../../src/pages/CustosFixos');
     const html = renderToString(<CustosFixos />);
     for (const t of ['Incidência', 'Imputado', 'Importar do Excel', '01/2026']) expect(html).toContain(t);
+  });
+
+  it('Bancos: vista conjunta do mês com logótipo por linha, filtros por banco e totais', async () => {
+    const { default: Bancos } = await import('../../src/pages/Bancos');
+    const html = renderToString(<Bancos />);
+    expect(html.match(/src="\/bancos\/(cgd|santander)\.png"/g)?.length).toBeGreaterThanOrEqual(5); // 2 filtros + 2 cartões + 3 linhas
+    for (const t of ['Novembro 2026', 'Limpar extrato', 'Importar extrato', 'Total dos bancos visíveis', 'Estorno', 'TRF MBWAY', 'Garagem Almada']) expect(html).toContain(t);
+    expect(html).toContain('1.470,00 €'); // saldo final CGD 1.050 + Santander 420
+    if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/bancos.html', html);
   });
 });
 

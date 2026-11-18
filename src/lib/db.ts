@@ -93,6 +93,7 @@ export async function gravarLotes(conf: Lote[], priv: Lote[], soPrivado = false)
 // ---------- bancos ----------
 export const listarBanco = (ano: number) => lista<BancoLote>('banco_lotes', where('ano', '==', ano));
 export const gravarBancoLote = (l: BancoLote) => setDoc(doc(db, 'banco_lotes', l.id), l);
+export const apagarBancoLote = (id: string) => deleteDoc(doc(db, 'banco_lotes', id));
 
 // ---------- custos fixos ----------
 export function listarCustosFixos(a: Acesso): Promise<CustoFixo[]> {
