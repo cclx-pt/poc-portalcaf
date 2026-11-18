@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { LogoBanco } from '../components/LogoBanco';
+import SaldosBancos from './SaldosBancos';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { apagarBancoLote, auditar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarLotes } from '../lib/db';
 import { lerFicheiro } from '../lib/ficheiros';
-import { NOME_BANCO, bancoDaConta, detetarBanco, dividirPorMes, mapaDoBanco, mapearExtrato, resumoMes, sugerir, sugerirMapaBanco, type Banco, type MapaBanco } from '../lib/banco';
+import { NOME_BANCO, bancoDaConta, maioresMovimentos, detetarBanco, dividirPorMes, mapaDoBanco, mapearExtrato, resumoMes, sugerir, sugerirMapaBanco, type Banco, type MapaBanco } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Conta, MovBanco } from '../lib/types';
 import type { Linha } from '../lib/fontes';
@@ -13,12 +15,6 @@ import { comunidadeAtiva } from '../lib/resumos';
 type Filtro = 'todos' | 'por-classificar' | 'bolsa' | 'contabilizados' | 'conciliados';
 type MovVista = MovBanco & { loteId: string; contaId: string };
 
-const BASE = import.meta.env.BASE_URL;
-/** Logótipo do banco (identificação de cada linha e dos filtros). */
-export function LogoBanco({ banco, tamanho = 18 }: { banco: Banco | null; tamanho?: number }) {
-  if (!banco) return <span className="logo-banco vazio" style={{ width: tamanho, height: tamanho }} />;
-  return <img className="logo-banco" src={`${BASE}bancos/${banco}.png`} alt={NOME_BANCO[banco]} title={NOME_BANCO[banco]} width={tamanho} height={tamanho} />;
-}
 const dataPt = (d: string) => d.split('-').reverse().join('/');
 
 export default function Bancos() {
@@ -35,6 +31,7 @@ export default function Bancos() {
   const [limpar, setLimpar] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [ocultas, setOcultas] = useState<string[]>([]);
+  const [vista, setVista] = useState<'mes' | 'saldos'>('mes');
   // Extratos sempre por mês: por omissão, o último mês com movimentos neste ano.
   const mesesComDados = [...new Set((banco.dados ?? []).map((l) => l.mes))].sort((a, b) => a - b);
   const [mesEscolhido, setMes] = useState<number | null>(null);
@@ -114,14 +111,18 @@ export default function Bancos() {
       </div>
       {msg && <div className="nota">{msg}</div>}
 
+      <div className="abas" role="tablist">
+        <button role="tab" aria-selected={vista === 'mes'} className={vista === 'mes' ? 'ativa' : ''} onClick={() => setVista('mes')}>Movimentos do mês</button>
+        <button role="tab" aria-selected={vista === 'saldos'} className={vista === 'saldos' ? 'ativa' : ''} onClick={() => setVista('saldos')}>Saldos {ano}</button>
+      </div>
       <div className="barra-bancos">
-        <div className="mes-nav" role="group" aria-label="Mês do extrato">
+        {vista === 'mes' ? <div className="mes-nav" role="group" aria-label="Mês do extrato">
           <button className="sec" aria-label="Mês anterior" disabled={mes <= 1} onClick={() => mudarMes(mes - 1)}><ChevronLeft size={16} aria-hidden /></button>
           <select value={mes} onChange={(e) => mudarMes(Number(e.target.value))} aria-label="Mês">
             {MESES.map((m, i) => <option key={m} value={i + 1}>{`${m.charAt(0).toUpperCase() + m.slice(1)} ${ano}${mesesComDados.includes(i + 1) ? '' : ' (sem extrato)'}`}</option>)}
           </select>
           <button className="sec" aria-label="Mês seguinte" disabled={mes >= 12} onClick={() => mudarMes(mes + 1)}><ChevronRight size={16} aria-hidden /></button>
-        </div>
+        </div> : <span className="small muted">Clique num mês para ver os movimentos.</span>}
         <div className="filtro-bancos" role="group" aria-label="Bancos visíveis">
           {ativas.map((c) => (
             <label key={c.id} className={`chip-banco${ocultas.includes(c.id) ? ' desligado' : ''}`}>
@@ -135,6 +136,10 @@ export default function Bancos() {
       </div>
 
       <Estado aCarregar={banco.aCarregar} erro={banco.erro} />
+      {vista === 'saldos' && !banco.aCarregar && (
+        <SaldosBancos contas={visiveis} lotes={(banco.dados ?? []).map((l) => alterados[l.id] ?? l)} ano={ano} aoAbrirMes={(m) => { mudarMes(m); setVista('mes'); }} />
+      )}
+      {vista === 'mes' && <>
       <div className="cards">
         {resumos.map(({ c, r }) => (
           <div key={c.id} className="kpi">
@@ -197,6 +202,25 @@ export default function Bancos() {
             <td className="num">{eur(r2(mostrar.filter((m) => m.valor < 0).reduce((s, m) => s - m.valor, 0)))}</td><td colSpan={5} /></tr></tfoot>}
         </table>
       </div>
+
+      <details className="sec card maiores">
+        <summary><h2 style={{ display: 'inline' }}>Maiores movimentos de {MESES[mes - 1]}</h2></summary>
+        <div className="grid2" style={{ marginTop: 10 }}>
+          {resumos.filter(({ c }) => (porConta.get(c.id) ?? []).length).map(({ c }) => {
+            const mm = maioresMovimentos(porConta.get(c.id) ?? [], 5);
+            return (
+              <div key={c.id}>
+                <h3 className="kpi-banco"><LogoBanco banco={bancoDe.get(c.id) ?? null} tamanho={16} /> {c.nome}</h3>
+                <table><tbody>
+                  {mm.entradas.map((m) => <tr key={m.id}><td>{dataPt(m.data)}</td><td className="small">{m.descricao}</td><td className="num">{eur(m.valor)}</td></tr>)}
+                  {mm.saidas.map((m) => <tr key={m.id}><td>{dataPt(m.data)}</td><td className="small">{m.descricao}</td><td className="num">({eur(-m.valor)})</td></tr>)}
+                </tbody></table>
+              </div>
+            );
+          })}
+        </div>
+      </details>
+      </>}
 
       <div className="sec">
         <h2>Distribuição da bolsa geral (pré-visualização)</h2>

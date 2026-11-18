@@ -1,4 +1,4 @@
-import { norm, parseData, parseNumero, periodo, r2 } from './format';
+import { MESES, eur, norm, parseData, parseNumero, periodo, r2 } from './format';
 import type { Linha } from './fontes';
 import type { BancoLote, Lote, MovBanco } from './types';
 
@@ -159,4 +159,97 @@ export function dividirPorMes(contaId: string, movs: MovBanco[], existentes: Ban
   });
   const ordem = novos.map((l, i) => ({ l, m: meses[i] })).sort((a, b) => a.l.periodo.localeCompare(b.l.periodo));
   return { lotes: ordem.map((x) => x.l), meses: ordem.map((x) => x.m) };
+}
+
+// ---------- vista de saldos ----------
+const classificado = (m: MovBanco) => !!(m.categoria || m.comunidadeId || m.contabilizar || m.conciliadoCom);
+export type ResumoConta = ReturnType<typeof resumoMes> & { classificados: number; conciliados: number };
+export interface SaldoMes {
+  mes: number;
+  contas: Record<string, ResumoConta | null>;
+  /** Soma das contas com extrato nesse mês (null se nenhuma tem). */
+  total: { saldoInicial: number | null; entradas: number; saidas: number; saldoFinal: number | null } | null;
+}
+
+/** Saldos de janeiro a dezembro, por conta e total. */
+export function saldosMensais(lotes: BancoLote[], contaIds: string[]): SaldoMes[] {
+  return Array.from({ length: 12 }, (_, i) => {
+    const mes = i + 1;
+    const contas: SaldoMes['contas'] = {};
+    for (const c of contaIds) {
+      const movs = lotes.filter((l) => l.contaId === c && l.mes === mes).flatMap((l) => l.registos);
+      contas[c] = movs.length ? { ...resumoMes(movs), classificados: movs.filter(classificado).length, conciliados: movs.filter((m) => m.conciliadoCom).length } : null;
+    }
+    const com = Object.values(contas).filter((x): x is ResumoConta => !!x);
+    const soma = (f: (x: ResumoConta) => number | null) => { const v = com.map(f).filter((x): x is number => x != null); return v.length ? r2(v.reduce((a, b) => a + b, 0)) : null; };
+    return { mes, contas, total: com.length ? { saldoInicial: soma((x) => x.saldoInicial), entradas: soma((x) => x.entradas) ?? 0, saidas: soma((x) => x.saidas) ?? 0, saldoFinal: soma((x) => x.saldoFinal) } : null };
+  });
+}
+
+/** Médias e extremos dos meses com extrato (sobre o total das contas). */
+export function estatisticasSaldos(s: SaldoMes[]) {
+  const com = s.filter((x) => x.total);
+  const n = com.length;
+  const media = (f: (x: SaldoMes) => number) => (n ? r2(com.reduce((a, x) => a + f(x), 0) / n) : null);
+  const saldos = com.filter((x) => x.total!.saldoFinal != null).map((x) => ({ mes: x.mes, valor: x.total!.saldoFinal as number }));
+  const ext = (cmp: (a: number, b: number) => boolean) => saldos.reduce<{ mes: number; valor: number } | null>((m, x) => (!m || cmp(x.valor, m.valor) ? x : m), null);
+  const maisSaidas = com.reduce<{ mes: number; valor: number } | null>((m, x) => (!m || x.total!.saidas > m.valor ? { mes: x.mes, valor: x.total!.saidas } : m), null);
+  return {
+    meses: n,
+    entradasMedia: media((x) => x.total!.entradas), saidasMedia: media((x) => x.total!.saidas),
+    saldoMedio: saldos.length ? r2(saldos.reduce((a, x) => a + x.valor, 0) / saldos.length) : null,
+    saldoMinimo: ext((a, b) => a < b), saldoMaximo: ext((a, b) => a > b), maisSaidas,
+  };
+}
+
+export interface AvisoExtrato { contaId: string; tipo: 'mes-em-falta' | 'saldo-nao-encadeia' | 'saldo-interno'; mes: number; texto: string }
+
+/** Verifica os extratos: meses em falta, saldos que não encadeiam entre meses e saldos que não batem dentro do mês. */
+export function verificarExtratos(lotes: BancoLote[], contaIds: string[]): AvisoExtrato[] {
+  const avisos: AvisoExtrato[] = [];
+  for (const c of contaIds) {
+    const meses = [...new Set(lotes.filter((l) => l.contaId === c && l.registos.length).map((l) => l.mes))].sort((a, b) => a - b);
+    if (!meses.length) continue;
+    const movsDe = (mes: number) => ordenarMovimentos(lotes.filter((l) => l.contaId === c && l.mes === mes).flatMap((l) => l.registos));
+    for (let m = meses[0]; m <= meses[meses.length - 1]; m++) if (!meses.includes(m)) avisos.push({ contaId: c, tipo: 'mes-em-falta', mes: m, texto: `Falta o extrato de ${MESES[m - 1]}.` });
+    let anterior: number | null = null;
+    for (const mes of meses) {
+      const movs = movsDe(mes);
+      const r = resumoMes(movs);
+      if (anterior != null && r.saldoInicial != null && Math.abs(r.saldoInicial - anterior) > 0.005) {
+        avisos.push({ contaId: c, tipo: 'saldo-nao-encadeia', mes, texto: `O saldo inicial de ${MESES[mes - 1]} (${eur(r.saldoInicial)}) não é igual ao final do mês anterior (${eur(anterior)}).` });
+      }
+      // Dentro do mês: cada saldo = saldo anterior + movimento (os estornos não mexem no saldo).
+      let quebras = 0; let s: number | null = null;
+      for (const m of movs) {
+        if (m.saldo == null) continue;
+        if (s != null && !m.estorno && Math.abs(s + m.valor - m.saldo) > 0.005) quebras++;
+        s = m.saldo;
+      }
+      if (quebras) avisos.push({ contaId: c, tipo: 'saldo-interno', mes, texto: `${quebras} ${quebras === 1 ? 'movimento' : 'movimentos'} em ${MESES[mes - 1]} com saldo que não bate com o anterior.` });
+      anterior = r.saldoFinal;
+    }
+  }
+  return avisos;
+}
+
+/** Maiores entradas e saídas (por valor). */
+export function maioresMovimentos<T extends MovBanco>(movs: T[], n = 5) {
+  return {
+    entradas: movs.filter((m) => m.valor > 0).sort((a, b) => b.valor - a.valor).slice(0, n),
+    saidas: movs.filter((m) => m.valor < 0).sort((a, b) => a.valor - b.valor).slice(0, n),
+  };
+}
+
+/** Saldo previsto até dezembro: último saldo total + média do movimento líquido dos últimos k meses com extrato. */
+export function previsaoSaldos(s: SaldoMes[], k = 3) {
+  const com = s.filter((x) => x.total && x.total.saldoFinal != null);
+  if (!com.length) return [];
+  const ultimo = com[com.length - 1];
+  const base = com.slice(-k);
+  const liquido = base.reduce((a, x) => a + x.total!.entradas - x.total!.saidas, 0) / base.length;
+  const out: { mes: number; saldo: number }[] = [];
+  let saldo = ultimo.total!.saldoFinal as number;
+  for (let mes = ultimo.mes + 1; mes <= 12; mes++) { saldo = r2(saldo + liquido); out.push({ mes, saldo }); }
+  return out;
 }
