@@ -16,12 +16,12 @@ describe('importação de custos fixos (Excel por comunidade)', () => {
     expect(limparRubrica('Imposto mensal renda')).toEqual({ rubrica: 'Imposto sobre a renda', confidencial: false });
   });
 
-  it('um custo por ano com valor: jan-dez, o último ano em vigor; incidência em %', () => {
+  it('um custo por ano com valor: campo ano, jan-dez (também o último ano); incidência em %', () => {
     const r = importarCustosFixos([L('Moita', 'Vencimento Pastoral (Enoque)', 0.5, 1000, 1500, 1536)], COMUNIDADES);
-    expect(r.custos.map((c) => [c.comunidadeId, c.rubrica, c.valorMensal, c.incidencia, c.inicio, c.fim, c.nivel])).toEqual([
-      ['moita', 'Vencimento Pastoral', 1000, 50, '2025-01', '2025-12', 'confidencial'],
-      ['moita', 'Vencimento Pastoral', 1500, 50, '2026-01', '2026-12', 'confidencial'],
-      ['moita', 'Vencimento Pastoral', 1536, 50, '2027-01', null, 'confidencial'],
+    expect(r.custos.map((c) => [c.comunidadeId, c.rubrica, c.ano, c.valorMensal, c.incidencia, c.inicio, c.fim, c.nivel])).toEqual([
+      ['moita', 'Vencimento Pastoral', 2025, 1000, 50, '2025-01', '2025-12', 'confidencial'],
+      ['moita', 'Vencimento Pastoral', 2026, 1500, 50, '2026-01', '2026-12', 'confidencial'],
+      ['moita', 'Vencimento Pastoral', 2027, 1536, 50, '2027-01', '2027-12', 'confidencial'],
     ]);
     expect(r.custos[0].notas).toMatch(/partilhado: 50%/i);
     expect(JSON.stringify(r.custos)).not.toContain('Enoque');

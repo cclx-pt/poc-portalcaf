@@ -125,6 +125,8 @@ export interface CustoFixo {
   incidencia?: number;
   /** "geral": custo partilhado por toda a CCLX, repartido pelas comunidades conforme a assistência. Por omissão, local. */
   ambito?: 'local' | 'geral';
+  /** Ano a que a linha pertence; início e fim são meses desse ano. Linhas antigas sem ano usam o ano do início. */
+  ano?: number;
   inicio: string; // YYYY-MM
   fim: string | null;
   nivel: Nivel;

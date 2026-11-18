@@ -5,6 +5,7 @@ import { apagar, auditar, gravar, listarComunidades, listarCustosFixos } from '.
 import { eur, periodo, r2 } from '../lib/format';
 import { custoAtivo, custoNoAno, mesesDecorridos, valorImputado } from '../lib/resumos';
 import { importarCustosFixos, type ResultadoImportacao } from '../lib/custosImport';
+import { anoDoCusto, copiarAno } from '../lib/custosAno';
 import { lerFicheiro } from '../lib/ficheiros';
 import { NIVEIS, NIVEL_LABEL, type CustoFixo, type Nivel } from '../lib/types';
 import { hoje } from '../lib/format';
@@ -13,7 +14,9 @@ import { hoje } from '../lib/format';
 const mesPT = (p?: string | null) => (p ? p.split('-').reverse().join('/') : '');
 const pct = (v?: number) => `${(v ?? 100).toLocaleString('pt-PT', { maximumFractionDigits: 2 })}%`;
 
-const vazio = (comunidadeId: string): CustoFixo => ({ id: '', comunidadeId, rubrica: '', valorMensal: 0, inicio: `${new Date().getFullYear()}-01`, fim: null, nivel: 'privado' });
+const vazio = (comunidadeId: string, ano: number): CustoFixo => ({ id: '', comunidadeId, rubrica: '', valorMensal: 0, ano, inicio: `${ano}-01`, fim: `${ano}-12`, nivel: 'privado' });
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const mm = (p?: string | null, omissao = '12') => (p ? p.slice(5, 7) : omissao);
 const NIVEL_SUGERIDO: Record<string, Nivel> = { vencimentos: 'confidencial', 'seguranca social': 'confidencial', renda: 'privado', luz: 'publico', agua: 'publico', internet: 'publico' };
 
 export default function CustosFixos() {
@@ -32,6 +35,41 @@ export default function CustosFixos() {
   const ficheiro = useRef<HTMLInputElement>(null);
   const [imp, setImp] = useState<(ResultadoImportacao & { nome: string; substituir: boolean }) | null>(null);
   const [aImportar, setAImportar] = useState(false);
+  const [copia, setCopia] = useState<{ origem: number; destino: number; atualizacao: string; todas: boolean; substituir: boolean } | null>(null);
+  const [aCopiar, setACopiar] = useState(false);
+  const comsCopia = copia ? (copia.todas || comunidade === 'todas' ? null : [comunidade]) : null;
+  let previa: ReturnType<typeof copiarAno> | null = null;
+  let erroCopia: string | null = null;
+  if (copia) {
+    try { previa = copiarAno(cf.dados ?? [], { origem: copia.origem, destino: copia.destino, atualizacao: Number(copia.atualizacao.replace(',', '.')) || 0, comunidades: comsCopia }, coms.dados ?? []); }
+    catch (e) { erroCopia = mensagemErro(e); }
+  }
+  const comsPrevia = new Set((previa?.novos ?? []).map((c) => c.comunidadeId));
+  const existentesDestino = copia ? (cf.dados ?? []).filter((c) => anoDoCusto(c) === copia.destino && comsPrevia.has(c.comunidadeId)) : [];
+  async function confirmarCopia() {
+    if (!copia || !previa) return;
+    setACopiar(true);
+    try {
+      const novos = new Set(previa.novos.map((c) => c.id));
+      if (copia.substituir) for (const c of existentesDestino) if (!novos.has(c.id)) await apagar('custos_fixos', c.id);
+      for (let i = 0; i < previa.novos.length; i += 20) await Promise.all(previa.novos.slice(i, i + 20).map((c) => gravar('custos_fixos', c)));
+      await auditar(acesso!.email, 'copiar custos fixos', `${copia.origem} → ${copia.destino}: ${previa.novos.length} linhas, atualização ${copia.atualizacao || 0}%${comsCopia ? ` (${comsCopia.map((c) => nomes.get(c) ?? c).join(', ')})` : ''}; ${copia.substituir ? existentesDestino.length : 0} substituídas`);
+      setMsg(`Criadas ${previa.novos.length} linhas de ${copia.destino} com base em ${copia.origem}. Recalcule os resumos (Configuração ou Calcular) para atualizar os mapas.`);
+      setCopia(null); await cf.recarregar();
+    } catch (e) { setMsg(mensagemErro(e)); }
+    finally { setACopiar(false); }
+  }
+  async function apagarAno() {
+    const alvo = linhas;
+    const onde = comunidade === 'todas' ? 'todas as comunidades' : nomes.get(comunidade) ?? comunidade;
+    if (!alvo.length || !confirm(`Apagar ${alvo.length} linhas de custos fixos de ${ano} (${onde})? Esta ação não se pode desfazer.`)) return;
+    try {
+      for (let i = 0; i < alvo.length; i += 20) await Promise.all(alvo.slice(i, i + 20).map((c) => apagar('custos_fixos', c.id)));
+      await auditar(acesso!.email, 'apagar custos fixos do ano', `${ano} (${onde}): ${alvo.length} linhas`);
+      setMsg(`Apagadas ${alvo.length} linhas de ${ano}. Recalcule os resumos (Configuração ou Calcular) para atualizar os mapas.`);
+      await cf.recarregar();
+    } catch (e) { setMsg(mensagemErro(e)); }
+  }
 
   async function lerImportacao(f: File) {
     setMsg(null);
@@ -63,7 +101,7 @@ export default function CustosFixos() {
     try {
       const id = edit.id || `${edit.comunidadeId}-${edit.rubrica.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${edit.inicio}`;
       const incidencia = Math.min(100, Math.max(0, r2(Number(edit.incidencia ?? 100))));
-      await gravar('custos_fixos', { ...edit, id, valorMensal: r2(Number(edit.valorMensal)), incidencia, ambito: edit.ambito ?? 'local', fim: edit.fim || null });
+      await gravar('custos_fixos', { ...edit, id, ano: anoDoCusto(edit), valorMensal: r2(Number(edit.valorMensal)), incidencia, ambito: edit.ambito ?? 'local', fim: edit.fim || `${anoDoCusto(edit)}-12` });
       await auditar(acesso!.email, 'custo fixo', `${edit.comunidadeId} · ${edit.rubrica} · ${edit.valorMensal} € × ${pct(incidencia)} desde ${mesPT(edit.inicio)}`);
       setEdit(null); await cf.recarregar();
     } catch (e) { setMsg(mensagemErro(e)); }
@@ -78,21 +116,24 @@ export default function CustosFixos() {
       <div className="linha" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <h1>Custos fixos por comunidade</h1>
-          <p className="muted">Uma linha por rubrica e período. Quando um valor muda a meio do ano, feche a linha anterior (mês de fim) e crie uma nova. Os vencimentos e a Segurança Social são confidenciais. A <b>incidência</b> é a parte do custo imputada a esta comunidade (custos partilhados); nos resultados entra o valor imputado. Os custos de âmbito <b>geral</b> repartem-se pelas comunidades conforme a assistência.</p>
+          <p className="muted">Uma linha por rubrica e ano (mostra o ano escolhido no filtro). Quando um valor muda a meio do ano, feche a linha anterior (mês de fim) e crie uma nova no mesmo ano. Para preparar um ano novo, use <b>Copiar ano</b>. Os vencimentos e a Segurança Social são confidenciais. A <b>incidência</b> é a parte do custo imputada a esta comunidade (custos partilhados); nos resultados entra o valor imputado. Os custos de âmbito <b>geral</b> repartem-se pelas comunidades conforme a assistência.</p>
         </div>
         {pode('custos') && <div className="acoes">
           <button className="sec" onClick={() => ficheiro.current?.click()}>Importar do Excel</button>
           <input ref={ficheiro} type="file" accept=".xlsx,.xls,.csv" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void lerImportacao(f); }} />
-          <button onClick={() => setEdit(vazio(comunidade === 'todas' ? (acesso!.comunidades[0] === '*' ? 'caldas-da-rainha' : acesso!.comunidades[0]) : comunidade))}>Nova linha</button>
+          <button className="sec" onClick={() => setCopia({ origem: ano, destino: ano + 1, atualizacao: '', todas: comunidade === 'todas', substituir: false })}>Copiar ano…</button>
+          {acesso!.papel === 'master' && <button className="sec" disabled={!linhas.length} onClick={() => void apagarAno()}>Apagar linhas de {ano}</button>}
+          <button onClick={() => setEdit(vazio(comunidade === 'todas' ? (acesso!.comunidades[0] === '*' ? 'caldas-da-rainha' : acesso!.comunidades[0]) : comunidade, ano))}>Nova linha</button>
         </div>}
       </div>
       {msg && <div className="aviso">{msg}</div>}
       <Estado aCarregar={cf.aCarregar} erro={cf.erro} vazio={!linhas.length} />
       {!!linhas.length && (
         <div className="tabela"><table>
-          <thead><tr><th>Comunidade</th><th>Rubrica</th><th>Nível</th><th className="num">Mensal (total)</th><th className="num">Incidência</th><th className="num">Imputado</th><th>Âmbito</th><th>Início</th><th>Fim</th><th className="num">{ano} (até hoje)</th><th className="num">{ano} (ano)</th><th /></tr></thead>
+          <thead><tr><th>Ano</th><th>Comunidade</th><th>Rubrica</th><th>Nível</th><th className="num">Mensal (total)</th><th className="num">Incidência</th><th className="num">Imputado</th><th>Âmbito</th><th>Início</th><th>Fim</th><th className="num">{ano} (até hoje)</th><th className="num">{ano} (ano)</th><th /></tr></thead>
           <tbody>{linhas.map((c) => (
             <tr key={c.id}>
+              <td>{anoDoCusto(c)}</td>
               <td>{nomes.get(c.comunidadeId) ?? c.comunidadeId}</td>
               <td>{c.rubrica}{c.notas && <div className="muted">{c.notas}</div>}</td>
               <td><span className={'etiqueta' + (c.nivel === 'confidencial' ? ' preta' : '')}>{NIVEL_LABEL[c.nivel]}</span></td>
@@ -102,12 +143,12 @@ export default function CustosFixos() {
               <td>{pode('custos') && <><button className="link" onClick={() => setEdit(c)}>Editar</button> · <button className="link" onClick={() => remover(c)}>Remover</button></>}</td>
             </tr>
           ))}</tbody>
-          <tfoot><tr><td colSpan={9}>Total (imputado)</td><td className="num">{eur(r2(linhas.reduce((s, c) => s + ateHoje(c), 0)))}</td><td className="num">{eur(r2(linhas.reduce((s, c) => s + noAno(c), 0)))}</td><td /></tr></tfoot>
+          <tfoot><tr><td colSpan={10}>Total (imputado)</td><td className="num">{eur(r2(linhas.reduce((s, c) => s + ateHoje(c), 0)))}</td><td className="num">{eur(r2(linhas.reduce((s, c) => s + noAno(c), 0)))}</td><td /></tr></tfoot>
         </table></div>
       )}
       {imp && (
         <Modal titulo={`Importar custos fixos: ${imp.nome}`} onFechar={() => setImp(null)}>
-          <p className="small">{imp.custos.length} custos fixos de {comsImp.size} comunidades, anos {imp.anos.join(', ')}. Cada ano vale de janeiro a dezembro; o último ({imp.anos[imp.anos.length - 1]}) fica em vigor. Os nomes das pessoas foram retirados das rubricas.</p>
+          <p className="small">{imp.custos.length} custos fixos de {comsImp.size} comunidades, anos {imp.anos.join(', ')}. Cada ano gera linhas desse ano, de janeiro a dezembro. Os nomes das pessoas foram retirados das rubricas.</p>
           {imp.avisos.length > 0 && <div className="aviso"><b>Avisos ({imp.avisos.length})</b><ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{imp.avisos.map((a) => <li key={a}>{a}</li>)}</ul></div>}
           <label className="opcao"><input type="checkbox" checked={imp.substituir} onChange={(e) => setImp({ ...imp, substituir: e.target.checked })} /> Substituir os custos fixos atuais destas comunidades ({(cf.dados ?? []).filter((c) => comsImp.has(c.comunidadeId)).length} linhas)</label>
           <div className="tabela" style={{ maxHeight: '50vh', overflowY: 'auto' }}><table>
@@ -122,6 +163,34 @@ export default function CustosFixos() {
             <button disabled={aImportar} onClick={() => void confirmarImportacao()}>{aImportar ? 'A importar…' : `Importar ${imp.custos.length} custos fixos`}</button>
             <button className="sec" onClick={() => setImp(null)}>Cancelar</button>
           </div>
+        </Modal>
+      )}
+      {copia && (
+        <Modal titulo="Copiar custos fixos de um ano para outro" onFechar={() => setCopia(null)}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+            <label className="campo">Ano de origem<input type="number" inputMode="numeric" value={copia.origem} onChange={(e) => setCopia({ ...copia, origem: Number(e.target.value) || copia.origem })} /></label>
+            <label className="campo">Ano de destino<input type="number" inputMode="numeric" value={copia.destino} onChange={(e) => setCopia({ ...copia, destino: Number(e.target.value) || copia.destino })} /></label>
+            <label className="campo">Atualização (%)<input inputMode="decimal" placeholder="0" value={copia.atualizacao} onChange={(e) => setCopia({ ...copia, atualizacao: e.target.value })} /></label>
+          </div>
+          {comunidade !== 'todas' && <label className="opcao"><input type="checkbox" checked={copia.todas} onChange={(e) => setCopia({ ...copia, todas: e.target.checked })} /> {`Todas as comunidades (senão, só ${nomes.get(comunidade) ?? comunidade})`}</label>}
+          <p className="small muted">Por comunidade e rubrica copia-se a linha mais recente do ano de origem, como linha de janeiro a dezembro do ano de destino, com os valores atualizados pela percentagem indicada.</p>
+          {erroCopia && <div className="aviso">{erroCopia}</div>}
+          {previa && previa.avisos.length > 0 && <div className="aviso"><b>Avisos ({previa.avisos.length})</b><ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{previa.avisos.map((a) => <li key={a}>{a}</li>)}</ul></div>}
+          {existentesDestino.length > 0 && <label className="opcao"><input type="checkbox" checked={copia.substituir} onChange={(e) => setCopia({ ...copia, substituir: e.target.checked })} /> {`Substituir as ${existentesDestino.length} linhas que já existem em ${copia.destino} nestas comunidades`}</label>}
+          {previa && (previa.novos.length ? (
+            <div className="tabela" style={{ maxHeight: '45vh', overflowY: 'auto' }}><table>
+              <thead><tr><th>Comunidade</th><th>Rubrica</th><th className="num">Mensal</th><th className="num">Incidência</th><th className="num">Imputado</th><th>Âmbito</th></tr></thead>
+              <tbody>{previa.novos.map((c) => (
+                <tr key={c.id}><td>{nomes.get(c.comunidadeId) ?? c.comunidadeId}</td><td>{c.rubrica}</td><td className="num">{eur(c.valorMensal)}</td><td className="num">{pct(c.incidencia)}</td><td className="num">{eur(valorImputado(c))}</td><td className="small">{c.ambito === 'geral' ? 'Geral' : 'Local'}</td></tr>
+              ))}</tbody>
+              <tfoot><tr><td colSpan={4}>Total mensal (imputado)</td><td className="num">{eur(r2(previa.novos.reduce((s, c) => s + valorImputado(c), 0)))}</td><td /></tr></tfoot>
+            </table></div>
+          ) : <p className="muted">{`Não há linhas de ${copia.origem} para copiar.`}</p>)}
+          <div className="acoes" style={{ marginTop: 12 }}>
+            <button disabled={aCopiar || !previa?.novos.length || (existentesDestino.length > 0 && !copia.substituir)} onClick={() => void confirmarCopia()}>{aCopiar ? 'A copiar…' : `Criar ${previa?.novos.length ?? 0} linhas em ${copia.destino}`}</button>
+            <button className="sec" onClick={() => setCopia(null)}>Cancelar</button>
+          </div>
+          {existentesDestino.length > 0 && !copia.substituir && <p className="small muted">{`${copia.destino} já tem linhas nestas comunidades: marque "Substituir" para continuar.`}</p>}
         </Modal>
       )}
       {edit && (
@@ -153,12 +222,17 @@ export default function CustosFixos() {
               <label className="campo">Nível de privacidade
                 <select value={edit.nivel} onChange={(e) => setEdit({ ...edit, nivel: e.target.value as Nivel })}>{NIVEIS.map((n) => <option key={n} value={n}>{NIVEL_LABEL[n]}</option>)}</select>
               </label>
-              <label className="campo">Início (mês)<input type="month" value={edit.inicio} onChange={(e) => setEdit({ ...edit, inicio: e.target.value })} /></label>
-              <label className="campo">Fim (mês, vazio = em vigor)<input type="month" value={edit.fim ?? ''} onChange={(e) => setEdit({ ...edit, fim: e.target.value || null })} /></label>
+              <label className="campo">Ano *<input type="number" inputMode="numeric" min={2000} max={2100} value={anoDoCusto(edit)} onChange={(e) => { const a = Number(e.target.value) || anoDoCusto(edit); setEdit({ ...edit, ano: a, inicio: `${a}-${mm(edit.inicio, '01')}`, fim: `${a}-${mm(edit.fim)}` }); }} /></label>
+              <label className="campo">Mês de início
+                <select value={mm(edit.inicio, '01')} onChange={(e) => setEdit({ ...edit, ano: anoDoCusto(edit), inicio: `${anoDoCusto(edit)}-${e.target.value}` })}>{MESES.map((m, i) => <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>)}</select>
+              </label>
+              <label className="campo">Mês de fim
+                <select value={mm(edit.fim)} onChange={(e) => setEdit({ ...edit, ano: anoDoCusto(edit), fim: `${anoDoCusto(edit)}-${e.target.value}` })}>{MESES.map((m, i) => <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>)}</select>
+              </label>
               <label className="campo" style={{ gridColumn: '1 / -1' }}>Notas<input value={edit.notas ?? ''} onChange={(e) => setEdit({ ...edit, notas: e.target.value })} /></label>
             </div>
             <div className="acoes" style={{ marginTop: 14 }}>
-              <button disabled={!edit.rubrica || !edit.inicio} onClick={guardar}>Guardar</button>
+              <button disabled={!edit.rubrica || !edit.inicio || (!!edit.fim && edit.fim < edit.inicio)} onClick={guardar}>Guardar</button>
               <button className="sec" onClick={() => setEdit(null)}>Cancelar</button>
             </div>
           </div>
