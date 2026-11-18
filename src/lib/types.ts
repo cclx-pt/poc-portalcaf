@@ -144,6 +144,13 @@ export interface CustoFixo {
   incidencia?: number;
   /** "geral": custo partilhado por toda a CCLX, repartido pelas comunidades conforme a assistência. Por omissão, local. */
   ambito?: 'local' | 'geral';
+  /** Categoria do plano financeiro (nome, ex.: "02.01 Rendas e condomínios"). Sem ela, a rubrica classifica pelo nome. */
+  categoria?: string;
+  /** Dimensões do plano financeiro (nomes ou códigos das dimensões configuradas). */
+  contaAnalitica?: string;
+  fornecedor?: string;
+  centroCusto?: string;
+  projeto?: string;
   /** Ano a que a linha pertence; início e fim são meses desse ano. Linhas antigas sem ano usam o ano do início. */
   ano?: number;
   inicio: string; // YYYY-MM

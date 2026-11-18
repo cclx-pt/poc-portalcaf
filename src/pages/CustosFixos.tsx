@@ -3,7 +3,8 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { CORES } from '../lib/cores';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
-import { apagar, auditar, gravar, listarComunidades, listarCustosFixos } from '../lib/db';
+import { apagar, auditar, gravar, listarCategorias, listarComunidades, listarCustosFixos, listarDimensoes } from '../lib/db';
+import { proporClassificacaoCusto, propostasCustos } from '../lib/custosPlano';
 import { eur, eurK, periodo, r2 } from '../lib/format';
 import { custoAtivo, custoNoAno, mesesDecorridos, valorImputado } from '../lib/resumos';
 import { COMUNIDADE_GERAL, importarCustosFixos, type ResultadoImportacao } from '../lib/custosImport';
@@ -26,6 +27,25 @@ export default function CustosFixos() {
   const { ano, comunidade } = useFiltros();
   const coms = useCarregar(listarComunidades, []);
   const cf = useCarregar(() => listarCustosFixos(acesso!), [acesso?.email]);
+  const cats = useCarregar(listarCategorias, []);
+  const dims = useCarregar(listarDimensoes, []);
+  const catsDespesa = (cats.dados ?? []).filter((c) => c.tipo === 'saida' && c.codigo && c.ativo !== false);
+  const dimsDe = (t: 'centro' | 'projeto' | 'fornecedor' | 'conta') => (dims.dados ?? []).filter((d) => d.tipo === t && d.ativo !== false);
+  const nomeCentro = (cod?: string) => dimsDe('centro').find((d) => d.codigo === cod)?.nome ?? cod;
+  const [classificar, setClassificar] = useState(false);
+  const [aClassificar, setAClassificar] = useState(false);
+  const propostas = classificar ? propostasCustos(cf.dados ?? [], cats.dados ?? []) : [];
+  const comProposta = propostas.filter((p) => p.proposta.categoria);
+  async function aplicarPropostas() {
+    setAClassificar(true);
+    try {
+      for (let i = 0; i < comProposta.length; i += 20) await Promise.all(comProposta.slice(i, i + 20).map((p) => gravar('custos_fixos', { ...p.custo, ...p.proposta })));
+      await auditar(acesso!.email, 'classificar custos fixos com o plano', `${comProposta.length} linhas`);
+      setMsg(`${comProposta.length} custos fixos classificados com o plano financeiro.${propostas.length - comProposta.length ? ` ${propostas.length - comProposta.length} ficaram sem proposta: classifique-os em Editar.` : ''} Recalcule os resumos para atualizar os mapas.`);
+      setClassificar(false); await cf.recarregar();
+    } catch (e) { setMsg(mensagemErro(e)); }
+    finally { setAClassificar(false); }
+  }
   const [edit, setEdit] = useState<CustoFixo | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
@@ -130,6 +150,7 @@ export default function CustosFixos() {
         {pode('custos') && <div className="acoes">
           <button className="sec" onClick={() => ficheiro.current?.click()}>Importar do Excel</button>
           <input ref={ficheiro} type="file" accept=".xlsx,.xls,.csv" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void lerImportacao(f); }} />
+          <button className="sec" onClick={() => setClassificar(true)} title="Propõe a categoria do plano, o fornecedor e o centro de custo das linhas ainda sem categoria">Classificar com o plano</button>
           <button className="sec" onClick={() => setCopia({ origem: ano, destino: ano + 1, atualizacao: '', todas: comunidade === 'todas', substituir: false })}>Copiar ano…</button>
           {acesso!.papel === 'master' && <button className="sec" disabled={!anosComLinhas.length} onClick={() => setApagarSel({ ano: '', confirmo: false })}>Apagar ano…</button>}
           <button onClick={() => setEdit(vazio(comunidade === 'todas' ? (acesso!.comunidades[0] === '*' ? 'caldas-da-rainha' : acesso!.comunidades[0]) : comunidade, ano))}>Nova linha</button>
@@ -158,7 +179,9 @@ export default function CustosFixos() {
             <tr key={c.id}>
               <td>{anoDoCusto(c)}</td>
               <td>{nomes.get(c.comunidadeId) ?? c.comunidadeId}</td>
-              <td>{c.rubrica}{c.notas && <div className="muted">{c.notas}</div>}</td>
+              <td>{c.rubrica}
+                <div className="small muted">{c.categoria ? [c.categoria, c.fornecedor, nomeCentro(c.centroCusto), c.projeto].filter(Boolean).join(' · ') : 'Sem categoria do plano'}</div>
+                {c.notas && <div className="muted">{c.notas}</div>}</td>
               <td><span className={'etiqueta' + (c.nivel === 'confidencial' ? ' preta' : '')}>{NIVEL_LABEL[c.nivel]}</span></td>
               <td className="num">{eur(c.valorMensal)}</td><td className="num">{pct(c.incidencia)}</td><td className="num">{eur(valorImputado(c))}</td>
               <td className="small">{c.ambito === 'geral' ? 'Geral' : 'Local'}</td><td>{mesPT(c.inicio)}</td><td>{c.fim ? mesPT(c.fim) : 'em vigor'}</td>
@@ -186,6 +209,24 @@ export default function CustosFixos() {
             <button disabled={aImportar} onClick={() => void confirmarImportacao()}>{aImportar ? 'A importar…' : `Importar ${imp.custos.length} custos fixos`}</button>
             <button className="sec" onClick={() => setImp(null)}>Cancelar</button>
           </div>
+        </Modal>
+      )}
+      {classificar && (
+        <Modal titulo="Classificar os custos fixos com o plano financeiro" onFechar={() => setClassificar(false)}>
+          {!catsDespesa.length ? <div className="aviso">O plano financeiro ainda não está carregado. Carregue-o na Configuração.</div> : <>
+            <p className="small">{`${propostas.length} linhas de todos os anos ainda sem categoria do plano; ${comProposta.length} com proposta. As linhas sem proposta classificam-se em Editar.`}</p>
+            <div className="tabela" style={{ maxHeight: '50vh', overflowY: 'auto' }}><table>
+              <thead><tr><th>Ano</th><th>Comunidade</th><th>Rubrica atual</th><th>Categoria proposta</th><th>Fornecedor</th><th>Centro de custo</th></tr></thead>
+              <tbody>{propostas.map(({ custo: c, proposta: p }) => (
+                <tr key={c.id}><td>{anoDoCusto(c)}</td><td>{nomes.get(c.comunidadeId) ?? c.comunidadeId}</td><td>{c.rubrica}</td>
+                  <td>{p.categoria ?? <span className="muted">sem proposta</span>}</td><td>{p.fornecedor ?? ''}</td><td>{nomeCentro(p.centroCusto) ?? ''}</td></tr>
+              ))}</tbody>
+            </table></div>
+            <div className="acoes" style={{ marginTop: 12 }}>
+              <button disabled={aClassificar || !comProposta.length} onClick={() => void aplicarPropostas()}>{aClassificar ? 'A classificar…' : `Aplicar ${comProposta.length} propostas`}</button>
+              <button className="sec" onClick={() => setClassificar(false)}>Cancelar</button>
+            </div>
+          </>}
         </Modal>
       )}
       {apagarSel && (
@@ -247,9 +288,38 @@ export default function CustosFixos() {
               <label className="campo">Rubrica
                 <input value={edit.rubrica} list="rubricas" onChange={(e) => {
                   const r = e.target.value; const k = r.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-                  setEdit({ ...edit, rubrica: r, nivel: edit.id ? edit.nivel : NIVEL_SUGERIDO[k] ?? edit.nivel });
+                  const prop = edit.categoria ? {} : proporClassificacaoCusto(r, cats.dados ?? []);
+                  setEdit({ ...edit, ...prop, rubrica: r, nivel: edit.id ? edit.nivel : NIVEL_SUGERIDO[k] ?? edit.nivel });
                 }} />
                 <datalist id="rubricas">{['Renda', 'Vencimentos', 'Segurança Social', 'Luz', 'Água', 'Internet', 'Seguros', 'Condomínio'].map((r) => <option key={r} value={r} />)}</datalist>
+              </label>
+              <label className="campo">Categoria do plano
+                <select value={edit.categoria ?? ''} onChange={(e) => setEdit({ ...edit, categoria: e.target.value || undefined, contaAnalitica: undefined })}>
+                  <option value="">—</option>
+                  {catsDespesa.map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                </select>
+              </label>
+              <label className="campo">Conta analítica
+                <select value={edit.contaAnalitica ?? ''} onChange={(e) => setEdit({ ...edit, contaAnalitica: e.target.value || undefined })}>
+                  <option value="">—</option>
+                  {dimsDe('conta').filter((d) => !edit.categoria || !d.categoria || edit.categoria.startsWith(d.categoria)).map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
+                </select>
+              </label>
+              <label className="campo">Fornecedor
+                <input value={edit.fornecedor ?? ''} list="fornecedores" onChange={(e) => setEdit({ ...edit, fornecedor: e.target.value || undefined })} />
+                <datalist id="fornecedores">{dimsDe('fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist>
+              </label>
+              <label className="campo">Centro de custo
+                <select value={edit.centroCusto ?? ''} onChange={(e) => setEdit({ ...edit, centroCusto: e.target.value || undefined })}>
+                  <option value="">—</option>
+                  {dimsDe('centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
+                </select>
+              </label>
+              <label className="campo">Projeto ou evento
+                <select value={edit.projeto ?? ''} onChange={(e) => setEdit({ ...edit, projeto: e.target.value || undefined })}>
+                  <option value="">—</option>
+                  {dimsDe('projeto').map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
+                </select>
               </label>
               <label className="campo">Valor mensal (€)<input type="number" inputMode="decimal" step="0.01" value={edit.valorMensal} onChange={(e) => setEdit({ ...edit, valorMensal: Number(e.target.value) })} /></label>
               <label className="campo">Incidência (%)<input type="number" inputMode="decimal" min={0} max={100} step="0.01" value={edit.incidencia ?? 100} onChange={(e) => setEdit({ ...edit, incidencia: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
