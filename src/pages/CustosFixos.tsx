@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { apagar, auditar, gravar, listarComunidades, listarCustosFixos } from '../lib/db';
 import { eur, periodo, r2 } from '../lib/format';
-import { custoAtivo, mesesDecorridos, valorImputado } from '../lib/resumos';
+import { custoAtivo, custoNoAno, mesesDecorridos, valorImputado } from '../lib/resumos';
 import { importarCustosFixos, type ResultadoImportacao } from '../lib/custosImport';
 import { lerFicheiro } from '../lib/ficheiros';
 import { NIVEIS, NIVEL_LABEL, type CustoFixo, type Nivel } from '../lib/types';
@@ -24,7 +24,7 @@ export default function CustosFixos() {
   const [edit, setEdit] = useState<CustoFixo | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
-  const linhas = (cf.dados ?? []).filter((c) => comunidade === 'todas' || c.comunidadeId === comunidade)
+  const linhas = (cf.dados ?? []).filter((c) => (comunidade === 'todas' || c.comunidadeId === comunidade) && custoNoAno(c, ano))
     .sort((a, b) => (nomes.get(a.comunidadeId) ?? '').localeCompare(nomes.get(b.comunidadeId) ?? '') || a.rubrica.localeCompare(b.rubrica) || a.inicio.localeCompare(b.inicio));
   const ate = mesesDecorridos(ano, hoje());
   const noAno = (c: CustoFixo) => r2(Array.from({ length: 12 }, (_, i) => (custoAtivo(c, periodo(ano, i + 1)) ? valorImputado(c) : 0)).reduce((s, v) => s + v, 0));

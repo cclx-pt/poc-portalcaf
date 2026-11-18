@@ -80,6 +80,11 @@ export function custoAtivo(c: CustoFixo, p: string) {
   return c.inicio <= p && (!c.fim || c.fim >= p);
 }
 
+/** A linha de custo fixo está ativa em pelo menos um mês do ano. */
+export function custoNoAno(c: CustoFixo, ano: number) {
+  return c.inicio <= `${ano}-12` && (!c.fim || c.fim >= `${ano}-01`);
+}
+
 export function comunidadeAtiva(c: Comunidade, p: string) {
   const inicio = c.inicio ? c.inicio.slice(0, 7) : '0000-00';
   const fim = c.fim ? c.fim.slice(0, 7) : '9999-99';
