@@ -1,12 +1,58 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Banknote, Building2, CalendarCheck, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Building2, CalendarCheck, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { useCarregar, useFiltros, Rodape } from './ui';
 import { listarComunidades } from '../lib/db';
 import { NIVEL_LABEL, PAPEL_LABEL } from '../lib/types';
 
 const BASE = import.meta.env.BASE_URL;
+
+type Perm = { pode: (a: Parameters<ReturnType<typeof useAuth>['pode']>[0]) => boolean; temNivel: (n: 'privado' | 'confidencial') => boolean };
+interface Item { to: string; nome: string; Icone: LucideIcon; ver: (p: Perm) => boolean; end?: boolean; etiqueta?: string }
+const privado = (p: Perm) => p.temNivel('privado');
+/** Menu lateral, por grupos. Cada grupo abre e fecha; o da página atual fica sempre aberto. */
+const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
+  { id: 'inicio', itens: [{ to: '/', nome: 'Painel', Icone: LayoutDashboard, ver: () => true, end: true }] },
+  { id: 'dados', titulo: 'Dados (Jotform)', itens: [
+    { to: '/entradas-conjunto', nome: 'Entradas: contribuições e depósitos', Icone: Wallet, ver: privado },
+    { to: '/entradas', nome: 'Contribuições', Icone: HandCoins, ver: privado },
+    { to: '/depositos', nome: 'Depósitos de coletas', Icone: Banknote, ver: privado },
+    { to: '/reembolsos', nome: 'Reembolsos e despesas', Icone: Receipt, ver: privado },
+  ] },
+  { id: 'registos', titulo: 'Registos', itens: [
+    { to: '/registos/presencas', nome: 'Presenças por evento', Icone: CalendarCheck, ver: privado, end: true },
+    { to: '/registos/presencas/novo', nome: 'Registar presenças', Icone: ClipboardList, ver: (p) => privado(p) && p.pode('registar') },
+    { to: '/registos/batismos', nome: 'Batismos', Icone: Droplets, ver: privado, etiqueta: 'em desenvolvimento' },
+    { to: '/registos/conversoes', nome: 'Conversões', Icone: HeartHandshake, ver: privado, etiqueta: 'em desenvolvimento' },
+  ] },
+  { id: 'analise', titulo: 'Análise', itens: [
+    { to: '/analise/resultados', nome: 'Demonstração de resultados', Icone: Scale, ver: privado },
+    { to: '/analise/comparacao', nome: 'Comparação entre comunidades', Icone: ChartColumn, ver: privado },
+    { to: '/analise/relatorio', nome: 'Relatório custos x entradas', Icone: FileText, ver: privado },
+  ] },
+  { id: 'tesouraria', titulo: 'Tesouraria', itens: [
+    { to: '/bancos', nome: 'Bancos e bolsa geral', Icone: Landmark, ver: (p) => p.pode('bancos') },
+    { to: '/custos-fixos', nome: 'Custos fixos', Icone: Building2, ver: privado },
+    { to: '/orcamento', nome: 'Orçamento', Icone: PiggyBank, ver: privado },
+    { to: '/fecho', nome: 'Fecho mensal e publicação', Icone: LockKeyhole, ver: (p) => p.pode('publicar') },
+    { to: '/exportacao', nome: 'Exportação contabilista', Icone: FileSpreadsheet, ver: (p) => p.pode('exportar') },
+  ] },
+  { id: 'admin', titulo: 'Administração', itens: [
+    { to: '/configuracao', nome: 'Configuração', Icone: Settings, ver: (p) => p.pode('configurar') },
+    { to: '/utilizadores', nome: 'Utilizadores', Icone: Users, ver: (p) => p.pode('utilizadores') },
+    { to: '/auditoria', nome: 'Auditoria', Icone: ShieldCheck, ver: (p) => p.pode('auditoria') },
+  ] },
+];
+
+const CHAVE_MENU = 'caf-portal:menu';
+function lerPreferencias(): { recolhido: boolean; abertos: string[] } {
+  try { const v = JSON.parse(localStorage.getItem(CHAVE_MENU) ?? '{}'); return { recolhido: !!v.recolhido, abertos: Array.isArray(v.abertos) ? v.abertos : [] }; }
+  catch { return { recolhido: false, abertos: [] }; }
+}
+function gravarPreferencias(p: { recolhido: boolean; abertos: string[] }) {
+  try { localStorage.setItem(CHAVE_MENU, JSON.stringify(p)); } catch { /* sem armazenamento: fica só nesta visita */ }
+}
 
 export default function Layout() {
   const { acesso, sair, pode, temNivel } = useAuth();
@@ -17,50 +63,58 @@ export default function Layout() {
   const [menuAberto, setMenuAberto] = useState(false);
   const local = useLocation();
   useEffect(() => { setMenuAberto(false); }, [local.pathname]);
+  // Computador: painel recolhível (só ícones) e grupos que abrem e fecham; a escolha fica guardada neste browser.
+  const [pref, setPref] = useState(lerPreferencias);
+  const recolhido = pref.recolhido;
+  const gruposAbertos = pref.abertos;
+  const mudar = (p: typeof pref) => { setPref(p); gravarPreferencias(p); };
+  const setRecolhido = (v: boolean) => mudar({ ...pref, recolhido: v });
+  const alternarGrupo = (id: string) => mudar({ ...pref, abertos: gruposAbertos.includes(id) ? gruposAbertos.filter((x) => x !== id) : [...gruposAbertos, id] });
+  const perm: Perm = { pode, temNivel };
+  const eAtivo = (to: string) => (to === '/' ? local.pathname === '/' : local.pathname === to || local.pathname.startsWith(`${to}/`));
   const visiveis = (comunidades ?? []).filter((c) => c.ativo !== false && (acesso?.comunidades.includes('*') || acesso?.comunidades.includes(c.id)));
 
   return (
-    <div className="app">
-      <nav className="side" aria-label="Navegação principal">
+    <div className={`app${recolhido ? ' app-recolhido' : ''}`}>
+      <nav className={`side${recolhido ? ' recolhido' : ''}`} aria-label="Navegação principal">
         <div className="side-cabeca">
-          <img src={`${BASE}caf-logo-negativo.png`} alt="CAF, Conselho Administrativo e Financeiro, CCLX" />
+          <img className="logo" src={`${BASE}caf-logo-negativo.png`} alt="CAF, Conselho Administrativo e Financeiro, CCLX" />
+          <img className="simbolo" src={`${BASE}caf-simbolo-branco.svg`} alt="" aria-hidden />
+          <button className="recolher-botao" aria-label={recolhido ? 'Mostrar o menu' : 'Recolher o menu'} title={recolhido ? 'Mostrar o menu' : 'Recolher o menu'} aria-expanded={!recolhido} onClick={() => setRecolhido(!recolhido)}>
+            {recolhido ? <PanelLeftOpen size={18} aria-hidden /> : <PanelLeftClose size={18} aria-hidden />}
+          </button>
           <button className="menu-botao" aria-expanded={menuAberto} aria-controls="menu-principal" onClick={() => setMenuAberto((v) => !v)}>
             {menuAberto ? <><X size={18} aria-hidden /> Fechar</> : <><MenuIcon size={18} aria-hidden /> Menu</>}
           </button>
         </div>
         <div id="menu-principal" className={`side-links${menuAberto ? ' aberto' : ''}`}>
-        <NavLink to="/" end><LayoutDashboard className="ico" size={18} aria-hidden /><span>Painel</span></NavLink>
-        {temNivel('privado') && <>
-          <div className="grupo">Dados (Jotform)</div>
-          <NavLink to="/entradas-conjunto"><Wallet className="ico" size={18} aria-hidden /><span>Entradas: contribuições e depósitos</span></NavLink>
-          <NavLink to="/entradas"><HandCoins className="ico" size={18} aria-hidden /><span>Contribuições</span></NavLink>
-          <NavLink to="/depositos"><Banknote className="ico" size={18} aria-hidden /><span>Depósitos de coletas</span></NavLink>
-          <NavLink to="/reembolsos"><Receipt className="ico" size={18} aria-hidden /><span>Reembolsos e despesas</span></NavLink>
-        </>}
-        {temNivel('privado') && <>
-          <div className="grupo">Registos</div>
-          <NavLink to="/registos/presencas" end><CalendarCheck className="ico" size={18} aria-hidden /><span>Presenças por evento</span></NavLink>
-          {pode('registar') && <NavLink to="/registos/presencas/novo"><ClipboardList className="ico" size={18} aria-hidden /><span>Registar presenças</span></NavLink>}
-          <NavLink to="/registos/batismos"><Droplets className="ico" size={18} aria-hidden /><span>Batismos</span><span className="etiqueta-menu">em desenvolvimento</span></NavLink>
-          <NavLink to="/registos/conversoes"><HeartHandshake className="ico" size={18} aria-hidden /><span>Conversões</span><span className="etiqueta-menu">em desenvolvimento</span></NavLink>
-        </>}
-        {temNivel('privado') && <>
-          <div className="grupo">Análise</div>
-          <NavLink to="/analise/resultados"><Scale className="ico" size={18} aria-hidden /><span>Demonstração de resultados</span></NavLink>
-          <NavLink to="/analise/comparacao"><ChartColumn className="ico" size={18} aria-hidden /><span>Comparação entre comunidades</span></NavLink>
-          <NavLink to="/analise/relatorio"><FileText className="ico" size={18} aria-hidden /><span>Relatório custos x entradas</span></NavLink>
-        </>}
-        {pode('bancos') && <><div className="grupo">Tesouraria</div><NavLink to="/bancos"><Landmark className="ico" size={18} aria-hidden /><span>Bancos e bolsa geral</span></NavLink></>}
-        {temNivel('privado') && <NavLink to="/custos-fixos"><Building2 className="ico" size={18} aria-hidden /><span>Custos fixos</span></NavLink>}
-        {temNivel('privado') && <NavLink to="/orcamento"><PiggyBank className="ico" size={18} aria-hidden /><span>Orçamento</span></NavLink>}
-        {pode('publicar') && <NavLink to="/fecho"><LockKeyhole className="ico" size={18} aria-hidden /><span>Fecho mensal e publicação</span></NavLink>}
-        {pode('exportar') && <NavLink to="/exportacao"><FileSpreadsheet className="ico" size={18} aria-hidden /><span>Exportação contabilista</span></NavLink>}
-        {(pode('configurar') || pode('auditoria')) && <div className="grupo">Administração</div>}
-        {pode('configurar') && <NavLink to="/configuracao"><Settings className="ico" size={18} aria-hidden /><span>Configuração</span></NavLink>}
-        {pode('utilizadores') && <NavLink to="/utilizadores"><Users className="ico" size={18} aria-hidden /><span>Utilizadores</span></NavLink>}
-        {pode('auditoria') && <NavLink to="/auditoria"><ShieldCheck className="ico" size={18} aria-hidden /><span>Auditoria</span></NavLink>}
-        <a href={`${BASE}#/publico`} target="_blank" rel="noreferrer"><Globe className="ico" size={18} aria-hidden /><span>Página pública ↗</span></a>
-        <div className="rodape">Portal CAF · PoC</div>
+          {GRUPOS.map((g) => {
+            const itens = g.itens.filter((it) => it.ver(perm));
+            if (!itens.length) return null;
+            const ativo = itens.some((it) => eAtivo(it.to));
+            const aberto = (recolhido && !menuAberto) || !g.titulo || ativo || gruposAbertos.includes(g.id);
+            return (
+              <div key={g.id} className="grupo-menu">
+                {g.titulo && (
+                  <button className="grupo-botao" aria-expanded={aberto} aria-controls={`grupo-${g.id}`} onClick={() => !ativo && alternarGrupo(g.id)} title={ativo ? 'Contém a página atual' : undefined}>
+                    <span>{g.titulo}</span><ChevronDown className={`seta${aberto ? ' aberta' : ''}`} size={14} aria-hidden />
+                  </button>
+                )}
+                {aberto && (
+                  <div id={`grupo-${g.id}`} className="grupo-itens">
+                    {itens.map((it) => (
+                      <NavLink key={it.to} to={it.to} end={it.end} title={it.nome}>
+                        <it.Icone className="ico" size={18} aria-hidden /><span className="texto">{it.nome}</span>
+                        {it.etiqueta && <span className="etiqueta-menu">{it.etiqueta}</span>}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <a href={`${BASE}#/publico`} target="_blank" rel="noreferrer" title="Página pública"><Globe className="ico" size={18} aria-hidden /><span className="texto">Página pública ↗</span></a>
+          <div className="rodape">Portal CAF · PoC</div>
         </div>
       </nav>
       <main className="main">
