@@ -171,7 +171,7 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
     x.custosFixos = r2(x.custosFixos + valor);
     soma(x.custosRubricas, cf.nivel === 'confidencial' ? 'Outros custos de funcionamento' : cf.rubrica, valor);
     // Custo fixo confidencial: nunca aparece com a sua rubrica própria.
-    registar(cf.comunidadeId, mes, 'saida', cf.rubrica, valor, cf.nivel === 'confidencial', true, cf.ambito === 'geral' || cf.comunidadeId === 'bolsa-geral');
+    registar(cf.comunidadeId, mes, 'saida', cf.categoria || cf.rubrica, valor, cf.nivel === 'confidencial', true, cf.ambito === 'geral' || cf.comunidadeId === 'bolsa-geral');
   }
 
   // Distribuição da bolsa geral (média de adultos do mesmo mês), também por rubrica.
