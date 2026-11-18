@@ -77,6 +77,11 @@ describe('importação Jotform', () => {
     expect(r.registos.map((x) => [x.id, x.valor, x.extra?.liquido])).toEqual([['1', 50, 48.9]]);
     expect(r.naoPagas).toBe(1);
   });
+  it('reconhece os nomes reais do formulário: Pago e Valor Liquido', () => {
+    const cols = ['Submission ID', 'Submission Date', 'Valor Liquido', 'Comunidade', 'Valor (€)', 'Categoria', 'Pago'];
+    const m = sugerirMapa(FONTES.contribuir, cols);
+    expect([m.valor, m.liquido, m.pago]).toEqual(['Valor (€)', 'Valor Liquido', 'Pago']);
+  });
   it('anonimiza no nível privado', async () => {
     const m = sugerirMapa(FONTES.contribuir, Object.keys(linhas[0]));
     const { registos, rejeitadas } = mapearLinhas('contribuir', linhas, m);
