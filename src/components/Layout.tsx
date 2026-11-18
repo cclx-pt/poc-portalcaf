@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { useCarregar, useFiltros, Rodape } from './ui';
 import { listarComunidades } from '../lib/db';
@@ -11,12 +12,22 @@ export default function Layout() {
   const { ano, setAno, comunidade, setComunidade } = useFiltros();
   const { dados: comunidades } = useCarregar(listarComunidades, []);
   const anoAtual = new Date().getFullYear();
+  // Telemóvel e tablet: o menu fica recolhido atrás de um botão e fecha ao mudar de página.
+  const [menuAberto, setMenuAberto] = useState(false);
+  const local = useLocation();
+  useEffect(() => { setMenuAberto(false); }, [local.pathname]);
   const visiveis = (comunidades ?? []).filter((c) => c.ativo !== false && (acesso?.comunidades.includes('*') || acesso?.comunidades.includes(c.id)));
 
   return (
     <div className="app">
       <nav className="side" aria-label="Navegação principal">
-        <img src={`${BASE}caf-logo-negativo.png`} alt="CAF, Conselho Administrativo e Financeiro, CCLX" />
+        <div className="side-cabeca">
+          <img src={`${BASE}caf-logo-negativo.png`} alt="CAF, Conselho Administrativo e Financeiro, CCLX" />
+          <button className="menu-botao" aria-expanded={menuAberto} aria-controls="menu-principal" onClick={() => setMenuAberto((v) => !v)}>
+            {menuAberto ? '✕ Fechar' : '☰ Menu'}
+          </button>
+        </div>
+        <div id="menu-principal" className={`side-links${menuAberto ? ' aberto' : ''}`}>
         <NavLink to="/" end>Painel</NavLink>
         {temNivel('privado') && <>
           <div className="grupo">Dados (Jotform)</div>
@@ -49,6 +60,7 @@ export default function Layout() {
         {pode('auditoria') && <NavLink to="/auditoria">Auditoria</NavLink>}
         <a href={`${BASE}#/publico`} target="_blank" rel="noreferrer">Página pública ↗</a>
         <div className="rodape">Portal CAF · PoC</div>
+        </div>
       </nav>
       <main className="main">
         <div className="topo">

@@ -183,6 +183,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
         {recolhe.map(campoNum)}
       </div>
       <label className="campo" style={{ marginTop: 12 }}>Observações<textarea rows={2} value={e.observacoes ?? ''} onChange={(ev) => setE({ ...e, observacoes: ev.target.value })} /></label>
+      <p className="muted small" style={{ marginTop: 8, marginBottom: 0 }}>Campos com * são obrigatórios.{edicao ? ' A correção fica registada no registo e na auditoria (o quê, quem e quando). O Jotform não é alterado.' : ''}</p>
       <div className="acoes" style={{ marginTop: 14 }}>
         <button onClick={() => void guardar()} disabled={aGuardar}>{aGuardar ? 'A guardar…' : edicao ? 'Guardar correção' : 'Guardar registo'}</button>
         {edicao
@@ -193,7 +194,6 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
             setE(vazio(e.comunidadeId)); setMsg(null);
           }}>Limpar</button>}
       </div>
-      <p className="muted small" style={{ marginTop: 8 }}>Campos com * são obrigatórios.{edicao ? ' A correção fica registada no registo e na auditoria (o quê, quem e quando). O Jotform não é alterado.' : ''}</p>
     </div>
   );
 }
