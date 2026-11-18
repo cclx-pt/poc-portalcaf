@@ -335,3 +335,20 @@ label.campo, div.campo { font-size: 12px; font-weight: 600; }
   .recolher-botao { display: none; }
   .side-cabeca { margin-bottom: 0; }
 }
+
+/* Bancos: vista conjunta CGD + Santander, por mês */
+.barra-bancos { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.mes-nav { display: flex; gap: 6px; align-items: center; }
+.mes-nav button { padding: 0 10px; min-height: 36px; margin: 0; }
+.mes-nav select { min-height: 36px; font-weight: 600; }
+.filtro-bancos { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-banco { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--linha); background: var(--branco); border-radius: 999px; padding: 6px 12px 6px 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.chip-banco input { margin: 0; }
+.chip-banco.desligado { opacity: .5; }
+.chip-banco.desligado .logo-banco { filter: grayscale(1); }
+.logo-banco { display: inline-block; object-fit: contain; vertical-align: middle; }
+.logo-banco.vazio { border: 1px dashed var(--linha); border-radius: 4px; }
+.kpi-banco { display: flex; align-items: center; gap: 6px; }
+.kpi-total { background: var(--preto); color: var(--branco); border-color: var(--preto); }
+.kpi-total h3, .kpi-total .sub { color: #cfcfcf; }
+.tabela-bancos td:first-child { width: 36px; text-align: center; }

@@ -93,6 +93,10 @@ export interface MovBanco {
   descricao: string;
   valor: number; // + crédito, - débito
   saldo?: number | null;
+  /** Posição cronológica no extrato (para saber o saldo mais recente dentro do mesmo dia). */
+  ordem?: number;
+  /** Movimento de estorno (CGD: coluna "Estorno" = E). */
+  estorno?: boolean;
   categoria?: string;
   comunidadeId?: string; // 'bolsa-geral' para ofertas sem comunidade
   contabilizar: boolean;
