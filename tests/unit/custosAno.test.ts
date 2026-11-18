@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anoDoCusto, copiarAno } from '../../src/lib/custosAno';
+import { anoDoCusto, copiarAno, totaisPorRubrica } from '../../src/lib/custosAno';
 import { custoAtivo, custoNoAno } from '../../src/lib/resumos';
 import type { Comunidade, CustoFixo } from '../../src/lib/types';
 
@@ -55,5 +55,16 @@ describe('copiarAno', () => {
   });
   it('recusa origem igual ao destino', () => {
     expect(() => copiarAno([], { origem: 2026, destino: 2026, atualizacao: 0, comunidades: null }, comunidades)).toThrow();
+  });
+});
+
+describe('totaisPorRubrica (gráfico)', () => {
+  it('soma por rubrica, ordena do maior para o menor e junta o resto em "Outros"', () => {
+    const v = new Map([['a', 10], ['b', 30], ['c', 5], ['d', 1], ['e', 2]]);
+    const linhas = [cf({ id: 'a', rubrica: 'Renda' }), cf({ id: 'b', rubrica: 'Luz' }), cf({ id: 'c', rubrica: 'Renda' }), cf({ id: 'd', rubrica: 'Água' }), cf({ id: 'e', rubrica: 'Gás' })];
+    expect(totaisPorRubrica(linhas, (c) => v.get(c.id)!, 2)).toEqual([
+      { rubrica: 'Luz', valor: 30 }, { rubrica: 'Renda', valor: 15 }, { rubrica: 'Outros (2 rubricas)', valor: 3 },
+    ]);
+    expect(totaisPorRubrica(linhas, () => 0, 2)).toEqual([]);
   });
 });
