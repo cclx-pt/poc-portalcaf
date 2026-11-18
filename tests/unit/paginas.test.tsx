@@ -287,11 +287,18 @@ describe('páginas', () => {
 
   it('Bancos: vista conjunta do mês com logótipo por linha, filtros por banco e totais', async () => {
     const { default: Bancos } = await import('../../src/pages/Bancos');
-    const html = renderToString(<Bancos />);
+    const { MemoryRouter } = await import('react-router-dom');
+    const html = renderToString(<MemoryRouter><Bancos /></MemoryRouter>);
     expect(html.match(/src="\/bancos\/(cgd|santander)\.png"/g)?.length).toBeGreaterThanOrEqual(5); // 2 filtros + 2 cartões + 3 linhas
     for (const t of ['Novembro 2026', 'Limpar extrato', 'Importar extrato', 'Total dos bancos visíveis', 'Estorno', 'TRF MBWAY', 'Garagem Almada']) expect(html).toContain(t);
     expect(html).toContain('1.470,00 €'); // saldo final CGD 1.050 + Santander 420
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/bancos.html', html);
+  });
+
+  it('Reconciliação bancária: controlo do mês, distribuição por comunidade e propostas', async () => {
+    const { default: Reconciliacao } = await import('../../src/pages/Reconciliacao');
+    const html = renderToString(<Reconciliacao />);
+    for (const t of ['Reconciliação bancária', 'Novembro 2026 por reconciliar', 'Movimentado no mês', 'Conciliado com o Jotform', 'Por resolver', 'Propor classificação', 'Aceitar propostas', 'Distribuição de novembro por comunidade']) expect(html).toContain(t);
   });
 
   it('Bancos, vista de saldos: cartões, verificação, saldos mensais e exportação', async () => {

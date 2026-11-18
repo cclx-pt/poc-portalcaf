@@ -201,3 +201,20 @@ export function relatorioExtratos(movs: MovBanco[], categorias: Categoria[], dim
   const linhas = [...acc.values()].sort((a, b) => a.chave.localeCompare(b.chave, 'pt'));
   return { linhas, foraDosResultados: { valor: fora, n: nFora }, porValidar };
 }
+
+/**
+ * Controlo do mês: o total movimentado (valores absolutos) = contabilizado + conciliado com o Jotform + financeiro
+ * + para rever + proposto + por classificar. O mês está fechado quando só há contabilizado, conciliado e financeiro.
+ */
+export function controloMes(movs: MovBanco[]) {
+  const c = { total: 0, contabilizado: 0, conciliado: 0, financeiro: 0, rever: 0, proposto: 0, porClassificar: 0 };
+  for (const m of movs) {
+    const v = Math.abs(m.valor);
+    c.total = r2(c.total + v);
+    const estado = m.estado ?? (m.contabilizar || m.conciliadoCom ? 'validado' : 'por-classificar');
+    const k = estado === 'rever' ? 'rever' : estado === 'proposto' ? 'proposto' : estado === 'por-classificar' ? 'porClassificar'
+      : m.conciliadoCom ? 'conciliado' : m.contabilizar ? 'contabilizado' : 'financeiro';
+    c[k] = r2(c[k] + v);
+  }
+  return { ...c, fechado: movs.length > 0 && !c.rever && !c.proposto && !c.porClassificar };
+}

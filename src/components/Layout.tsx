@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Building2, CalendarCheck, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Building2, CalendarCheck, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, ListChecks, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { useCarregar, useFiltros, Rodape } from './ui';
 import { listarComunidades } from '../lib/db';
@@ -32,7 +32,8 @@ const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
     { to: '/analise/relatorio', nome: 'Relatório custos x entradas', Icone: FileText, ver: privado },
   ] },
   { id: 'tesouraria', titulo: 'Tesouraria', itens: [
-    { to: '/bancos', nome: 'Bancos e bolsa geral', Icone: Landmark, ver: (p) => p.pode('bancos') },
+    { to: '/bancos', nome: 'Bancos (extratos e saldos)', Icone: Landmark, ver: (p) => p.pode('bancos') },
+    { to: '/reconciliacao', nome: 'Reconciliação bancária', Icone: ListChecks, ver: (p) => p.pode('bancos') },
     { to: '/custos-fixos', nome: 'Custos Fixos', Icone: Building2, ver: privado },
     { to: '/orcamento', nome: 'Orçamento', Icone: PiggyBank, ver: privado },
     { to: '/fecho', nome: 'Fecho mensal e publicação', Icone: LockKeyhole, ver: (p) => p.pode('publicar') },

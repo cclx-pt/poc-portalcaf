@@ -108,3 +108,20 @@ describe('IFTHENPAY com o líquido do Contribuir', () => {
     expect(d.nota).toMatch(/diferença 8,30 €/);
   });
 });
+
+describe('controlo do mês (cada euro conta uma vez)', () => {
+  it('reparte o total do extrato pelos estados e confere a soma', async () => {
+    const { controloMes } = await import('../../src/lib/classificacaoBanco');
+    const c = controloMes([
+      mov('1', '2026-03-05', -45, 'MEO', { estado: 'validado', contabilizar: true, categoria: '02.03 Comunicações', comunidadeId: 'almada' }),
+      mov('2', '2026-03-05', 135, 'DEP', { estado: 'validado', contabilizar: false, categoria: 'F1.02 Depósitos de numerário', conciliadoCom: 'depositos:d1' }),
+      mov('3', '2026-03-05', 300, 'IF', { estado: 'validado', contabilizar: false, categoria: 'F1.03 Regularização de tesouraria', conciliadoCom: 'contribuir:ifthenpay' }),
+      mov('4', '2026-03-05', -1000, 'TRF', { estado: 'validado', contabilizar: false, categoria: 'F1.01 Transferências internas' }),
+      mov('5', '2026-03-05', -20, 'R', { estado: 'rever' }),
+      mov('6', '2026-03-05', -7, 'X', { estado: 'proposto', categoria: '02.03 Comunicações' }),
+      mov('7', '2026-03-05', 9, 'Y'),
+    ]);
+    expect(c).toEqual({ total: 1516, contabilizado: 45, conciliado: 435, financeiro: 1000, rever: 20, proposto: 7, porClassificar: 9, fechado: false });
+    expect(c.contabilizado + c.conciliado + c.financeiro + c.rever + c.proposto + c.porClassificar).toBe(c.total);
+  });
+});
