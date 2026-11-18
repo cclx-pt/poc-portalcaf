@@ -33,7 +33,7 @@ const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
   ] },
   { id: 'tesouraria', titulo: 'Tesouraria', itens: [
     { to: '/bancos', nome: 'Bancos e bolsa geral', Icone: Landmark, ver: (p) => p.pode('bancos') },
-    { to: '/custos-fixos', nome: 'Custos fixos', Icone: Building2, ver: privado },
+    { to: '/custos-fixos', nome: 'Custos Fixos', Icone: Building2, ver: privado },
     { to: '/orcamento', nome: 'Orçamento', Icone: PiggyBank, ver: privado },
     { to: '/fecho', nome: 'Fecho mensal e publicação', Icone: LockKeyhole, ver: (p) => p.pode('publicar') },
     { to: '/exportacao', nome: 'Exportação contabilista', Icone: FileSpreadsheet, ver: (p) => p.pode('exportar') },

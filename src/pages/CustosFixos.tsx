@@ -1,11 +1,13 @@
 import { useRef, useState } from 'react';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { CORES } from '../lib/cores';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { apagar, auditar, gravar, listarComunidades, listarCustosFixos } from '../lib/db';
-import { eur, periodo, r2 } from '../lib/format';
+import { eur, eurK, periodo, r2 } from '../lib/format';
 import { custoAtivo, custoNoAno, mesesDecorridos, valorImputado } from '../lib/resumos';
 import { importarCustosFixos, type ResultadoImportacao } from '../lib/custosImport';
-import { anoDoCusto, copiarAno } from '../lib/custosAno';
+import { anoDoCusto, copiarAno, totaisPorRubrica } from '../lib/custosAno';
 import { lerFicheiro } from '../lib/ficheiros';
 import { NIVEIS, NIVEL_LABEL, type CustoFixo, type Nivel } from '../lib/types';
 import { hoje } from '../lib/format';
@@ -32,6 +34,7 @@ export default function CustosFixos() {
   const ate = mesesDecorridos(ano, hoje());
   const noAno = (c: CustoFixo) => r2(Array.from({ length: 12 }, (_, i) => (custoAtivo(c, periodo(ano, i + 1)) ? valorImputado(c) : 0)).reduce((s, v) => s + v, 0));
   const ateHoje = (c: CustoFixo) => r2(Array.from({ length: ate }, (_, i) => (custoAtivo(c, periodo(ano, i + 1)) ? valorImputado(c) : 0)).reduce((s, v) => s + v, 0));
+  const grafico = totaisPorRubrica(linhas, noAno, 12);
   const ficheiro = useRef<HTMLInputElement>(null);
   const [imp, setImp] = useState<(ResultadoImportacao & { nome: string; substituir: boolean }) | null>(null);
   const [aImportar, setAImportar] = useState(false);
@@ -115,7 +118,7 @@ export default function CustosFixos() {
     <>
       <div className="linha" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
-          <h1>Custos fixos por comunidade</h1>
+          <h1>Custos Fixos</h1>
           <p className="muted">Uma linha por rubrica e ano (mostra o ano escolhido no filtro). Quando um valor muda a meio do ano, feche a linha anterior (mês de fim) e crie uma nova no mesmo ano. Para preparar um ano novo, use <b>Copiar ano</b>. Os vencimentos e a Segurança Social são confidenciais. A <b>incidência</b> é a parte do custo imputada a esta comunidade (custos partilhados); nos resultados entra o valor imputado. Os custos de âmbito <b>geral</b> repartem-se pelas comunidades conforme a assistência.</p>
         </div>
         {pode('custos') && <div className="acoes">
@@ -128,6 +131,20 @@ export default function CustosFixos() {
       </div>
       {msg && <div className="aviso">{msg}</div>}
       <Estado aCarregar={cf.aCarregar} erro={cf.erro} vazio={!linhas.length} />
+      {grafico.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h2 style={{ marginTop: 0 }}>{`Por rubrica · total imputado em ${ano}${comunidade === 'todas' ? '' : ` · ${nomes.get(comunidade) ?? comunidade}`}`}</h2>
+          <ResponsiveContainer width="100%" height={grafico.length * 30 + 40}>
+            <BarChart data={grafico} layout="vertical" margin={{ top: 4, right: 24, bottom: 4, left: 8 }}>
+              <CartesianGrid stroke={CORES.grelha} horizontal={false} />
+              <XAxis type="number" tickFormatter={(v) => eurK(Number(v))} tick={{ fontSize: 12, fill: CORES.eixo }} />
+              <YAxis type="category" dataKey="rubrica" width={230} interval={0} tick={{ fontSize: 12, fill: CORES.texto }} tickFormatter={(t: string) => (t.length > 34 ? `${t.slice(0, 33)}…` : t)} />
+              <Tooltip cursor={{ fill: CORES.grelha }} formatter={(v: number) => [eur(v), `Imputado em ${ano}`]} />
+              <Bar dataKey="valor" fill={CORES.saidas} barSize={16} radius={[0, 4, 4, 0]} isAnimationActive={false} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
       {!!linhas.length && (
         <div className="tabela"><table>
           <thead><tr><th>Ano</th><th>Comunidade</th><th>Rubrica</th><th>Nível</th><th className="num">Mensal (total)</th><th className="num">Incidência</th><th className="num">Imputado</th><th>Âmbito</th><th>Início</th><th>Fim</th><th className="num">{ano} (até hoje)</th><th className="num">{ano} (ano)</th><th /></tr></thead>
@@ -143,7 +160,7 @@ export default function CustosFixos() {
               <td>{pode('custos') && <><button className="link" onClick={() => setEdit(c)}>Editar</button> · <button className="link" onClick={() => remover(c)}>Remover</button></>}</td>
             </tr>
           ))}</tbody>
-          <tfoot><tr><td colSpan={10}>Total (imputado)</td><td className="num">{eur(r2(linhas.reduce((s, c) => s + ateHoje(c), 0)))}</td><td className="num">{eur(r2(linhas.reduce((s, c) => s + noAno(c), 0)))}</td><td /></tr></tfoot>
+          <tfoot><tr><td colSpan={4}>Total</td><td className="num">{eur(r2(linhas.reduce((s, c) => s + c.valorMensal, 0)))}</td><td /><td className="num">{eur(r2(linhas.reduce((s, c) => s + valorImputado(c), 0)))}</td><td colSpan={3} /><td className="num">{eur(r2(linhas.reduce((s, c) => s + ateHoje(c), 0)))}</td><td className="num">{eur(r2(linhas.reduce((s, c) => s + noAno(c), 0)))}</td><td /></tr></tfoot>
         </table></div>
       )}
       {imp && (

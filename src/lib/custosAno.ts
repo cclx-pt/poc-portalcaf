@@ -58,3 +58,13 @@ export function copiarAno(custos: CustoFixo[], o: OpcoesCopia, comunidades: Comu
   for (const [id, n] of inativas) avisos.push(`${coms.get(id)?.nome ?? id} não está ativa em ${o.destino}; ${n} ${n === 1 ? 'linha não foi copiada' : 'linhas não foram copiadas'}.`);
   return { novos, avisos };
 }
+
+/** Totais por rubrica (somando comunidades), do maior para o menor; além de `max` rubricas, o resto vai para "Outros". */
+export function totaisPorRubrica(linhas: CustoFixo[], valor: (c: CustoFixo) => number, max = 12): { rubrica: string; valor: number }[] {
+  const t = new Map<string, number>();
+  for (const c of linhas) t.set(c.rubrica, (t.get(c.rubrica) ?? 0) + valor(c));
+  const lista = [...t].map(([rubrica, v]) => ({ rubrica, valor: r2(v) })).filter((x) => x.valor > 0).sort((a, b) => b.valor - a.valor || a.rubrica.localeCompare(b.rubrica));
+  if (lista.length <= max + 1) return lista;
+  const resto = lista.slice(max);
+  return [...lista.slice(0, max), { rubrica: `Outros (${resto.length} rubricas)`, valor: r2(resto.reduce((s, x) => s + x.valor, 0)) }];
+}
