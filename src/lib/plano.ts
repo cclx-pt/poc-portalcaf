@@ -27,11 +27,11 @@ export const RUBRICAS_PLANO: RubricaPlano[] = [
   { codigo: 'F3', nome: 'Adiantamentos e reembolsos', grupo: 'financeiro' },
 ];
 
-/** [código, nome] de cada categoria; a rubrica é o código antes do ponto. */
+/** [código, nome] de cada categoria; a rubrica é o código antes do ponto. 02.08 e 03.07 acrescentadas pelo CAF (18/11/2026). */
 export const CATEGORIAS_PLANO: [string, string][] = [
   ['01.01', 'Remunerações e subsídios'], ['01.02', 'Segurança Social e retenções'], ['01.03', 'Seguros de trabalho'], ['01.04', 'Serviços contratados'], ['01.05', 'Deslocações de pessoal'],
-  ['02.01', 'Rendas e condomínios'], ['02.02', 'Energia e água'], ['02.03', 'Comunicações'], ['02.04', 'Limpeza e higiene'], ['02.05', 'Manutenção e inspeções'], ['02.06', 'Segurança e seguros'], ['02.07', 'Equipamentos em aluguer'],
-  ['03.01', 'Contabilidade e assessoria'], ['03.02', 'Jurídico e registos'], ['03.03', 'Bancos e pagamentos'], ['03.04', 'Software e subscrições'], ['03.05', 'Associações e quotas'], ['03.06', 'Escritório e correios'],
+  ['02.01', 'Rendas e condomínios'], ['02.02', 'Energia e água'], ['02.03', 'Comunicações'], ['02.04', 'Limpeza e higiene'], ['02.05', 'Manutenção e inspeções'], ['02.06', 'Segurança e seguros'], ['02.07', 'Equipamentos em aluguer'], ['02.08', 'Impostos prediais'],
+  ['03.01', 'Contabilidade e assessoria'], ['03.02', 'Jurídico e registos'], ['03.03', 'Bancos e pagamentos'], ['03.04', 'Software e subscrições'], ['03.05', 'Associações e quotas'], ['03.06', 'Escritório e correios'], ['03.07', 'Taxas'],
   ['04.01', 'Cultos e sacramentos'], ['04.02', 'Som, louvor e multimédia'], ['04.03', 'Hospitalidade e representação'], ['04.04', 'Viaturas e transportes'], ['04.05', 'Consumíveis e utensílios'], ['04.06', 'Bar e livraria (custo)'], ['04.07', 'Equipamentos e manutenção corrente'],
   ['05.01', 'Ensino e discipulado'], ['05.02', 'Crianças e jovens'], ['05.03', 'Homens e mulheres'], ['05.04', 'Ação social ministerial'], ['05.05', 'Outras atividades ministeriais'],
   ['06.01', 'Alojamento e espaços'], ['06.02', 'Alimentação e catering'], ['06.03', 'Produção e decoração'], ['06.04', 'Materiais e consumíveis'], ['06.05', 'Transporte e deslocações'], ['06.06', 'Inscrições e serviços'], ['06.07', 'Reembolsos e ajustes de eventos'],

@@ -20,6 +20,9 @@ describe('proposta de classificação dos custos fixos com o plano', () => {
     expect(p('Segurança Social · Vencimento Multimédia')).toEqual({ categoria: '01.02 Segurança Social e retenções', centroCusto: 'CC03' });
     expect(p('Contabilidade').categoria).toBe('03.01 Contabilidade e assessoria');
     expect(p('Google Workspace')).toMatchObject({ categoria: '03.04 Software e subscrições' });
+    expect(p('Imposto sobre a renda').categoria).toBe('02.08 Impostos prediais');
+    expect(p('Plafond deslocação pastoral')).toEqual({ categoria: '01.05 Deslocações de pessoal', centroCusto: 'CC03' });
+    expect(p('Deslocação pastoral (donativo)')).toEqual({ categoria: '01.05 Deslocações de pessoal', centroCusto: 'CC03' });
     expect(p('Algo desconhecido')).toEqual({});
   });
   it('só propõe categorias que existem no catálogo', () => {

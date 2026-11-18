@@ -7,8 +7,10 @@ describe('plano financeiro (proposta v2.1)', () => {
     expect(RUBRICAS_PLANO.filter((r) => r.grupo === 'despesa')).toHaveLength(9);
     expect(RUBRICAS_PLANO.filter((r) => r.grupo === 'receita')).toHaveLength(3);
     expect(RUBRICAS_PLANO.filter((r) => r.grupo === 'financeiro')).toHaveLength(3);
-    expect(CATEGORIAS_PLANO.filter(([c]) => /^\d/.test(c))).toHaveLength(49);
-    expect(CATEGORIAS_PLANO).toHaveLength(65);
+    expect(CATEGORIAS_PLANO.filter(([c]) => /^\d/.test(c))).toHaveLength(51);
+    expect(CATEGORIAS_PLANO).toHaveLength(67);
+    expect(CATEGORIAS_PLANO).toContainEqual(['02.08', 'Impostos prediais']);
+    expect(CATEGORIAS_PLANO).toContainEqual(['03.07', 'Taxas']);
   });
   it('gera as categorias com rubrica, tipo, nível (vencimentos e donativos confidenciais) e âmbito local', () => {
     const cats = categoriasDoPlano();

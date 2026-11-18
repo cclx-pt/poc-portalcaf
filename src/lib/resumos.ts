@@ -132,7 +132,8 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
     somaParte(m(com, mes).rubricas[tipo], rubrica, 'local', valor);
   };
 
-  const nomeComissao = (d.categorias ?? []).find((c) => c.codigo === '03.03')?.nome ?? 'Comissões bancárias';
+  // Taxa IFTHENPAY: 03.07 Taxas (decisão do CAF); sem ela, 03.03 Bancos e pagamentos.
+  const nomeComissao = (d.categorias ?? []).find((c) => c.codigo === '03.07')?.nome ?? (d.categorias ?? []).find((c) => c.codigo === '03.03')?.nome ?? 'Comissões bancárias';
   for (const l of d.contribuir) for (const r of l.registos) {
     const x = m(l.comunidadeId, l.mes); x.contribuir = r2(x.contribuir + r.valor); x.n.contribuir++; soma(x.entradasPorCategoria, r.categoria || 'Sem categoria', r.valor);
     registar(l.comunidadeId, l.mes, 'entrada', r.categoria || 'Sem categoria', r.valor);

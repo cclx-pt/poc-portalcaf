@@ -231,7 +231,7 @@ describe('movimentos repartidos', () => {
 });
 
 describe('comissão IFTHENPAY (Contribuir com líquido)', () => {
-  it('a diferença entre o valor e o líquido é um gasto 03.03 Bancos e pagamentos da comunidade', async () => {
+  it('a diferença entre o valor e o líquido é um gasto 03.07 Taxas da comunidade', async () => {
     const { categoriasDoPlano } = await import('../../src/lib/plano');
     const l = lote('contribuir', 'almada', 2026, 3, [{ valor: 50, categoria: 'Dízimos' }]);
     l.registos[0].extra = { liquido: 48.9 };
@@ -239,7 +239,7 @@ describe('comissão IFTHENPAY (Contribuir com líquido)', () => {
     const m = mes(rs, 'almada', 3);
     expect(m.contribuir).toBe(50);
     expect(m.despesas).toBe(1.1);
-    expect(m.despesasPorCategoria['03.03 Bancos e pagamentos']).toBe(1.1);
+    expect(m.despesasPorCategoria['03.07 Taxas']).toBe(1.1);
     expect(m.rubricas.saida['03 Administração e Tecnologia'].local).toBe(1.1);
   });
 });
