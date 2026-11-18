@@ -62,16 +62,22 @@ export default function CustosFixos() {
     } catch (e) { setMsg(mensagemErro(e)); }
     finally { setACopiar(false); }
   }
+  const [apagarSel, setApagarSel] = useState<{ ano: string; confirmo: boolean } | null>(null);
+  const [aApagar, setAApagar] = useState(false);
+  const ondeApagar = comunidade === 'todas' ? 'todas as comunidades' : nomes.get(comunidade) ?? comunidade;
+  const daComunidade = (cf.dados ?? []).filter((c) => comunidade === 'todas' || c.comunidadeId === comunidade);
+  const anosComLinhas = [...new Set(daComunidade.map(anoDoCusto))].sort((a, b) => a - b);
+  const alvoApagar = apagarSel?.ano ? daComunidade.filter((c) => anoDoCusto(c) === Number(apagarSel.ano)) : [];
   async function apagarAno() {
-    const alvo = linhas;
-    const onde = comunidade === 'todas' ? 'todas as comunidades' : nomes.get(comunidade) ?? comunidade;
-    if (!alvo.length || !confirm(`Apagar ${alvo.length} linhas de custos fixos de ${ano} (${onde})? Esta ação não se pode desfazer.`)) return;
+    if (!apagarSel?.ano || !apagarSel.confirmo || !alvoApagar.length) return;
+    setAApagar(true);
     try {
-      for (let i = 0; i < alvo.length; i += 20) await Promise.all(alvo.slice(i, i + 20).map((c) => apagar('custos_fixos', c.id)));
-      await auditar(acesso!.email, 'apagar custos fixos do ano', `${ano} (${onde}): ${alvo.length} linhas`);
-      setMsg(`Apagadas ${alvo.length} linhas de ${ano}. Recalcule os resumos (Configuração ou Calcular) para atualizar os mapas.`);
-      await cf.recarregar();
+      for (let i = 0; i < alvoApagar.length; i += 20) await Promise.all(alvoApagar.slice(i, i + 20).map((c) => apagar('custos_fixos', c.id)));
+      await auditar(acesso!.email, 'apagar custos fixos do ano', `${apagarSel.ano} (${ondeApagar}): ${alvoApagar.length} linhas`);
+      setMsg(`Apagadas ${alvoApagar.length} linhas de ${apagarSel.ano}. Recalcule os resumos (Configuração ou Calcular) para atualizar os mapas.`);
+      setApagarSel(null); await cf.recarregar();
     } catch (e) { setMsg(mensagemErro(e)); }
+    finally { setAApagar(false); }
   }
 
   async function lerImportacao(f: File) {
@@ -125,7 +131,7 @@ export default function CustosFixos() {
           <button className="sec" onClick={() => ficheiro.current?.click()}>Importar do Excel</button>
           <input ref={ficheiro} type="file" accept=".xlsx,.xls,.csv" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void lerImportacao(f); }} />
           <button className="sec" onClick={() => setCopia({ origem: ano, destino: ano + 1, atualizacao: '', todas: comunidade === 'todas', substituir: false })}>Copiar ano…</button>
-          {acesso!.papel === 'master' && <button className="sec" disabled={!linhas.length} onClick={() => void apagarAno()}>Apagar linhas de {ano}</button>}
+          {acesso!.papel === 'master' && <button className="sec" disabled={!anosComLinhas.length} onClick={() => setApagarSel({ ano: '', confirmo: false })}>Apagar ano…</button>}
           <button onClick={() => setEdit(vazio(comunidade === 'todas' ? (acesso!.comunidades[0] === '*' ? 'caldas-da-rainha' : acesso!.comunidades[0]) : comunidade, ano))}>Nova linha</button>
         </div>}
       </div>
@@ -179,6 +185,24 @@ export default function CustosFixos() {
           <div className="acoes" style={{ marginTop: 12 }}>
             <button disabled={aImportar} onClick={() => void confirmarImportacao()}>{aImportar ? 'A importar…' : `Importar ${imp.custos.length} custos fixos`}</button>
             <button className="sec" onClick={() => setImp(null)}>Cancelar</button>
+          </div>
+        </Modal>
+      )}
+      {apagarSel && (
+        <Modal titulo="Apagar os custos fixos de um ano" onFechar={() => setApagarSel(null)}>
+          <label className="campo">{`Ano a apagar (${ondeApagar})`}
+            <select value={apagarSel.ano} onChange={(e) => setApagarSel({ ano: e.target.value, confirmo: false })}>
+              <option value="">Escolha o ano…</option>
+              {anosComLinhas.map((a) => <option key={a} value={String(a)}>{`${a} (${daComunidade.filter((c) => anoDoCusto(c) === a).length} linhas)`}</option>)}
+            </select>
+          </label>
+          {alvoApagar.length > 0 && <>
+            <div className="aviso">{`Vão ser apagadas ${alvoApagar.length} linhas de ${apagarSel.ano} (${ondeApagar}). Esta ação não se pode desfazer.`}</div>
+            <label className="opcao"><input type="checkbox" checked={apagarSel.confirmo} onChange={(e) => setApagarSel({ ...apagarSel, confirmo: e.target.checked })} /> Confirmo que quero apagar estas linhas</label>
+          </>}
+          <div className="acoes" style={{ marginTop: 12 }}>
+            <button disabled={aApagar || !apagarSel.confirmo || !alvoApagar.length} onClick={() => void apagarAno()}>{aApagar ? 'A apagar…' : alvoApagar.length ? `Apagar ${alvoApagar.length} linhas de ${apagarSel.ano}` : 'Apagar'}</button>
+            <button className="sec" onClick={() => setApagarSel(null)}>Cancelar</button>
           </div>
         </Modal>
       )}
