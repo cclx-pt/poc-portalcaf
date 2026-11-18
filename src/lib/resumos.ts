@@ -120,7 +120,8 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
     const rubrica = k.confidencial || confidencial ? OUTROS_FUNCIONAMENTO : k.rubrica;
     // Entradas sem comunidade (bolsa geral): rubrica "Outros rendimentos", seja qual for a categoria (decisão do CAF).
     if (com === 'bolsa-geral' && tipo === 'entrada') { soma(bolsaRub[mes - 1], 'Outros rendimentos', valor); return; }
-    if (k.ambito === 'geral' && com !== 'bolsa-geral') {
+    // Os custos fixos da comunidade Geral (bolsa-geral) são sempre repartidos pelas comunidades.
+    if (k.ambito === 'geral' && (com !== 'bolsa-geral' || custoFixo)) {
       soma(bolo[mes - 1][tipo], rubrica, valor);
       const ced = m(com, mes).cedidoGeral;
       const campo = tipo === 'entrada' ? 'entradas' : custoFixo ? 'custosFixos' : 'despesas';
@@ -168,7 +169,7 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
     x.custosFixos = r2(x.custosFixos + valor);
     soma(x.custosRubricas, cf.nivel === 'confidencial' ? 'Outros custos de funcionamento' : cf.rubrica, valor);
     // Custo fixo confidencial: nunca aparece com a sua rubrica própria.
-    registar(cf.comunidadeId, mes, 'saida', cf.rubrica, valor, cf.nivel === 'confidencial', true, cf.ambito === 'geral');
+    registar(cf.comunidadeId, mes, 'saida', cf.rubrica, valor, cf.nivel === 'confidencial', true, cf.ambito === 'geral' || cf.comunidadeId === 'bolsa-geral');
   }
 
   // Distribuição da bolsa geral (média de adultos do mesmo mês), também por rubrica.

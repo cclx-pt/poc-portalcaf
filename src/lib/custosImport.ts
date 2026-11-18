@@ -9,9 +9,10 @@ import type { Comunidade, CustoFixo, Nivel } from './types';
 
 type Linha = Record<string, unknown>;
 
-/** "Site" Geral: custos partilhados por toda a CCLX, lançados na Sede e repartidos pela assistência. */
+/** "Site" Geral: custos partilhados por toda a CCLX, lançados na comunidade Geral e repartidos pela assistência. */
 export const SITE_GERAL = 'geral';
-const COMUNIDADE_DOS_GERAIS = 'sede';
+export const COMUNIDADE_GERAL = 'bolsa-geral';
+const eGeral = (site: string) => [SITE_GERAL, 'cclx geral'].includes(norm(site));
 
 const coluna = (l: Linha, ...nomes: string[]) => {
   const k = Object.keys(l).find((c) => nomes.some((n) => norm(c).startsWith(n)));
@@ -60,7 +61,7 @@ export function importarCustosFixos(linhas: Linha[], comunidades: Comunidade[]):
   const avisos: string[] = [];
   const anos = [...new Set(linhas.flatMap((l) => Object.keys(l).filter((k) => /^\d{4}$/.test(k.trim())).map((k) => Number(k))))].sort();
   const porNome = (site: string) => {
-    if (norm(site) === SITE_GERAL) return comunidades.find((c) => c.id === COMUNIDADE_DOS_GERAIS);
+    if (eGeral(site)) return comunidades.find((c) => c.id === COMUNIDADE_GERAL);
     return comunidades.find((c) => !c.especial && (norm(c.nome) === norm(site) || c.id === slug(site)));
   };
   const vistas = new Set<string>();
@@ -75,7 +76,7 @@ export function importarCustosFixos(linhas: Linha[], comunidades: Comunidade[]):
     const com = porNome(site);
     if (!com) { avisos.push(`Linha ${linhaN}: comunidade "${site}" não existe no portal; linha ignorada.`); return; }
     if (!original) { avisos.push(`Linha ${linhaN}: sem rubrica; linha ignorada.`); return; }
-    const geral = norm(site) === SITE_GERAL;
+    const geral = eGeral(site);
     const { rubrica, confidencial } = limparRubrica(original);
     const valores = anos.map((a) => ({ a, v: r2(parseNumero(l[String(a)] ?? l[` ${a}`])) }));
     const chave = `${site}|${rubrica}|${valores.map((x) => x.v).join('|')}`;

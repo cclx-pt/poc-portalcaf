@@ -6,7 +6,7 @@ import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../compone
 import { apagar, auditar, gravar, listarComunidades, listarCustosFixos } from '../lib/db';
 import { eur, eurK, periodo, r2 } from '../lib/format';
 import { custoAtivo, custoNoAno, mesesDecorridos, valorImputado } from '../lib/resumos';
-import { importarCustosFixos, type ResultadoImportacao } from '../lib/custosImport';
+import { COMUNIDADE_GERAL, importarCustosFixos, type ResultadoImportacao } from '../lib/custosImport';
 import { anoDoCusto, copiarAno, totaisPorRubrica } from '../lib/custosAno';
 import { lerFicheiro } from '../lib/ficheiros';
 import { NIVEIS, NIVEL_LABEL, type CustoFixo, type Nivel } from '../lib/types';
@@ -104,7 +104,7 @@ export default function CustosFixos() {
     try {
       const id = edit.id || `${edit.comunidadeId}-${edit.rubrica.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${edit.inicio}`;
       const incidencia = Math.min(100, Math.max(0, r2(Number(edit.incidencia ?? 100))));
-      await gravar('custos_fixos', { ...edit, id, ano: anoDoCusto(edit), valorMensal: r2(Number(edit.valorMensal)), incidencia, ambito: edit.ambito ?? 'local', fim: edit.fim || `${anoDoCusto(edit)}-12` });
+      await gravar('custos_fixos', { ...edit, id, ano: anoDoCusto(edit), valorMensal: r2(Number(edit.valorMensal)), incidencia, ambito: edit.comunidadeId === COMUNIDADE_GERAL ? 'geral' : edit.ambito ?? 'local', fim: edit.fim || `${anoDoCusto(edit)}-12` });
       await auditar(acesso!.email, 'custo fixo', `${edit.comunidadeId} · ${edit.rubrica} · ${edit.valorMensal} € × ${pct(incidencia)} desde ${mesPT(edit.inicio)}`);
       setEdit(null); await cf.recarregar();
     } catch (e) { setMsg(mensagemErro(e)); }
@@ -119,7 +119,7 @@ export default function CustosFixos() {
       <div className="linha" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <h1>Custos Fixos</h1>
-          <p className="muted">Uma linha por rubrica e ano (mostra o ano escolhido no filtro). Quando um valor muda a meio do ano, feche a linha anterior (mês de fim) e crie uma nova no mesmo ano. Para preparar um ano novo, use <b>Copiar ano</b>. Os vencimentos e a Segurança Social são confidenciais. A <b>incidência</b> é a parte do custo imputada a esta comunidade (custos partilhados); nos resultados entra o valor imputado. Os custos de âmbito <b>geral</b> repartem-se pelas comunidades conforme a assistência.</p>
+          <p className="muted">Uma linha por rubrica e ano (mostra o ano escolhido no filtro). Quando um valor muda a meio do ano, feche a linha anterior (mês de fim) e crie uma nova no mesmo ano. Para preparar um ano novo, use <b>Copiar ano</b>. Os vencimentos e a Segurança Social são confidenciais. A <b>incidência</b> é a parte do custo imputada a esta comunidade (custos partilhados); nos resultados entra o valor imputado. Os custos lançados na comunidade <b>Geral</b> (e os de âmbito geral) repartem-se por todas as comunidades conforme a assistência.</p>
         </div>
         {pode('custos') && <div className="acoes">
           <button className="sec" onClick={() => ficheiro.current?.click()}>Importar do Excel</button>
@@ -216,8 +216,8 @@ export default function CustosFixos() {
             <h2>{edit.id ? 'Editar custo fixo' : 'Novo custo fixo'}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
               <label className="campo">Comunidade
-                <select value={edit.comunidadeId} onChange={(e) => setEdit({ ...edit, comunidadeId: e.target.value })}>
-                  {(coms.dados ?? []).filter((c) => !c.especial && (c.ativo !== false || c.id === edit.comunidadeId) && (acesso!.comunidades.includes('*') || acesso!.comunidades.includes(c.id))).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                <select value={edit.comunidadeId} onChange={(e) => setEdit({ ...edit, comunidadeId: e.target.value, ...(e.target.value === COMUNIDADE_GERAL ? { ambito: 'geral' as const } : {}) })}>
+                  {(coms.dados ?? []).filter((c) => (!c.especial || c.id === COMUNIDADE_GERAL) && (c.ativo !== false || c.id === edit.comunidadeId) && (acesso!.comunidades.includes('*') || acesso!.comunidades.includes(c.id))).map((c) => <option key={c.id} value={c.id}>{c.id === COMUNIDADE_GERAL ? 'Geral (repartido por todas as comunidades)' : c.nome}</option>)}
                 </select>
               </label>
               <label className="campo">Rubrica
@@ -230,7 +230,7 @@ export default function CustosFixos() {
               <label className="campo">Valor mensal (€)<input type="number" inputMode="decimal" step="0.01" value={edit.valorMensal} onChange={(e) => setEdit({ ...edit, valorMensal: Number(e.target.value) })} /></label>
               <label className="campo">Incidência (%)<input type="number" inputMode="decimal" min={0} max={100} step="0.01" value={edit.incidencia ?? 100} onChange={(e) => setEdit({ ...edit, incidencia: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
               <label className="campo">Âmbito
-                <select value={edit.ambito ?? 'local'} onChange={(e) => setEdit({ ...edit, ambito: e.target.value as 'local' | 'geral' })}>
+                <select value={edit.comunidadeId === COMUNIDADE_GERAL ? 'geral' : edit.ambito ?? 'local'} disabled={edit.comunidadeId === COMUNIDADE_GERAL} onChange={(e) => setEdit({ ...edit, ambito: e.target.value as 'local' | 'geral' })}>
                   <option value="local">Local (só esta comunidade)</option>
                   <option value="geral">Geral (repartido pela assistência)</option>
                 </select>

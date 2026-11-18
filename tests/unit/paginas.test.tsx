@@ -93,7 +93,7 @@ describe('páginas', () => {
     expect(html).toContain('400,50 €'); // 50 + 20 + 100 + 230,50
     expect(html).toContain('170,00 €'); // contribuições
     expect(html).toContain('230,50 €'); // depósitos
-    expect(html).toContain('Bolsa geral (sem comunidade)');
+    expect(html).toContain('Geral (sem comunidade)');
     expect(html).toContain('Depósito de coletas');
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/entradas.html', html);
   });

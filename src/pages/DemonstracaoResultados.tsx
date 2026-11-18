@@ -27,7 +27,7 @@ export default function DemonstracaoResultados() {
 
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
   nomes.set(GERAIS_POR_REPARTIR, 'Gerais por repartir');
-  nomes.set('bolsa-geral', 'Bolsa geral (por distribuir)');
+  nomes.set('bolsa-geral', 'Geral (por distribuir)');
   const ordem = new Map((coms.dados ?? []).map((c) => [c.id, c.ordem]));
   const todos = resumos.dados ?? [];
   const sel = comunidade === 'todas' ? todos : todos.filter((r) => r.comunidadeId === comunidade);
