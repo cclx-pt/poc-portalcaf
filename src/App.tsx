@@ -15,6 +15,7 @@ import RegistoRapido from './pages/RegistoRapido';
 import Comparacao from './pages/Comparacao';
 import Relatorio from './pages/Relatorio';
 import Bancos from './pages/Bancos';
+import Reconciliacao from './pages/Reconciliacao';
 import CustosFixos from './pages/CustosFixos';
 import Orcamento from './pages/Orcamento';
 import Fecho from './pages/Fecho';
@@ -70,6 +71,7 @@ export default function App() {
             <Route path="analise/comparacao" element={<Se nivel="privado"><Comparacao /></Se>} />
             <Route path="analise/relatorio" element={<Se nivel="privado"><Relatorio /></Se>} />
             <Route path="bancos" element={<Se acao="bancos"><Bancos /></Se>} />
+            <Route path="reconciliacao" element={<Se acao="bancos"><Reconciliacao /></Se>} />
             <Route path="custos-fixos" element={<Se nivel="privado"><CustosFixos /></Se>} />
             <Route path="orcamento" element={<Se nivel="privado"><Orcamento /></Se>} />
             <Route path="fecho" element={<Se acao="publicar"><Fecho /></Se>} />
