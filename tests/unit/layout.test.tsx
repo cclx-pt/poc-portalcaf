@@ -16,6 +16,16 @@ describe('layout em telemóvel e tablet', () => {
     const html = renderToString(<MemoryRouter initialEntries={['/x']}><Routes><Route element={<Layout />}><Route path="x" element={<p>conteudo</p>} /></Route></Routes></MemoryRouter>);
     expect(html).toMatch(/class="menu-botao"[^>]*aria-expanded="false"/);
     expect(html).toContain('class="side-links"');
-    expect(html).toContain('Registar presenças');
+    expect(html).toMatch(/class="grupo-botao"[^>]*aria-expanded="false"[^>]*>.*?Registos/s);
+  });
+
+  it('painel lateral recolhível e grupos que abrem e fecham (o da página atual aberto)', async () => {
+    const { default: Layout } = await import('../../src/components/Layout');
+    const html = renderToString(<MemoryRouter initialEntries={['/analise/resultados']}><Routes><Route element={<Layout />}><Route path="analise/resultados" element={<p>x</p>} /></Route></Routes></MemoryRouter>);
+    expect(html).toMatch(/aria-label="Recolher o menu"/);
+    expect(html).toMatch(/class="grupo-botao"[^>]*aria-expanded="true"[^>]*>.*?Análise/s);
+    expect(html).toMatch(/class="grupo-botao"[^>]*aria-expanded="false"[^>]*>.*?Tesouraria/s);
+    expect(html).toContain('title="Demonstração de resultados"');
   });
 });
+
