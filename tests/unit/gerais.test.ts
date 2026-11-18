@@ -216,3 +216,16 @@ describe('plano financeiro nos resultados', () => {
     expect(m.despesas).toBe(45);
   });
 });
+
+describe('movimentos repartidos', () => {
+  it('um movimento do banco com partes conta em cada comunidade pelo valor da parte', async () => {
+    const { categoriasDoPlano } = await import('../../src/lib/plano');
+    const banco = [{ id: 'b', contaId: 'cgd', ano: 2026, mes: 3, periodo: '2026-03', atualizadoEm: '', atualizadoPor: '', registos: [
+      { id: 'ss', data: '2026-03-10', descricao: 'TSU', valor: -300, categoria: '01.02 Segurança Social e retenções', contabilizar: true, partes: [{ comunidadeId: 'almada', valor: -100 }, { comunidadeId: 'porto', valor: -200 }] },
+    ] }];
+    const rs = calcularResumos(base({ categorias: categoriasDoPlano(), banco }));
+    expect(mes(rs, 'almada', 3).despesas).toBe(100);
+    expect(mes(rs, 'porto', 3).despesas).toBe(200);
+    expect(mes(rs, 'porto', 3).rubricas.saida['01 Pessoal'].local).toBe(200);
+  });
+});

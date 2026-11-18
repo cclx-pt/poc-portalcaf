@@ -48,6 +48,7 @@ vi.mock('../../src/lib/db', () => ({
   gravarExcecao: vi.fn(), apagarExcecao: vi.fn(), auditar: vi.fn(),
   listarCategorias: () => sync([]),
   listarDimensoes: () => sync([]),
+  listarRegrasBanco: () => sync([]),
   listarLotes: (_a: unknown, origem: string) => sync(LOTES[origem] ?? []),
   listarComunidades: () => sync([{ id: 'almada', nome: 'Almada', ordem: 1 }, { id: 'porto', nome: 'Porto', ordem: 2 }]),
   lerEstadoSync: () => sync(null),

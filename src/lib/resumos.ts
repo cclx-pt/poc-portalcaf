@@ -119,7 +119,8 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
     const k = geral ? { ...c0, ambito: 'geral' as const } : c0;
     const rubrica = k.confidencial || confidencial ? OUTROS_FUNCIONAMENTO : k.rubrica;
     // Entradas sem comunidade (bolsa geral): rubrica "Outros rendimentos", seja qual for a categoria (decisão do CAF).
-    if (com === 'bolsa-geral' && tipo === 'entrada') { soma(bolsaRub[mes - 1], 'Outros rendimentos', valor); return; }
+    // Com o plano financeiro, a rubrica de receita da categoria (R1, R2, R3) mantém-se.
+    if (com === 'bolsa-geral' && tipo === 'entrada') { soma(bolsaRub[mes - 1], /^R\d/.test(rubrica) ? rubrica : 'Outros rendimentos', valor); return; }
     // Os custos fixos da comunidade Geral (bolsa-geral) são sempre repartidos pelas comunidades.
     if (k.ambito === 'geral' && (com !== 'bolsa-geral' || custoFixo)) {
       soma(bolo[mes - 1][tipo], rubrica, valor);
@@ -143,15 +144,19 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
     const x = m(l.comunidadeId, l.mes); x.despesas = r2(x.despesas + r.valor); x.n.despesas++; soma(x.despesasPorCategoria, r.categoria || 'Sem categoria', r.valor);
     registar(l.comunidadeId, l.mes, 'saida', r.categoria || 'Sem categoria', r.valor);
   }
-  for (const b of d.banco) for (const r of b.registos) {
-    if (!r.contabilizar || !r.comunidadeId) continue;
-    // Movimentos financeiros (depósitos, transferências internas…) não são receita nem despesa.
-    if (r.categoria && classificar(r.categoria, r.valor > 0 ? 'entrada' : 'saida').financeiro) continue;
-    const mes = Number(r.data.slice(5, 7));
-    if (Number(r.data.slice(0, 4)) !== d.ano) continue;
-    const x = m(r.comunidadeId, mes);
-    if (r.valor > 0) { x.transferencias = r2(x.transferencias + r.valor); x.n.transferencias++; soma(x.entradasPorCategoria, r.categoria || 'Transferências', r.valor); registar(r.comunidadeId, mes, 'entrada', r.categoria || 'Transferências', r.valor); }
-    else { x.despesas = r2(x.despesas - r.valor); x.n.despesas++; soma(x.despesasPorCategoria, r.categoria || 'Débitos bancários', -r.valor); registar(r.comunidadeId, mes, 'saida', r.categoria || 'Débitos bancários', -r.valor); }
+  for (const b of d.banco) for (const r0 of b.registos) {
+    // Movimento repartido: cada parte conta na sua comunidade.
+    const pedacos = r0.partes?.length ? r0.partes.map((p) => ({ ...r0, comunidadeId: p.comunidadeId, valor: p.valor })) : [r0];
+    for (const r of pedacos) {
+      if (!r.contabilizar || !r.comunidadeId) continue;
+      // Movimentos financeiros (depósitos, transferências internas…) não são receita nem despesa.
+      if (r.categoria && classificar(r.categoria, r.valor > 0 ? 'entrada' : 'saida').financeiro) continue;
+      const mes = Number(r.data.slice(5, 7));
+      if (Number(r.data.slice(0, 4)) !== d.ano) continue;
+      const x = m(r.comunidadeId, mes);
+      if (r.valor > 0) { x.transferencias = r2(x.transferencias + r.valor); x.n.transferencias++; soma(x.entradasPorCategoria, r.categoria || 'Transferências', r.valor); registar(r.comunidadeId, mes, 'entrada', r.categoria || 'Transferências', r.valor); }
+      else { x.despesas = r2(x.despesas - r.valor); x.n.despesas++; soma(x.despesasPorCategoria, r.categoria || 'Débitos bancários', -r.valor); registar(r.comunidadeId, mes, 'saida', r.categoria || 'Débitos bancários', -r.valor); }
+    }
   }
   // Assistência média de adultos por comunidade e mês.
   const ass = new Map<string, { soma: number; n: number }>();

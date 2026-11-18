@@ -121,7 +121,22 @@ export interface MovBanco {
   contabilizar: boolean;
   conciliadoCom?: string | null;
   sugestao?: string | null;
+  /** Classificação com o plano financeiro. */
+  estado?: EstadoMov;
+  /** Motivo do estado (ex.: REVER - Dados inconsistentes) ou origem da proposta. */
+  nota?: string;
+  contaAnalitica?: string;
+  fornecedor?: string;
+  centroCusto?: string;
+  projeto?: string;
+  /** Documento de suporte (ex.: FT 123). */
+  documento?: string;
+  /** Repartição do movimento por comunidades (a soma dos valores é o valor do movimento). */
+  partes?: ParteMov[];
 }
+
+export type EstadoMov = 'por-classificar' | 'proposto' | 'validado' | 'rever';
+export interface ParteMov { comunidadeId: string; valor: number; centroCusto?: string }
 
 export interface BancoLote {
   id: string;

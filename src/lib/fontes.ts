@@ -64,6 +64,7 @@ export const FONTES: Record<Origem, FonteDef> = {
       { key: 'categoria', label: 'Categoria', padroes: ['categoria'] },
       { key: 'evento', label: 'Evento', padroes: ['evento sempre que aplicavel', 'evento'] },
       { key: 'reembolso', label: 'Reembolso necessário?', padroes: ['reembolso do valor necessaro', 'reembolso do valor', 'reembolso'] },
+      { key: 'codigo', label: 'Código do reembolso (R…)', padroes: ['unique id', 'codigo do reembolso', 'codigo'] },
       { key: 'descricao', label: 'Descrição/Notas', padroes: ['descricao notas', 'descricao'], pessoal: true },
       { key: 'pessoa', label: 'Nome', padroes: ['nome'], pessoal: true },
       { key: 'email', label: 'E-mail', padroes: ['e mail', 'email'], pessoal: true },
@@ -148,7 +149,7 @@ export function mapearLinhas(origem: Origem, linhas: Linha[], mapa: Record<strin
     const com = resolverComunidade(get(l, 'comunidade'), data);
     const extra: Record<string, string | number> = {};
     if (com.original) extra.comunidadeOriginal = com.original;
-    for (const k of ['conta', 'caixa', 'reembolso']) { const v = get(l, k); if (v != null && v !== '') extra[k] = String(v); }
+    for (const k of ['conta', 'caixa', 'reembolso', 'codigo']) { const v = get(l, k); if (v != null && v !== '') extra[k] = String(v); }
     for (const k of ['jump', 'criancas', 'connects']) { const v = parseNumero(get(l, k)); if (Number.isFinite(v)) extra[k] = v; }
     const id = String(get(l, 'id') ?? '').trim() || `${origem}-${data}-${i}-${++seq}`;
     const r: Registo & { comunidadeId: string } = {

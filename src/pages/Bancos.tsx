@@ -4,15 +4,19 @@ import { LogoBanco } from '../components/LogoBanco';
 import SaldosBancos from './SaldosBancos';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
-import { apagarBancoLote, auditar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarLotes } from '../lib/db';
+import { apagarBancoLote, auditar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco } from '../lib/db';
+import { REGRAS_INICIAIS, aceitarPropostas, proporClassificacao, relatorioExtratos, repartirPorPrevisao, validar, type DimensaoRelatorio } from '../lib/classificacaoBanco';
 import { lerFicheiro } from '../lib/ficheiros';
-import { NOME_BANCO, bancoDaConta, maioresMovimentos, detetarBanco, dividirPorMes, mapaDoBanco, mapearExtrato, resumoMes, sugerir, sugerirMapaBanco, type Banco, type MapaBanco } from '../lib/banco';
+import { NOME_BANCO, bancoDaConta, maioresMovimentos, detetarBanco, dividirPorMes, mapaDoBanco, mapearExtrato, resumoMes, sugerirMapaBanco, type Banco, type MapaBanco } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
-import type { BancoLote, Conta, MovBanco } from '../lib/types';
+import type { BancoLote, Categoria, Comunidade, Conta, Dimensao, EstadoMov, MovBanco, ParteMov } from '../lib/types';
 import type { Linha } from '../lib/fontes';
 import { comunidadeAtiva } from '../lib/resumos';
 
-type Filtro = 'todos' | 'por-classificar' | 'bolsa' | 'contabilizados' | 'conciliados';
+type Filtro = 'todos' | EstadoMov | 'bolsa' | 'conciliados';
+const ESTADO: Record<EstadoMov, string> = { 'por-classificar': 'Por classificar', proposto: 'Proposto', validado: 'Validado', rever: 'Rever' };
+/** Estado de um movimento (os antigos, sem estado, contam como validados se já estavam classificados). */
+const estadoDe = (m: MovBanco): EstadoMov => m.estado ?? (m.contabilizar || m.conciliadoCom ? 'validado' : 'por-classificar');
 type MovVista = MovBanco & { loteId: string; contaId: string };
 
 const dataPt = (d: string) => d.split('-').reverse().join('/');
@@ -25,13 +29,18 @@ export default function Bancos() {
   const cats = useCarregar(listarCategorias, []);
   const banco = useCarregar(() => listarBanco(ano), [ano]);
   const assist = useCarregar(() => listarLotes(acesso!, 'assistencia', ano), [ano]);
+  const dims = useCarregar(listarDimensoes, []);
+  const regras = useCarregar(listarRegrasBanco, []);
+  const cfixos = useCarregar(() => listarCustosFixos(acesso!), [acesso?.email]);
+  const [detalhe, setDetalhe] = useState<MovVista | null>(null);
+  const [relDim, setRelDim] = useState<DimensaoRelatorio>('rubrica');
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [alterados, setAlterados] = useState<Record<string, BancoLote>>({});
   const [importar, setImportar] = useState(false);
   const [limpar, setLimpar] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [ocultas, setOcultas] = useState<string[]>([]);
-  const [vista, setVista] = useState<'mes' | 'saldos'>('mes');
+  const [vista, setVista] = useState<'mes' | 'saldos' | 'relatorio'>('mes');
   // Extratos sempre por mês: por omissão, o último mês com movimentos neste ano.
   const mesesComDados = [...new Set((banco.dados ?? []).map((l) => l.mes))].sort((a, b) => a - b);
   const [mesEscolhido, setMes] = useState<number | null>(null);
@@ -47,10 +56,10 @@ export default function Bancos() {
     .sort((a, b) => a.data.localeCompare(b.data) || a.contaId.localeCompare(b.contaId) || (a.ordem ?? 0) - (b.ordem ?? 0));
   const mostrar = movs.filter((m) =>
     filtro === 'todos' ? true
-      : filtro === 'por-classificar' ? !m.conciliadoCom && !m.contabilizar && !m.categoria
-        : filtro === 'bolsa' ? m.comunidadeId === 'bolsa-geral'
-          : filtro === 'contabilizados' ? m.contabilizar
-            : !!m.conciliadoCom);
+      : filtro === 'bolsa' ? m.comunidadeId === 'bolsa-geral'
+        : filtro === 'conciliados' ? !!m.conciliadoCom
+          : estadoDe(m) === filtro);
+  const contagem = (e: EstadoMov) => movs.filter((m) => estadoDe(m) === e).length;
   // Totais recalculados só com os bancos visíveis.
   const resumos = visiveis.map((c) => ({ c, r: resumoMes(porConta.get(c.id) ?? []) }));
   const soma = (k: 'entradas' | 'saidas') => r2(resumos.reduce((s, x) => s + x.r[k], 0));
@@ -60,14 +69,25 @@ export default function Bancos() {
     const base = alterados[loteId] ?? banco.dados!.find((l) => l.id === loteId)!;
     setAlterados({ ...alterados, [loteId]: { ...base, registos: base.registos.map((m) => (m.id === id ? { ...m, ...patch } : m)) } });
   }
-  function marcarBolsa() {
+  /** Propõe a classificação dos movimentos do mês (bancos visíveis) com o plano financeiro. */
+  async function propor() {
+    setMsg('A preparar a proposta…');
+    try {
+      const [deps, desp] = await Promise.all([listarLotes(acesso!, 'depositos', ano), listarLotes(acesso!, 'despesas', ano)]);
+      const ctx = {
+        categorias: cats.dados ?? [], regras: regras.dados?.length ? regras.dados : REGRAS_INICIAIS, depositos: deps, despesas: desp,
+        historico: (banco.dados ?? []).flatMap((l) => (alterados[l.id] ?? l).registos), custosFixos: cfixos.dados ?? [],
+      };
+      const novo = { ...alterados };
+      for (const l of lotesMes) if (!ocultas.includes(l.contaId)) novo[l.id] = { ...l, registos: proporClassificacao(l.registos, ctx) };
+      setAlterados(novo);
+      const todos = Object.values(novo).filter((l) => l.mes === mes).flatMap((l) => l.registos);
+      setMsg(`Proposta pronta: ${todos.filter((m) => m.estado === 'proposto').length} propostos, ${todos.filter((m) => m.estado === 'rever').length} para rever, ${todos.filter((m) => m.estado === 'por-classificar').length} por classificar. Reveja e use Aceitar propostas; depois Guardar classificação.`);
+    } catch (e) { setMsg(mensagemErro(e)); }
+  }
+  function aceitar() {
     const novo = { ...alterados };
-    for (const l of lotesMes) {
-      if (ocultas.includes(l.contaId)) continue;
-      const regs = l.registos.map((m) => (m.valor > 0 && !m.conciliadoCom && !m.comunidadeId && /bolsa geral/.test(m.sugestao ?? '')
-        ? { ...m, comunidadeId: 'bolsa-geral', contabilizar: true, categoria: m.categoria ?? 'Ofertas' } : m));
-      novo[l.id] = { ...l, registos: regs };
-    }
+    for (const l of lotesMes) if (!ocultas.includes(l.contaId)) novo[l.id] = { ...l, registos: aceitarPropostas(l.registos, cats.dados ?? []) };
     setAlterados(novo);
   }
   async function guardar() {
@@ -114,6 +134,7 @@ export default function Bancos() {
       <div className="abas" role="tablist">
         <button role="tab" aria-selected={vista === 'mes'} className={vista === 'mes' ? 'ativa' : ''} onClick={() => setVista('mes')}>Movimentos do mês</button>
         <button role="tab" aria-selected={vista === 'saldos'} className={vista === 'saldos' ? 'ativa' : ''} onClick={() => setVista('saldos')}>Saldos {ano}</button>
+        <button role="tab" aria-selected={vista === 'relatorio'} className={vista === 'relatorio' ? 'ativa' : ''} onClick={() => setVista('relatorio')}>Relatório {ano}</button>
       </div>
       <div className="barra-bancos">
         {vista === 'mes' ? <div className="mes-nav" role="group" aria-label="Mês do extrato">
@@ -122,7 +143,7 @@ export default function Bancos() {
             {MESES.map((m, i) => <option key={m} value={i + 1}>{`${m.charAt(0).toUpperCase() + m.slice(1)} ${ano}${mesesComDados.includes(i + 1) ? '' : ' (sem extrato)'}`}</option>)}
           </select>
           <button className="sec" aria-label="Mês seguinte" disabled={mes >= 12} onClick={() => mudarMes(mes + 1)}><ChevronRight size={16} aria-hidden /></button>
-        </div> : <span className="small muted">Clique num mês para ver os movimentos.</span>}
+        </div> : <span className="small muted">{vista === 'saldos' ? 'Clique num mês para ver os movimentos.' : 'Movimentos validados que contam nos resultados.'}</span>}
         <div className="filtro-bancos" role="group" aria-label="Bancos visíveis">
           {ativas.map((c) => (
             <label key={c.id} className={`chip-banco${ocultas.includes(c.id) ? ' desligado' : ''}`}>
@@ -139,6 +160,31 @@ export default function Bancos() {
       {vista === 'saldos' && !banco.aCarregar && (
         <SaldosBancos contas={visiveis} lotes={(banco.dados ?? []).map((l) => alterados[l.id] ?? l)} ano={ano} aoAbrirMes={(m) => { mudarMes(m); setVista('mes'); }} />
       )}
+      {vista === 'relatorio' && !banco.aCarregar && (() => {
+        const todos = (banco.dados ?? []).map((l) => alterados[l.id] ?? l).filter((l) => !ocultas.includes(l.contaId)).flatMap((l) => l.registos);
+        const rel = relatorioExtratos(todos, cats.dados ?? [], relDim, 1, 12);
+        const nomeCom = (id: string) => (coms.dados ?? []).find((c) => c.id === id)?.nome ?? id;
+        const nomeCC = (cod: string) => { const d = (dims.dados ?? []).find((x) => x.tipo === 'centro' && x.codigo === cod); return d ? `${d.codigo} ${d.nome}` : cod; };
+        const rot = (k: string) => (relDim === 'comunidade' ? nomeCom(k) : relDim === 'centroCusto' ? nomeCC(k) : k);
+        return (
+          <div className="sec">
+            <div className="acoes">
+              <label className="campo">Agrupar por
+                <select value={relDim} onChange={(e) => setRelDim(e.target.value as DimensaoRelatorio)}>
+                  <option value="rubrica">Rubrica</option><option value="categoria">Categoria</option><option value="comunidade">Comunidade</option>
+                  <option value="centroCusto">Centro de custo</option><option value="fornecedor">Fornecedor</option><option value="projeto">Projeto ou evento</option>
+                </select></label>
+            </div>
+            <div className="tabela"><table>
+              <thead><tr><th>{relDim === 'centroCusto' ? 'Centro de custo' : relDim.charAt(0).toUpperCase() + relDim.slice(1)}</th><th className="num">Receitas</th><th className="num">Despesas</th><th className="num">Saldo</th><th className="num">Movimentos</th></tr></thead>
+              <tbody>{rel.linhas.map((l) => <tr key={l.chave}><td>{rot(l.chave)}</td><td className="num">{eur(l.receitas)}</td><td className="num">{eur(l.despesas)}</td><td className="num">{eur(r2(l.receitas - l.despesas))}</td><td className="num">{l.n}</td></tr>)}
+                {!rel.linhas.length && <tr><td colSpan={5} className="muted">Sem movimentos validados neste ano.</td></tr>}</tbody>
+              {rel.linhas.length > 0 && <tfoot><tr><td>Total</td><td className="num">{eur(r2(rel.linhas.reduce((s0, l) => s0 + l.receitas, 0)))}</td><td className="num">{eur(r2(rel.linhas.reduce((s0, l) => s0 + l.despesas, 0)))}</td><td className="num">{eur(r2(rel.linhas.reduce((s0, l) => s0 + l.receitas - l.despesas, 0)))}</td><td /></tr></tfoot>}
+            </table></div>
+            <p className="small muted">{`Fora dos resultados (financeiros e conciliados com o Jotform): ${eur(rel.foraDosResultados.valor)} em ${rel.foraDosResultados.n} movimentos. Por validar: ${rel.porValidar} movimentos.`}</p>
+          </div>
+        );
+      })()}
       {vista === 'mes' && <>
       <div className="cards">
         {resumos.map(({ c, r }) => (
@@ -158,48 +204,52 @@ export default function Bancos() {
       <div className="acoes">
         <label className="campo">Mostrar
           <select value={filtro} onChange={(e) => setFiltro(e.target.value as Filtro)}>
-            <option value="todos">Todos os movimentos</option>
-            <option value="por-classificar">Por classificar</option>
-            <option value="bolsa">Bolsa geral</option>
-            <option value="contabilizados">A contabilizar</option>
+            <option value="todos">{`Todos os movimentos (${movs.length})`}</option>
+            <option value="por-classificar">{`Por classificar (${contagem('por-classificar')})`}</option>
+            <option value="proposto">{`Propostos (${contagem('proposto')})`}</option>
+            <option value="rever">{`Para rever (${contagem('rever')})`}</option>
+            <option value="validado">{`Validados (${contagem('validado')})`}</option>
             <option value="conciliados">Conciliados com o Jotform</option>
+            <option value="bolsa">Comunidade Geral</option>
           </select>
         </label>
-        <button className="sec" style={{ alignSelf: 'flex-end' }} onClick={marcarBolsa}>Marcar transferências sugeridas como bolsa geral</button>
+        <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={!movs.length || !(cats.dados ?? []).some((c) => c.codigo)} onClick={() => void propor()} title="Conciliação com o Jotform, vencimentos previstos, memória, regras e transferências para a Geral">Propor classificação</button>
+        <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={!contagem('proposto')} onClick={aceitar} title="Valida as propostas completas (com categoria e comunidade)">Aceitar propostas</button>
       </div>
+      {!(cats.dados ?? []).some((c) => c.codigo) && <div className="aviso">O plano financeiro ainda não está carregado (Configuração → Carregar plano financeiro).</div>}
       <div className="tabela sec">
         <table className="tabela-bancos">
-          <thead><tr><th>Banco</th><th>Data</th><th>Descrição</th><th className="num">Entrada</th><th className="num">Saída</th><th className="num">Saldo</th><th>Sugestão / conciliação</th><th>Comunidade</th><th>Categoria</th><th>Contabilizar</th></tr></thead>
+          <thead><tr><th>Banco</th><th>Data</th><th>Descrição</th><th className="num">Entrada</th><th className="num">Saída</th><th>Estado</th><th>Categoria</th><th>Comunidade</th><th /></tr></thead>
           <tbody>
             {mostrar.slice(0, 600).map((m) => (
               <tr key={`${m.contaId}-${m.id}`}>
                 <td><LogoBanco banco={bancoDe.get(m.contaId) ?? null} /></td>
                 <td>{dataPt(m.data)}</td>
-                <td className="small">{m.descricao}{m.estorno && <> <span className="etiqueta">Estorno</span></>}</td>
+                <td className="small">{m.descricao}{m.estorno && <> <span className="etiqueta">Estorno</span></>}{m.nota && <div className={estadoDe(m) === 'rever' ? '' : 'muted'}>{m.nota}</div>}</td>
                 <td className="num">{m.valor > 0 ? eur(m.valor) : ''}</td>
                 <td className="num">{m.valor < 0 ? eur(-m.valor) : ''}</td>
-                <td className="num small muted">{m.saldo != null ? eur(m.saldo) : ''}</td>
-                <td className="small">{m.conciliadoCom ? <span className="etiqueta preta">Conciliado</span> : null} {m.sugestao}</td>
+                <td><span className={'etiqueta' + (estadoDe(m) === 'validado' ? ' preta' : '')}>{ESTADO[estadoDe(m)]}</span>{m.conciliadoCom && <div className="small muted">Conciliado</div>}</td>
                 <td>
-                  <select value={m.comunidadeId ?? ''} onChange={(e) => alterar(m.loteId, m.id, { comunidadeId: e.target.value || undefined })}>
-                    <option value="">—</option>
-                    {(coms.dados ?? []).filter((c) => c.ativo !== false || c.id === m.comunidadeId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
-                </td>
-                <td>
-                  <select value={m.categoria ?? ''} onChange={(e) => alterar(m.loteId, m.id, { categoria: e.target.value || undefined })}>
+                  <select value={m.categoria ?? ''} disabled={!!m.conciliadoCom} onChange={(e) => alterar(m.loteId, m.id, { categoria: e.target.value || undefined, estado: 'proposto', contabilizar: false })}>
                     <option value="">—</option>
                     {(cats.dados ?? []).filter((c) => (c.ativo !== false || c.nome === m.categoria) && (c.tipo === 'financeiro' || (m.valor > 0 ? c.tipo === 'entrada' : c.tipo === 'saida'))).map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
                   </select>
                 </td>
-                <td><input type="checkbox" checked={m.contabilizar} disabled={!!m.conciliadoCom} onChange={(e) => alterar(m.loteId, m.id, { contabilizar: e.target.checked })} aria-label="Contabilizar movimento" /></td>
+                <td>
+                  {m.partes?.length ? <span className="small">{`Repartido (${m.partes.length})`}</span> : (
+                    <select value={m.comunidadeId ?? ''} disabled={!!m.conciliadoCom} onChange={(e) => alterar(m.loteId, m.id, { comunidadeId: e.target.value || undefined, estado: 'proposto', contabilizar: false })}>
+                      <option value="">—</option>
+                      {(coms.dados ?? []).filter((c) => c.ativo !== false || c.id === m.comunidadeId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>)}
+                </td>
+                <td><button className="link" onClick={() => setDetalhe(m)}>Detalhe</button></td>
               </tr>
             ))}
-            {!mostrar.length && <tr><td colSpan={10} className="muted">{lotesMes.length ? 'Sem movimentos neste filtro ou nos bancos visíveis.' : `Sem extratos de ${MESES[mes - 1]} ${ano}. Use Importar extrato.`}</td></tr>}
+            {!mostrar.length && <tr><td colSpan={9} className="muted">{lotesMes.length ? 'Sem movimentos neste filtro ou nos bancos visíveis.' : `Sem extratos de ${MESES[mes - 1]} ${ano}. Use Importar extrato.`}</td></tr>}
           </tbody>
           {mostrar.length > 0 && <tfoot><tr><td colSpan={3}>Total ({mostrar.length} movimentos)</td>
             <td className="num">{eur(r2(mostrar.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0)))}</td>
-            <td className="num">{eur(r2(mostrar.filter((m) => m.valor < 0).reduce((s, m) => s - m.valor, 0)))}</td><td colSpan={5} /></tr></tfoot>}
+            <td className="num">{eur(r2(mostrar.filter((m) => m.valor < 0).reduce((s, m) => s - m.valor, 0)))}</td><td colSpan={4} /></tr></tfoot>}
         </table>
       </div>
 
@@ -236,6 +286,8 @@ export default function Bancos() {
           </div>
         ))}
       </div>
+      {detalhe && <DetalheMovimento m={detalhe} categorias={cats.dados ?? []} dimensoes={dims.dados ?? []} comunidades={coms.dados ?? []} custosFixos={cfixos.dados ?? []}
+        onFechar={() => setDetalhe(null)} onAplicar={(patch) => { alterar(detalhe.loteId, detalhe.id, patch); setDetalhe(null); }} />}
       {importar && <ImportarExtrato contas={ativas} onFechar={() => setImportar(false)} onFeito={() => void banco.recarregar()} />}
       {limpar && <LimparExtrato contas={ativas} lotes={(banco.dados ?? []).filter((l) => l.mes === mes)} mes={mes} ano={ano} onFechar={() => setLimpar(false)} onFeito={() => { setAlterados({}); void banco.recarregar(); }} />}
     </>
@@ -284,20 +336,13 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
     if (!previa || !res) return;
     setOcupado(true);
     try {
-      const [deps, desp] = await Promise.all([
-        Promise.all(anos.map((a) => listarLotes(acesso!, 'depositos', a, true))).then((x) => x.flat()),
-        Promise.all(anos.map((a) => listarLotes(acesso!, 'despesas', a, true))).then((x) => x.flat()),
-      ]);
       const falhas: string[] = [];
-      let conciliados = 0;
       for (const l of previa.lotes) {
-        l.registos = sugerir(l.registos, deps, desp);
-        conciliados += l.registos.filter((m) => m.conciliadoCom).length;
         try { await gravarBancoLote(l); } catch { falhas.push(periodoPt(l.periodo)); }
       }
       const conta = contas.find((c) => c.id === contaId)!;
       await auditar(acesso!.email, 'importar extrato', `${conta.nome} (${nome}): ${res.movimentos.length} movimentos em ${previa.lotes.length} meses${falhas.length ? `; não gravados (mês fechado?): ${falhas.join(', ')}` : ''}`);
-      setMsg(`Gravados ${previa.lotes.length - falhas.length} meses de ${conta.nome}. ${conciliados} movimentos conciliados com o Jotform.${falhas.length ? ` Não gravados (mês fechado ou sem permissão): ${falhas.join(', ')}.` : ''}`);
+      setMsg(`Gravados ${previa.lotes.length - falhas.length} meses de ${conta.nome}. Use Propor classificação em cada mês para conciliar com o Jotform e classificar.${falhas.length ? ` Não gravados (mês fechado ou sem permissão): ${falhas.join(', ')}.` : ''}`);
       onFeito();
     } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
@@ -386,6 +431,87 @@ function LimparExtrato({ contas, lotes, mes, ano, onFechar, onFeito }: { contas:
       <div className="acoes" style={{ marginTop: 12 }}>
         <button disabled={!alvo.length || ocupado} onClick={() => void apagar()}>{ocupado ? 'A limpar…' : 'Limpar extrato'}</button>
         <button className="sec" onClick={onFechar}>Cancelar</button>
+      </div>
+    </Modal>
+  );
+}
+
+
+/** Classificação completa de um movimento: dimensões do plano, documento e repartição por comunidades. */
+function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, onFechar, onAplicar }: {
+  m: MovBanco; categorias: Categoria[]; dimensoes: Dimensao[]; comunidades: Comunidade[]; custosFixos: import('../lib/types').CustoFixo[];
+  onFechar: () => void; onAplicar: (patch: Partial<MovBanco>) => void;
+}) {
+  const [v, setV] = useState<MovBanco>(m);
+  const [repartir, setRepartir] = useState(!!m.partes?.length);
+  const dims = (t: Dimensao['tipo']) => dimensoes.filter((d) => d.tipo === t && d.ativo !== false);
+  const cat = categorias.find((c) => c.nome === v.categoria);
+  const partes = v.partes ?? [];
+  const somaPartes = r2(partes.reduce((s, p) => s + p.valor, 0));
+  const ativas = comunidades.filter((c) => !c.especial && c.ativo !== false);
+  const setPartes = (ps: ParteMov[]) => setV({ ...v, partes: ps });
+  const iguais = () => { const n = ativas.length; const base = r2(Math.trunc((m.valor / n) * 100) / 100); setPartes(ativas.map((c, i) => ({ comunidadeId: c.id, valor: i === n - 1 ? r2(m.valor - base * (n - 1)) : base }))); };
+  const previsao = () => { if (cat?.codigo) setPartes(repartirPorPrevisao(m.valor, custosFixos, cat.codigo, m.data.slice(0, 7))); };
+  const ok = !repartir || (partes.length > 0 && Math.abs(somaPartes - m.valor) < 0.005 && partes.every((p) => p.comunidadeId));
+  const final = (): Partial<MovBanco> => (repartir ? { ...v, comunidadeId: undefined } : { ...v, partes: undefined });
+  return (
+    <Modal titulo="Classificar movimento" onFechar={onFechar}>
+      <p className="small">{`${m.data.split('-').reverse().join('/')} · ${m.descricao} · `}<b>{eur(m.valor)}</b>{m.conciliadoCom ? ` · Conciliado com ${m.conciliadoCom}` : ''}</p>
+      {m.nota && <div className={m.estado === 'rever' ? 'aviso' : 'nota'}>{m.nota}</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+        <label className="campo">Categoria
+          <select value={v.categoria ?? ''} onChange={(e) => setV({ ...v, categoria: e.target.value || undefined, contaAnalitica: undefined })}>
+            <option value="">—</option>
+            {categorias.filter((c) => (c.ativo !== false || c.nome === v.categoria) && (c.tipo === 'financeiro' || (m.valor > 0 ? c.tipo === 'entrada' : c.tipo === 'saida'))).map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+          </select></label>
+        <label className="campo">Conta analítica
+          <select value={v.contaAnalitica ?? ''} onChange={(e) => setV({ ...v, contaAnalitica: e.target.value || undefined })}>
+            <option value="">—</option>
+            {dims('conta').filter((d) => !cat?.codigo || !d.categoria || d.categoria === cat.codigo).map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
+          </select></label>
+        <label className="campo">Fornecedor
+          <input value={v.fornecedor ?? ''} list="forn-mov" onChange={(e) => setV({ ...v, fornecedor: e.target.value || undefined })} />
+          <datalist id="forn-mov">{dims('fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist></label>
+        <label className="campo">Centro de custo
+          <select value={v.centroCusto ?? ''} onChange={(e) => setV({ ...v, centroCusto: e.target.value || undefined })}>
+            <option value="">—</option>
+            {dims('centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
+          </select></label>
+        <label className="campo">Projeto ou evento
+          <select value={v.projeto ?? ''} onChange={(e) => setV({ ...v, projeto: e.target.value || undefined })}>
+            <option value="">—</option>
+            {dims('projeto').map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
+          </select></label>
+        <label className="campo">Documento<input value={v.documento ?? ''} placeholder="FT 123" onChange={(e) => setV({ ...v, documento: e.target.value || undefined })} /></label>
+        {!repartir && <label className="campo">Comunidade
+          <select value={v.comunidadeId ?? ''} onChange={(e) => setV({ ...v, comunidadeId: e.target.value || undefined })}>
+            <option value="">—</option>
+            {comunidades.filter((c) => c.ativo !== false || c.id === v.comunidadeId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select></label>}
+      </div>
+      <label className="opcao"><input type="checkbox" checked={repartir} onChange={(e) => setRepartir(e.target.checked)} /> Repartir por várias comunidades</label>
+      {repartir && <div className="card" style={{ marginTop: 6 }}>
+        <div className="acoes" style={{ margin: '0 0 8px' }}>
+          <button className="sec" type="button" disabled={!cat?.codigo} onClick={previsao} title="Na proporção dos custos fixos desta categoria previstos no mês">Pela previsão dos custos fixos</button>
+          <button className="sec" type="button" onClick={iguais}>Partes iguais</button>
+          <button className="sec" type="button" onClick={() => setPartes([...partes, { comunidadeId: '', valor: 0 }])}>Acrescentar parte</button>
+        </div>
+        {partes.map((p, i) => (
+          <div key={i} className="linha" style={{ gap: 8, marginBottom: 6 }}>
+            <select value={p.comunidadeId} onChange={(e) => setPartes(partes.map((x, k) => (k === i ? { ...x, comunidadeId: e.target.value } : x)))} aria-label="Comunidade da parte">
+              <option value="">—</option>{comunidades.filter((c) => c.ativo !== false).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+            <input type="number" step="0.01" value={p.valor} style={{ width: 120 }} aria-label="Valor da parte" onChange={(e) => setPartes(partes.map((x, k) => (k === i ? { ...x, valor: Number(e.target.value) } : x)))} />
+            <button className="link" type="button" onClick={() => setPartes(partes.filter((_, k) => k !== i))}>Remover</button>
+          </div>
+        ))}
+        <p className="small">{`Soma das partes: ${eur(somaPartes)} · movimento: ${eur(m.valor)}${Math.abs(somaPartes - m.valor) >= 0.005 ? ` · diferença ${eur(r2(m.valor - somaPartes))}` : ''}`}</p>
+      </div>}
+      <div className="acoes" style={{ marginTop: 14 }}>
+        <button disabled={!ok || !v.categoria || (!repartir && !v.comunidadeId && !v.conciliadoCom)} onClick={() => onAplicar(validar({ ...m, ...final(), nota: v.estado === 'rever' ? undefined : v.nota } as MovBanco, categorias))}>Validar</button>
+        <button className="sec" disabled={!ok} onClick={() => onAplicar({ ...final(), estado: 'proposto', contabilizar: false })}>Guardar como proposta</button>
+        <button className="sec" onClick={() => onAplicar({ estado: 'rever', contabilizar: false, nota: v.nota?.startsWith('REVER') ? v.nota : 'REVER - marcado à mão' })}>Para rever</button>
+        <button className="sec" onClick={() => onAplicar({ estado: 'por-classificar', contabilizar: false, categoria: undefined, comunidadeId: undefined, partes: undefined, conciliadoCom: null, centroCusto: undefined, fornecedor: undefined, projeto: undefined, contaAnalitica: undefined, nota: undefined })}>Limpar</button>
       </div>
     </Modal>
   );
