@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dec, eur, eurContab, parseData, parseNumero } from '../../src/lib/format';
 import { FONTES, construirLotes, mapearLinhas, resolverComunidade, sugerirMapa } from '../../src/lib/fontes';
-import { calcularPublico, calcularPublicoSite, calcularResumos, somarMeses, valorImputado } from '../../src/lib/resumos';
+import { calcularPublico, calcularPublicoSite, calcularResumos, somarMeses, valorImputado, custoNoAno } from '../../src/lib/resumos';
 import { mapearExtrato, sugerir, sugerirMapaBanco } from '../../src/lib/banco';
 import { achatar } from '../../src/lib/jotform';
 import { COMUNIDADES, CUSTOS_FIXOS_CDR } from '../../src/lib/seed';
@@ -226,5 +226,21 @@ describe('teste da chave Jotform', () => {
     const r = await testarChave({ apiKey: 'k', base: 'https://eu-api.jotform.com' }, forms);
     expect(r.ok).toBe(false);
     expect(r.sugestaoServidor).toBe('https://api.jotform.com');
+  });
+});
+
+describe('custoNoAno (filtro do ano nos custos fixos)', () => {
+  const base = { id: 'x', comunidadeId: 'almada', rubrica: 'Água', valorMensal: 55, nivel: 'privado' as const };
+  it('mostra só as linhas com pelo menos um mês ativo no ano escolhido', () => {
+    const l2025 = { ...base, inicio: '2025-01', fim: '2025-12' };
+    const l2026 = { ...base, inicio: '2026-01', fim: '2026-12' };
+    const l2027 = { ...base, inicio: '2027-01', fim: null };
+    expect([l2025, l2026, l2027].filter((c) => custoNoAno(c, 2026))).toEqual([l2026]);
+    expect([l2025, l2026, l2027].filter((c) => custoNoAno(c, 2028))).toEqual([l2027]);
+  });
+  it('inclui linhas que só tocam parte do ano', () => {
+    expect(custoNoAno({ ...base, inicio: '2025-06', fim: '2026-02' }, 2026)).toBe(true);
+    expect(custoNoAno({ ...base, inicio: '2026-11', fim: null }, 2026)).toBe(true);
+    expect(custoNoAno({ ...base, inicio: '2026-11', fim: null }, 2025)).toBe(false);
   });
 });

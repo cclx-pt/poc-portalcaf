@@ -77,7 +77,14 @@ export function mesesDecorridos(ano: number, hoje: string): number {
 export const valorImputado = (c: Pick<CustoFixo, 'valorMensal' | 'incidencia'>) => r2(c.valorMensal * (c.incidencia ?? 100) / 100);
 
 export function custoAtivo(c: CustoFixo, p: string) {
+  if (c.ano != null && p.slice(0, 4) !== String(c.ano)) return false;
   return c.inicio <= p && (!c.fim || c.fim >= p);
+}
+
+/** A linha de custo fixo está ativa em pelo menos um mês do ano. */
+export function custoNoAno(c: CustoFixo, ano: number) {
+  if (c.ano != null) return c.ano === ano;
+  return c.inicio <= `${ano}-12` && (!c.fim || c.fim >= `${ano}-01`);
 }
 
 export function comunidadeAtiva(c: Comunidade, p: string) {

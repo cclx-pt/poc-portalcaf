@@ -1,7 +1,7 @@
 /**
  * Importação dos custos fixos a partir do Excel "Custos por Comunidade":
  * colunas Site, Rúbrica, Incidência % e uma coluna por ano (valor mensal desse ano).
- * Cada ano com valor dá um custo fixo de janeiro a dezembro; o último ano do ficheiro fica em vigor.
+ * Cada ano com valor dá um custo fixo desse ano (campo ano), de janeiro a dezembro.
  * Os nomes das pessoas saem das rubricas (vencimentos sem nomes); vencimentos e encargos são confidenciais.
  */
 import { norm, parseNumero, r2, slug } from './format';
@@ -59,7 +59,6 @@ export interface ResultadoImportacao { custos: CustoFixo[]; avisos: string[]; an
 export function importarCustosFixos(linhas: Linha[], comunidades: Comunidade[]): ResultadoImportacao {
   const avisos: string[] = [];
   const anos = [...new Set(linhas.flatMap((l) => Object.keys(l).filter((k) => /^\d{4}$/.test(k.trim())).map((k) => Number(k))))].sort();
-  const ultimo = anos[anos.length - 1];
   const porNome = (site: string) => {
     if (norm(site) === SITE_GERAL) return comunidades.find((c) => c.id === COMUNIDADE_DOS_GERAIS);
     return comunidades.find((c) => !c.especial && (norm(c.nome) === norm(site) || c.id === slug(site)));
@@ -94,11 +93,11 @@ export function importarCustosFixos(linhas: Linha[], comunidades: Comunidade[]):
       if (!Number.isFinite(v)) { if (l[String(a)] != null && l[String(a)] !== '') avisos.push(`Linha ${linhaN}: valor de ${a} ilegível ("${String(l[String(a)])}"); ano ignorado.`); continue; }
       if (v <= 0) continue;
       const inicio = `${a}-01`;
-      let fim: string | null = a === ultimo ? null : `${a}-12`;
+      let fim: string = `${a}-12`;
       if (fimCom && inicio > fimCom) { avisos.push(`Linha ${linhaN}: ${com.nome} termina em ${fimCom.split('-').reverse().join('/')}; o valor de ${a} (${rubrica}) não foi importado. Pendente de confirmação.`); continue; }
-      if (fimCom && (fim == null || fim > fimCom)) fim = fimCom;
+      if (fimCom && fim > fimCom) fim = fimCom;
       const c: CustoFixo = {
-        id: `${prefixo}-${a}`, comunidadeId: com.id, rubrica, valorMensal: v, incidencia, inicio, fim, nivel: nivelDe(rubrica, confidencial),
+        id: `${prefixo}-${a}`, comunidadeId: com.id, rubrica, ano: a, valorMensal: v, incidencia, inicio, fim, nivel: nivelDe(rubrica, confidencial),
       };
       const notas = [incidencia !== 100 ? `Custo partilhado: ${incidencia}% imputado a esta comunidade.` : '', geral ? 'Custo geral (CCLX): repartido pelas comunidades conforme a assistência.' : ''].filter(Boolean).join(' ');
       if (notas) c.notas = notas;
