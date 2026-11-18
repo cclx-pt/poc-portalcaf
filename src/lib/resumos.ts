@@ -132,9 +132,17 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
     somaParte(m(com, mes).rubricas[tipo], rubrica, 'local', valor);
   };
 
+  const nomeComissao = (d.categorias ?? []).find((c) => c.codigo === '03.03')?.nome ?? 'Comissões bancárias';
   for (const l of d.contribuir) for (const r of l.registos) {
     const x = m(l.comunidadeId, l.mes); x.contribuir = r2(x.contribuir + r.valor); x.n.contribuir++; soma(x.entradasPorCategoria, r.categoria || 'Sem categoria', r.valor);
     registar(l.comunidadeId, l.mes, 'entrada', r.categoria || 'Sem categoria', r.valor);
+    // Comissão IFTHENPAY: diferença entre o valor e o líquido recebido.
+    const liq = Number(r.extra?.liquido);
+    if (Number.isFinite(liq) && liq < r.valor) {
+      const com = r2(r.valor - liq);
+      x.despesas = r2(x.despesas + com); x.n.despesas++; soma(x.despesasPorCategoria, nomeComissao, com);
+      registar(l.comunidadeId, l.mes, 'saida', nomeComissao, com);
+    }
   }
   for (const l of d.depositos) for (const r of l.registos) {
     const x = m(l.comunidadeId, l.mes); x.coletas = r2(x.coletas + r.valor); x.n.coletas++; soma(x.entradasPorCategoria, 'Coletas em dinheiro', r.valor);

@@ -73,9 +73,9 @@ export default function Bancos() {
   async function propor() {
     setMsg('A preparar a proposta…');
     try {
-      const [deps, desp] = await Promise.all([listarLotes(acesso!, 'depositos', ano), listarLotes(acesso!, 'despesas', ano)]);
+      const [deps, desp, contrib] = await Promise.all([listarLotes(acesso!, 'depositos', ano), listarLotes(acesso!, 'despesas', ano), listarLotes(acesso!, 'contribuir', ano)]);
       const ctx = {
-        categorias: cats.dados ?? [], regras: regras.dados?.length ? regras.dados : REGRAS_INICIAIS, depositos: deps, despesas: desp,
+        categorias: cats.dados ?? [], regras: regras.dados?.length ? regras.dados : REGRAS_INICIAIS, depositos: deps, despesas: desp, contribuir: contrib,
         historico: (banco.dados ?? []).flatMap((l) => (alterados[l.id] ?? l).registos), custosFixos: cfixos.dados ?? [],
       };
       const novo = { ...alterados };

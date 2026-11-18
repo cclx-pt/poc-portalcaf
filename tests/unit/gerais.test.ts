@@ -229,3 +229,17 @@ describe('movimentos repartidos', () => {
     expect(mes(rs, 'porto', 3).rubricas.saida['01 Pessoal'].local).toBe(200);
   });
 });
+
+describe('comissão IFTHENPAY (Contribuir com líquido)', () => {
+  it('a diferença entre o valor e o líquido é um gasto 03.03 Bancos e pagamentos da comunidade', async () => {
+    const { categoriasDoPlano } = await import('../../src/lib/plano');
+    const l = lote('contribuir', 'almada', 2026, 3, [{ valor: 50, categoria: 'Dízimos' }]);
+    l.registos[0].extra = { liquido: 48.9 };
+    const rs = calcularResumos(base({ categorias: categoriasDoPlano(), contribuir: [l] }));
+    const m = mes(rs, 'almada', 3);
+    expect(m.contribuir).toBe(50);
+    expect(m.despesas).toBe(1.1);
+    expect(m.despesasPorCategoria['03.03 Bancos e pagamentos']).toBe(1.1);
+    expect(m.rubricas.saida['03 Administração e Tecnologia'].local).toBe(1.1);
+  });
+});

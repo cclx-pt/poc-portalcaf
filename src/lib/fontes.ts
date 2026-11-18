@@ -27,6 +27,8 @@ export const FONTES: Record<Origem, FonteDef> = {
     campos: [
       { key: 'id', label: 'ID da submissão', padroes: ['submission id', 'id da submissao', 'id'] },
       { key: 'data', label: 'Data', padroes: [...DATA_SUB, 'data'], obrigatorio: true },
+      // Antes do valor, para "Valor líquido" não ser tomado pelo valor bruto.
+      { key: 'liquido', label: 'Líquido (após a comissão IFTHENPAY)', padroes: ['liquido', 'valor liquido', 'montante liquido'] },
       { key: 'valor', label: 'Valor (€)', padroes: ['valor'], obrigatorio: true },
       { key: 'comunidade', label: 'Comunidade', padroes: ['comunidade'] },
       { key: 'categoria', label: 'Categoria', padroes: ['categoria'] },
@@ -141,6 +143,9 @@ export function mapearLinhas(origem: Origem, linhas: Linha[], mapa: Record<strin
   let naoPagas = 0;
   linhas.forEach((l, i) => {
     if (origem === 'contribuir' && !estaPago(get(l, 'pago'))) { naoPagas++; return; }
+    // Com a coluna Líquido, só entram as contribuições com o líquido preenchido (decisão do CAF, 18/11/2026).
+    const liquido = origem === 'contribuir' && mapa.liquido ? parseNumero(get(l, 'liquido')) : NaN;
+    if (origem === 'contribuir' && mapa.liquido && !Number.isFinite(liquido)) { naoPagas++; return; }
     const data = parseData(get(l, 'data'));
     if (!data) { rejeitadas.push({ linha: i + 2, motivo: 'data inválida' }); return; }
     const valorBruto = origem === 'assistencia' ? get(l, 'adultos') : get(l, 'valor');
@@ -150,6 +155,7 @@ export function mapearLinhas(origem: Origem, linhas: Linha[], mapa: Record<strin
     const extra: Record<string, string | number> = {};
     if (com.original) extra.comunidadeOriginal = com.original;
     for (const k of ['conta', 'caixa', 'reembolso', 'codigo']) { const v = get(l, k); if (v != null && v !== '') extra[k] = String(v); }
+    if (Number.isFinite(liquido)) extra.liquido = r2(liquido);
     for (const k of ['jump', 'criancas', 'connects']) { const v = parseNumero(get(l, k)); if (Number.isFinite(v)) extra[k] = v; }
     const id = String(get(l, 'id') ?? '').trim() || `${origem}-${data}-${i}-${++seq}`;
     const r: Registo & { comunidadeId: string } = {

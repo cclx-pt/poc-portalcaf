@@ -39,6 +39,7 @@ export const REGRAS_INICIAIS: RegraBanco[] = [
 /** Descritivo sem números, datas e referências, para reconhecer o mesmo pagamento noutros meses. */
 export const chaveDescricao = (d: string) => norm(d).replace(/[0-9]+/g, ' ').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
+const eurTxt = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
 const dias = (a: string, b: string) => (new Date(b).getTime() - new Date(a).getTime()) / 86400000;
 const temPalavra = (texto: string, padrao: string) => {
   const p = norm(padrao).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -53,6 +54,8 @@ export interface Contexto {
   /** Movimentos já validados (para a memória por descritivo). */
   historico: MovBanco[];
   custosFixos: CustoFixo[];
+  /** Contribuições do Contribuir (com o líquido), para conferir os lotes IFTHENPAY. */
+  contribuir?: Lote[];
 }
 
 /** Reparte um valor pela previsão dos custos fixos de uma categoria (código) no mês, na proporção do valor imputado. */
@@ -76,6 +79,7 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
   const existe = (nome: string) => ctx.categorias.some((c) => c.nome === nome && c.ativo !== false);
   const deps = ctx.depositos.flatMap((l) => l.registos.map((x) => ({ ...x, comunidadeId: l.comunidadeId, usado: false })));
   const desp = ctx.despesas.flatMap((l) => l.registos.map((x) => ({ ...x, comunidadeId: l.comunidadeId, usado: false })));
+  const contrib = (ctx.contribuir ?? []).flatMap((l) => l.registos.map((x) => ({ data: x.data, liquido: Number(x.extra?.liquido), usado: false })));
   const memoria = new Map<string, MovBanco>();
   for (const h of [...ctx.historico].sort((a, b) => a.data.localeCompare(b.data))) if (h.estado === 'validado' && h.categoria && !h.conciliadoCom) memoria.set(`${h.valor > 0 ? '+' : '-'}${chaveDescricao(h.descricao)}`, h);
 
@@ -89,7 +93,18 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
 
     // 1. Estornos e IFTHENPAY (lotes do Contribuir, já contados pelo Jotform).
     if (m.estorno || /estorno/.test(d)) return proposto({ categoria: cat('F3.02'), nota: 'Estorno' });
-    if (m.valor > 0 && /ifthenpay/.test(d)) return proposto({ categoria: cat('F1.03'), conciliadoCom: 'contribuir:ifthenpay', nota: 'Lote IFTHENPAY do Contribuir (contado pelo Jotform)' });
+    if (m.valor > 0 && /ifthenpay/.test(d)) {
+      // Líquido das contribuições dos 7 dias anteriores ainda não atribuídas a outro lote.
+      const janela = contrib.filter((x) => !x.usado && Number.isFinite(x.liquido) && dias(x.data, m.data) >= 0 && dias(x.data, m.data) <= 7);
+      const soma = r2(janela.reduce((t, x) => t + x.liquido, 0));
+      let nota = 'Lote IFTHENPAY do Contribuir (contado pelo Jotform)';
+      if (janela.length) {
+        const dif = r2(v - soma);
+        if (Math.abs(dif) < 0.005) janela.forEach((x) => { x.usado = true; });
+        nota += `: líquido do Contribuir nos 7 dias anteriores ${eurTxt(soma)}${Math.abs(dif) < 0.005 ? ', confere' : `, diferença ${eurTxt(Math.abs(dif))}`}`;
+      }
+      return proposto({ categoria: cat('F1.03'), conciliadoCom: 'contribuir:ifthenpay', nota });
+    }
 
     // 2. Reembolsos (código R + ano + contador) e depósitos.
     if (m.valor < 0) {

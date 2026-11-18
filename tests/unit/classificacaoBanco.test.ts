@@ -94,3 +94,17 @@ describe('relatório dos extratos por dimensão', () => {
     expect(relatorioExtratos(movs, cats, 'fornecedor', 3, 3).linhas[0]).toEqual({ chave: '(sem fornecedor)', receitas: 50, despesas: 300, n: 2 });
   });
 });
+
+describe('IFTHENPAY com o líquido do Contribuir', () => {
+  it('compara o lote com a soma do líquido dos dias anteriores ainda não usados', () => {
+    const c = lote('contribuir', 'almada', [
+      { id: 'c1', data: '2026-03-02', valor: 50, extra: { liquido: '48.90' } },
+      { id: 'c2', data: '2026-03-03', valor: 20, extra: { liquido: '19.40' } },
+    ]);
+    const [m] = proporClassificacao([mov('1', '2026-03-05', 68.3, 'TRF IFTHENPAY LDA')], ctx({ contribuir: [c] }));
+    expect(m.conciliadoCom).toBe('contribuir:ifthenpay');
+    expect(m.nota).toMatch(/68,30 €.*confere/);
+    const [d] = proporClassificacao([mov('1', '2026-03-05', 60, 'TRF IFTHENPAY LDA')], ctx({ contribuir: [c] }));
+    expect(d.nota).toMatch(/diferença 8,30 €/);
+  });
+});
