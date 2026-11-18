@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { SyncEstado } from '../components/SyncEstado';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
-import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarDimensoes, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
+import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarDimensoes, listarRegrasBanco, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
 import { COMUNIDADES, CONTAS, JOTFORM_FORMS } from '../lib/seed';
 import { categoriasDoPlano, dimensoesDoPlano } from '../lib/plano';
+import { REGRAS_INICIAIS, type RegraBanco } from '../lib/classificacaoBanco';
 import { NIVEIS, NIVEL_LABEL, type Categoria, type Comunidade, type Conta, type Dimensao, type Nivel } from '../lib/types';
 import { formatarIban, ibanValido, limparIban } from '../lib/iban';
 import { usosCategoria, usosComunidade, usosConta } from '../lib/uso';
@@ -36,6 +37,8 @@ export default function Configuracao() {
   const contas = useCarregar(listarContas, []);
   const cats = useCarregar(listarCategorias, []);
   const dims = useCarregar(listarDimensoes, []);
+  const regras = useCarregar(listarRegrasBanco, []);
+  const [regra, setRegra] = useState<RegraBanco | null>(null);
   const [tipoDim, setTipoDim] = useState<Dimensao['tipo']>('centro');
   const [msg, setMsg] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -144,7 +147,7 @@ export default function Configuracao() {
     finally { setATestar(false); }
   }
   const [filtroCat, setFiltroCat] = useState<'todas' | Categoria['tipo']>('todas');
-  const recarregar = () => Promise.all([coms.recarregar(), contas.recarregar(), cats.recarregar(), dims.recarregar()]);
+  const recarregar = () => Promise.all([coms.recarregar(), contas.recarregar(), cats.recarregar(), dims.recarregar(), regras.recarregar()]);
 
   async function inicializar() {
     setOcupado(true); setMsg(null);
@@ -169,10 +172,28 @@ export default function Configuracao() {
       const novasD = dimensoesDoPlano().filter((d) => !dimEx.has(d.id));
       for (let i = 0; i < novasC.length; i += 20) await Promise.all(novasC.slice(i, i + 20).map((c) => gravar('categorias', c)));
       for (let i = 0; i < novasD.length; i += 20) await Promise.all(novasD.slice(i, i + 20).map((d) => gravar('dimensoes', d)));
-      await auditar(acesso!.email, 'carregar plano financeiro', `${novasC.length} categorias, ${novasD.length} dimensões`);
+      const regEx = new Set((regras.dados ?? []).map((x) => x.id));
+      const novasR = REGRAS_INICIAIS.filter((x) => !regEx.has(x.id));
+      for (const x of novasR) await gravar('regras_banco', x);
+      await auditar(acesso!.email, 'carregar plano financeiro', `${novasC.length} categorias, ${novasD.length} dimensões, ${novasR.length} regras dos extratos`);
       await recarregar();
-      setMsg(`Plano financeiro carregado: ${novasC.length} categorias e ${novasD.length} dimensões novas. O que já existia não foi alterado.`);
+      setMsg(`Plano financeiro carregado: ${novasC.length} categorias, ${novasD.length} dimensões e ${novasR.length} regras dos extratos novas. O que já existia não foi alterado.`);
     } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
+  }
+
+  async function guardarRegra() {
+    if (!regra) return;
+    try {
+      if (!regra.padrao.trim() || !regra.categoria) throw new Error('Indique o texto e a categoria.');
+      const v = { ...regra, id: regra.id || slug(regra.padrao), padrao: regra.padrao.trim() };
+      await gravar('regras_banco', v);
+      await auditar(acesso!.email, 'regra dos extratos', `${v.padrao} → ${v.categoria}`);
+      setRegra(null); await regras.recarregar();
+    } catch (e) { setMsg(mensagemErro(e)); }
+  }
+  async function apagarRegra(x: RegraBanco) {
+    if (!confirm(`Apagar a regra "${x.padrao}"?`)) return;
+    try { await apagar('regras_banco', x.id); await auditar(acesso!.email, 'apagar regra dos extratos', x.padrao); await regras.recarregar(); } catch (e) { setMsg(mensagemErro(e)); }
   }
 
   /** Lista as categorias usadas nos dados (Jotform) que não correspondem a nenhuma categoria nem sinónimo. */
@@ -377,6 +398,49 @@ export default function Configuracao() {
       </div>
 
       </>}
+
+      {area === 'estrutura' && <div className="sec">
+        <div className="linha" style={{ justifyContent: 'space-between' }}>
+          <h2>Regras dos extratos</h2>
+          <button onClick={() => setRegra({ id: '', padrao: '', categoria: '', ativo: true })}>Nova regra</button>
+        </div>
+        <p className="muted">Quando o descritivo do banco contém o texto, a classificação proposta usa esta categoria, fornecedor e centro de custo. A conciliação com o Jotform, os vencimentos previstos e a memória dos movimentos já classificados vêm antes das regras.</p>
+        <Estado aCarregar={regras.aCarregar} erro={regras.erro} vazio={!regras.dados?.length} />
+        {!!regras.dados?.length && <div className="tabela"><table>
+          <thead><tr><th>Texto no banco</th><th>Categoria</th><th>Fornecedor</th><th>Centro de custo</th><th>Estado</th><th /></tr></thead>
+          <tbody>{(regras.dados ?? []).map((x) => (
+            <tr key={x.id}><td>{x.padrao}</td><td>{x.categoria}</td><td>{x.fornecedor ?? '—'}</td><td>{x.centroCusto ?? '—'}</td><td>{ativoTxt(x.ativo) ?? 'Ativa'}</td>
+              <td><button className="link" onClick={() => setRegra(x)}>Editar</button> · <button className="link" onClick={() => void apagarRegra(x)}>Apagar</button></td></tr>
+          ))}</tbody>
+        </table></div>}
+      </div>}
+
+      {regra && (
+        <Modal titulo={regra.id ? 'Editar regra dos extratos' : 'Nova regra dos extratos'} onFechar={() => setRegra(null)}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+            <label className="campo">Texto no descritivo do banco<input value={regra.padrao} placeholder="MEO" onChange={(e) => setRegra({ ...regra, padrao: e.target.value })} /></label>
+            <label className="campo">Categoria
+              <select value={regra.categoria} onChange={(e) => setRegra({ ...regra, categoria: e.target.value })}>
+                <option value="">—</option>{(cats.dados ?? []).filter((c) => c.codigo && c.ativo !== false).map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+              </select></label>
+            <label className="campo">Fornecedor<input value={regra.fornecedor ?? ''} list="forn-regras" onChange={(e) => setRegra({ ...regra, fornecedor: e.target.value || undefined })} />
+              <datalist id="forn-regras">{(dims.dados ?? []).filter((d) => d.tipo === 'fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist></label>
+            <label className="campo">Centro de custo
+              <select value={regra.centroCusto ?? ''} onChange={(e) => setRegra({ ...regra, centroCusto: e.target.value || undefined })}>
+                <option value="">—</option>{(dims.dados ?? []).filter((d) => d.tipo === 'centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
+              </select></label>
+            <label className="campo">Comunidade (opcional)
+              <select value={regra.comunidadeId ?? ''} onChange={(e) => setRegra({ ...regra, comunidadeId: e.target.value || undefined })}>
+                <option value="">—</option>{(coms.dados ?? []).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select></label>
+            <label className="opcao"><input type="checkbox" checked={regra.ativo !== false} onChange={(e) => setRegra({ ...regra, ativo: e.target.checked })} /> Ativa</label>
+          </div>
+          <div className="acoes" style={{ marginTop: 14 }}>
+            <button onClick={() => void guardarRegra()}>Guardar</button>
+            <button className="sec" onClick={() => setRegra(null)}>Cancelar</button>
+          </div>
+        </Modal>
+      )}
 
       {area === 'assistencia' && <>
       <div className="sec card">

@@ -65,6 +65,23 @@ describe('importação Jotform', () => {
     expect(r.registos.map((x) => x.id)).toEqual(['1', '2']);
     expect(r.naoPagas).toBe(2); // PENDENTE e vazio
   });
+  it('com a coluna Líquido: só entram as contribuições com o líquido preenchido, que fica guardado', () => {
+    const ls = [
+      { 'Submission Date': '2026-03-02 10:00:00', 'Submission ID': '1', Comunidade: 'Almada', 'Valor (€)': '50,00', 'Valor Líquido': '48,90', Categoria: 'Dízimo', PAGO: 'PAGO' },
+      { 'Submission Date': '2026-03-03 10:00:00', 'Submission ID': '2', Comunidade: 'Almada', 'Valor (€)': '20', 'Valor Líquido': '', Categoria: 'Oferta', PAGO: 'PAGO' },
+    ];
+    const m = sugerirMapa(FONTES.contribuir, Object.keys(ls[0]));
+    expect(m.valor).toBe('Valor (€)');
+    expect(m.liquido).toBe('Valor Líquido');
+    const r = mapearLinhas('contribuir', ls, m);
+    expect(r.registos.map((x) => [x.id, x.valor, x.extra?.liquido])).toEqual([['1', 50, 48.9]]);
+    expect(r.naoPagas).toBe(1);
+  });
+  it('reconhece os nomes reais do formulário: Pago e Valor Liquido', () => {
+    const cols = ['Submission ID', 'Submission Date', 'Valor Liquido', 'Comunidade', 'Valor (€)', 'Categoria', 'Pago'];
+    const m = sugerirMapa(FONTES.contribuir, cols);
+    expect([m.valor, m.liquido, m.pago]).toEqual(['Valor (€)', 'Valor Liquido', 'Pago']);
+  });
   it('anonimiza no nível privado', async () => {
     const m = sugerirMapa(FONTES.contribuir, Object.keys(linhas[0]));
     const { registos, rejeitadas } = mapearLinhas('contribuir', linhas, m);

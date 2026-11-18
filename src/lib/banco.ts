@@ -108,7 +108,9 @@ export function fundir(novos: MovBanco[], existentes: MovBanco[]) {
   const ex = new Map(existentes.map((m) => [m.id, m]));
   return novos.map((n) => {
     const e = ex.get(n.id);
-    return e ? { ...n, categoria: e.categoria, comunidadeId: e.comunidadeId, contabilizar: e.contabilizar, conciliadoCom: e.conciliadoCom ?? n.conciliadoCom, sugestao: e.sugestao ?? n.sugestao } : n;
+    if (!e) return n;
+    const { categoria, comunidadeId, contabilizar, estado, nota, contaAnalitica, fornecedor, centroCusto, projeto, documento, partes } = e;
+    return { ...n, categoria, comunidadeId, contabilizar, estado, nota, contaAnalitica, fornecedor, centroCusto, projeto, documento, partes, conciliadoCom: e.conciliadoCom ?? n.conciliadoCom, sugestao: e.sugestao ?? n.sugestao };
   });
 }
 
