@@ -352,3 +352,8 @@ label.campo, div.campo { font-size: 12px; font-weight: 600; }
 .kpi-total { background: var(--preto); color: var(--branco); border-color: var(--preto); }
 .kpi-total h3, .kpi-total .sub { color: #cfcfcf; }
 .tabela-bancos td:first-child { width: 36px; text-align: center; }
+.tabela-saldos tr.clicavel { cursor: pointer; }
+.tabela-saldos tr.sem-extrato td { color: var(--cinza); }
+.avisos-extrato { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; }
+.maiores summary { cursor: pointer; }
+.maiores table td { font-size: 13px; }

@@ -291,5 +291,19 @@ describe('páginas', () => {
     expect(html).toContain('1.470,00 €'); // saldo final CGD 1.050 + Santander 420
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/bancos.html', html);
   });
+
+  it('Bancos, vista de saldos: cartões, verificação, saldos mensais e exportação', async () => {
+    const { default: SaldosBancos } = await import('../../src/pages/SaldosBancos');
+    const contas = [{ id: 'cgd-principal', nome: 'CGD · Conta principal', banco: 'Caixa Geral de Depósitos', tipo: 'principal' as const }, { id: 'santander', nome: 'Santander', banco: 'Santander', tipo: 'corrente' as const }];
+    const mv = (id: string, data: string, valor: number, saldo: number, ordem: number) => ({ id, data, descricao: id, valor, saldo, ordem, contabilizar: false });
+    const lotes = [
+      { id: 'c10', contaId: 'cgd-principal', ano: 2026, mes: 10, periodo: '2026-10', atualizadoEm: '', atualizadoPor: '', registos: [mv('a', '2026-10-02', 100, 1100, 0)] },
+      { id: 'c11', contaId: 'cgd-principal', ano: 2026, mes: 11, periodo: '2026-11', atualizadoEm: '', atualizadoPor: '', registos: [mv('b', '2026-11-02', -100, 1000, 0)] },
+      { id: 's11', contaId: 'santander', ano: 2026, mes: 11, periodo: '2026-11', atualizadoEm: '', atualizadoPor: '', registos: [mv('c', '2026-11-03', 50, 450, 0)] },
+    ];
+    const html = renderToString(<SaldosBancos contas={contas} lotes={lotes} ano={2026} aoAbrirMes={() => {}} />);
+    for (const t of ['Saldo atual', '1.450,00 €', 'Saldo médio', 'Mês com mais saídas', 'Verificação dos extratos', 'Saldos mensais', 'Exportar para Excel', 'Ver mês', 'Sem extrato']) expect(html).toContain(t);
+    if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/saldos.html', html);
+  });
 });
 
