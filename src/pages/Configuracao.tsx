@@ -10,7 +10,6 @@ import { NIVEIS, NIVEL_LABEL, type Categoria, type Comunidade, type Conta, type 
 import { formatarIban, ibanValido, limparIban } from '../lib/iban';
 import { usosCategoria, usosComunidade, usosConta } from '../lib/uso';
 import { dataPT, parseData, slug } from '../lib/format';
-import { eDomingo } from '../lib/domingos';
 import { eventosEfetivos } from '../lib/eventos';
 import ConfigEventos from './ConfigEventos';
 import type { ExcecaoAssistencia } from '../lib/types';
@@ -115,7 +114,6 @@ export default function Configuracao() {
   async function guardarExcecao() {
     setMsgExc(null);
     try {
-      if (!eDomingo(nova.data)) throw new Error('A data tem de ser um domingo.');
       if (!nova.motivo.trim()) throw new Error('Indique o motivo.');
       const e: ExcecaoAssistencia = { id: `${nova.data}_${nova.ambito}`, data: nova.data, ambito: nova.ambito, motivo: nova.motivo.trim(), criadoPor: acesso!.email, criadoEm: new Date().toISOString() };
       await gravarExcecao(e);
@@ -473,10 +471,10 @@ export default function Configuracao() {
       <ConfigEventos />
 
       <div className="sec">
-        <h2>Domingos sem assistência esperada (exceções)</h2>
-        <p className="muted small">Por exemplo: culto conjunto, retiro ou encerramento. Podem valer para toda a CCLX ou só para uma comunidade.</p>
+        <h2>Datas sem assistência esperada (exceções)</h2>
+        <p className="muted small">Por exemplo: culto conjunto, retiro ou encerramento. Podem valer para toda a CCLX ou só para uma comunidade. Nessa data, nenhum evento obrigatório aparece nos registos em falta.</p>
         <div className="filtros" style={{ alignItems: 'flex-end', marginBottom: 10 }}>
-            <CampoData rotulo="Domingo" valor={nova.data} onChange={(d) => setNova({ ...nova, data: d })} />
+            <CampoData rotulo="Data" valor={nova.data} onChange={(d) => setNova({ ...nova, data: d })} />
             <label className="campo">Âmbito
               <select value={nova.ambito} onChange={(e) => setNova({ ...nova, ambito: e.target.value })}>
                 <option value="cclx">Toda a CCLX</option>
@@ -489,7 +487,7 @@ export default function Configuracao() {
         {msgExc && <div className="aviso">{msgExc}</div>}
         {(excecoes.dados ?? []).length ? (
           <div className="tabela"><table>
-            <thead><tr><th>Domingo</th><th>Âmbito</th><th>Motivo</th><th>Registado por</th><th /></tr></thead>
+            <thead><tr><th>Data</th><th>Âmbito</th><th>Motivo</th><th>Registado por</th><th /></tr></thead>
             <tbody>{(excecoes.dados ?? []).map((e) => (
               <tr key={e.id}>
                 <td>{dataPt(e.data)}</td><td>{e.ambito === 'cclx' ? 'Toda a CCLX' : nomeCom(e.ambito)}</td><td>{e.motivo}</td>

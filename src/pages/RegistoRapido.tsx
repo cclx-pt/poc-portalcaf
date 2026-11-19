@@ -5,7 +5,7 @@ import { Estado } from '../components/ui';
 import { PAPEL_LABEL } from '../lib/types';
 import { hoje } from '../lib/format';
 import { filtrarLotesPresenca, type EntradaPresenca, type FiltroPresencas } from '../lib/presencas';
-import { DomingosEmFaltaLista, FiltrosListaPresencas, FormularioPresencas, ListaPresencas, useComunidadesDoUtilizador, useLotesPresencas } from './RegistarPresencas';
+import { RegistosEmFaltaLista, FiltrosListaPresencas, FormularioPresencas, ListaPresencas, useComunidadesDoUtilizador, useLotesPresencas } from './RegistarPresencas';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -42,7 +42,7 @@ export default function RegistoRapido() {
       <h1>Registo de presenças</h1>
       <div className="abas" role="tablist">
         <button role="tab" aria-selected={aba === 'novo'} className={aba === 'novo' ? 'ativa' : ''} onClick={() => setAba('novo')}>Novo registo</button>
-        <button role="tab" aria-selected={aba === 'domingos'} className={aba === 'domingos' ? 'ativa' : ''} onClick={() => setAba('domingos')}>Domingos em falta</button>
+        <button role="tab" aria-selected={aba === 'domingos'} className={aba === 'domingos' ? 'ativa' : ''} onClick={() => setAba('domingos')}>Registos em falta</button>
         <button role="tab" aria-selected={aba === 'consultar'} className={aba === 'consultar' ? 'ativa' : ''} onClick={() => setAba('consultar')}>Consultar</button>
       </div>
       <Estado aCarregar={coms.aCarregar} erro={coms.erro} />
@@ -70,8 +70,8 @@ export default function RegistoRapido() {
         <>
           <Estado aCarregar={lotes.aCarregar} erro={lotes.erro} />
           {!lotes.aCarregar && (
-            <DomingosEmFaltaLista ano={ano} hoje={hoje()} comunidades={filtradas} lotes={lotes.dados ?? []}
-              aoEscolher={(data, comunidadeId) => { setInicial({ chave: Date.now(), v: { data, comunidadeId } }); setAba('novo'); window.scrollTo?.(0, 0); }} />
+            <RegistosEmFaltaLista ano={ano} hoje={hoje()} comunidades={filtradas} lotes={lotes.dados ?? []}
+              aoEscolher={(data, comunidadeId, evento) => { setInicial({ chave: Date.now(), v: { data, comunidadeId, evento } }); setAba('novo'); window.scrollTo?.(0, 0); }} />
           )}
         </>
       )}

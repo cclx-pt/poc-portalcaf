@@ -1,6 +1,7 @@
 /** Domingos (dia das celebrações) e domingos sem registo de assistência. Datas AAAA-MM-DD, sempre em UTC. */
 import { norm } from './format';
 import type { Comunidade, ExcecaoAssistencia, Lote, Registo } from './types';
+import type { EventoConfig } from './eventos';
 
 const utc = (d: string) => new Date(`${d}T00:00:00Z`);
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -58,4 +59,41 @@ export function domingosEmFalta(p: { ano: number; hoje: string; comunidades: Com
 /** Vigência ao dia (início/fim podem ser a meio do mês). */
 function dentroDaVigencia(c: Comunidade, d: string) {
   return (!c.inicio || c.inicio.slice(0, 10) <= d) && (!c.fim || c.fim.slice(0, 10) >= d);
+}
+
+/** Evento cuja contagem é obrigatória: marcado assim na configuração; sem marcação, só o evento da celebração de domingo. */
+export function eventoObrigatorio(e: Pick<EventoConfig, 'nome' | 'ativo' | 'dias' | 'obrigatorio'>, eventoCelebracao?: string | null): boolean {
+  if (!e.ativo || !e.dias.length) return false;
+  return e.obrigatorio ?? (!!eventoCelebracao && norm(e.nome) === norm(eventoCelebracao));
+}
+
+export interface RegistoEmFalta { data: string; evento: string }
+export interface FaltasComunidade { comunidadeId: string; esperados: number; comRegisto: number; emFalta: RegistoEmFalta[] }
+
+/**
+ * Registos em falta: para cada evento obrigatório, cada dia da semana em que ocorre (desde `desde` ou 1 de janeiro,
+ * desde a data em que passou a obrigatório, até ontem), por comunidade ativa, sem registo desse evento nesse dia.
+ * As exceções do dia (da CCLX ou da comunidade) não contam.
+ */
+export function registosEmFalta(p: {
+  ano: number; hoje: string; comunidades: Comunidade[]; assistencia: Lote[]; excecoes: ExcecaoAssistencia[];
+  eventos: EventoConfig[]; eventoCelebracao?: string | null; desde?: string;
+}): FaltasComunidade[] {
+  const obrig = p.eventos.filter((e) => eventoObrigatorio(e, p.eventoCelebracao));
+  const excecao = new Set(p.excecoes.map((e) => `${e.data}|${e.ambito}`));
+  const comRegisto = new Set(p.assistencia.flatMap((l) => l.registos.map((r) => `${l.comunidadeId}|${r.data}|${norm(r.evento ?? '')}`)));
+  // Dias esperados de cada evento obrigatório.
+  const dias: RegistoEmFalta[] = [];
+  const d = utc(p.desde && p.desde > `${p.ano}-01-01` ? p.desde : `${p.ano}-01-01`);
+  for (; d.getUTCFullYear() === p.ano && iso(d) < p.hoje; d.setUTCDate(d.getUTCDate() + 1)) {
+    for (const e of obrig) if (e.dias.includes(d.getUTCDay()) && (!e.obrigatorioDesde || iso(d) >= e.obrigatorioDesde)) dias.push({ data: iso(d), evento: e.nome });
+  }
+  return p.comunidades
+    .filter((c) => !c.especial)
+    .map((c) => {
+      const esperados = dias.filter((x) => dentroDaVigencia(c, x.data) && !excecao.has(`${x.data}|cclx`) && !excecao.has(`${x.data}|${c.id}`));
+      const emFalta = esperados.filter((x) => !comRegisto.has(`${c.id}|${x.data}|${norm(x.evento)}`));
+      return { comunidadeId: c.id, esperados: esperados.length, comRegisto: esperados.length - emFalta.length, emFalta };
+    })
+    .filter((x) => x.esperados > 0);
 }

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
+import { CampoData, Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, gravarConfigAssistencia, lerConfigAssistencia, listarLotes } from '../lib/db';
 import { auditoriaEventos } from '../lib/presencas';
+import { eventoObrigatorio } from '../lib/domingos';
 import { DIAS_SEMANA, IDS_BASE, catalogoContagens, descreverQuando, eventosEfetivos, validarEvento, type Contagem, type EventoConfig } from '../lib/eventos';
 import { dataPT, norm, num, slug } from '../lib/format';
 
@@ -122,7 +123,7 @@ export default function ConfigEventos() {
                 {!!vazias.length && <div className="neg">Nunca preenchido: {vazias.map(nomeContagem).join(', ')}</div>}
               </>;
             })()}</td>
-            <td className="small">{e.ativo ? 'Ativo' : 'Inativo'}{cfg.eventoCelebracao && norm(cfg.eventoCelebracao) === norm(e.nome) ? ' · celebração' : ''}{e.pedeDescricao ? ' · pede descrição' : ''}</td>
+            <td className="small">{e.ativo ? 'Ativo' : 'Inativo'}{cfg.eventoCelebracao && norm(cfg.eventoCelebracao) === norm(e.nome) ? ' · celebração' : ''}{e.pedeDescricao ? ' · pede descrição' : ''}{eventoObrigatorio(e, cfg.eventoCelebracao) ? <b>{` · contagem obrigatória${e.obrigatorioDesde ? ` desde ${dataPT(e.obrigatorioDesde)}` : ''}`}</b> : ''}</td>
             {master && <td style={{ whiteSpace: 'nowrap' }}><button className="link" onClick={() => { setErro(null); setEdit({ ...e, descricao: e.descricao ?? '' }); }}>Editar</button> · <button className="link" onClick={() => void apagarEvento(e)}>Apagar</button></td>}
           </tr>
         ))}</tbody>
@@ -200,6 +201,16 @@ export default function ConfigEventos() {
             <label className="opcao"><input type="checkbox" checked={!!edit.pedeDescricao} onChange={(e) => setEdit({ ...edit, pedeDescricao: e.target.checked })} /> O registo pede uma descrição (ex.: "Outra")</label>
             <label className="opcao"><input type="checkbox" checked={edit.ativo} onChange={(e) => setEdit({ ...edit, ativo: e.target.checked })} /> Ativo (aparece no formulário)</label>
           </div>
+          <fieldset className="grupo-campos">
+            <legend>Contagem obrigatória</legend>
+            <label className="opcao"><input type="checkbox" checked={eventoObrigatorio({ ...edit, ativo: true, dias: edit.dias.length ? edit.dias : [0] }, cfg.eventoCelebracao)}
+              onChange={(e) => setEdit({ ...edit, obrigatorio: e.target.checked, obrigatorioDesde: e.target.checked ? (edit.obrigatorioDesde ?? new Date().toISOString().slice(0, 10)) : undefined })} />
+              {' '}A introdução da contagem é obrigatória: cada dia em que o evento ocorre aparece nos <b>registos em falta</b> até ser registado</label>
+            {eventoObrigatorio({ ...edit, ativo: true, dias: edit.dias.length ? edit.dias : [0] }, cfg.eventoCelebracao) && <>
+              <div style={{ maxWidth: 220, marginTop: 6 }}><CampoData rotulo="Obrigatório desde" valor={edit.obrigatorioDesde ?? ''} onChange={(d) => setEdit({ ...edit, obrigatorioDesde: d || undefined })} /></div>
+              <p className="small muted">Precisa de dias da semana específicos. Sem data, conta desde 1 de janeiro.</p>
+            </>}
+          </fieldset>
           <p className="muted small">Pré-visualização: {descreverQuando(edit)}</p>
           <div className="acoes" style={{ marginTop: 12 }}>
             <button onClick={() => void guardarEvento()}>Guardar evento</button>

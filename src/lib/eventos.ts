@@ -32,6 +32,13 @@ export interface EventoConfig {
   horario: Horario;
   /** O registo pede uma descrição (ex.: "Outra"). */
   pedeDescricao?: boolean;
+  /**
+   * A introdução da contagem é obrigatória: cada dia em que o evento ocorre aparece nos registos em falta
+   * enquanto não houver registo. Sem valor, só a celebração de domingo é obrigatória.
+   */
+  obrigatorio?: boolean;
+  /** Data (AAAA-MM-DD) a partir da qual o evento é obrigatório. */
+  obrigatorioDesde?: string;
 }
 
 export const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -90,6 +97,7 @@ export function validarEvento(e: EventoConfig, existentes: EventoConfig[]): stri
   if (existentes.some((x) => x.id !== e.id && norm(x.nome) === norm(e.nome))) return `Já existe um evento "${e.nome.trim()}".`;
   if (!e.contagens.length) return 'Escolha pelo menos uma contagem a recolher.';
   if (e.dias.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) return 'Dias da semana inválidos.';
+  if (e.obrigatorio && !e.dias.length) return 'Um evento com contagem obrigatória tem de ter dias da semana específicos.';
   if (!e.horario.diaTodo) {
     if (!HORA.test(e.horario.inicio)) return 'Indique a hora de início (hh:mm).';
     if (e.horario.fim && !HORA.test(e.horario.fim)) return 'A hora de fim não é válida (hh:mm).';

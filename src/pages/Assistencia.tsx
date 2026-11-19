@@ -5,7 +5,8 @@ import { SyncEstado } from '../components/SyncEstado';
 import { lerConfigAssistencia, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
 import { sincronizarAgora } from '../lib/syncWeb';
 import { MESES, MESES_CURTOS, num } from '../lib/format';
-import { contaParaMedia, domingosEmFalta, eDomingo } from '../lib/domingos';
+import { contaParaMedia, eDomingo, registosEmFalta } from '../lib/domingos';
+import { eventosEfetivos } from '../lib/eventos';
 import { CATEGORICAS } from '../lib/cores';
 import { ocorrenciasDeEvento } from '../lib/presencas';
 
@@ -42,7 +43,7 @@ export default function Assistencia() {
   const coms = useCarregar(listarComunidades, []);
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
   const excecoes = useCarregar(listarExcecoes, []);
-  // "Calcular": traz os registos novos do Jotform (Master), recalcula os resumos e atualiza o mapa e os domingos em falta.
+  // "Calcular": traz os registos novos do Jotform (Master), recalcula os resumos e atualiza o mapa e os registos em falta.
   const [aCalcular, setACalcular] = useState(false);
   const [msgCalc, setMsgCalc] = useState<string | null>(null);
   async function calcular() {
@@ -98,9 +99,9 @@ export default function Assistencia() {
     ...Object.fromEntries(GRUPOS.map((g) => [g.key, m.n ? Math.round((m.soma[g.key] / m.n) * 10) / 10 : 0])),
   }));
 
-  const falta = domingosEmFalta({
+  const falta = registosEmFalta({
     ano, hoje: hojeIso, comunidades: (coms.dados ?? []).filter((c) => (c.ativo ?? true) && (comunidade === 'todas' || c.id === comunidade)),
-    assistencia: lotes.dados ?? [], excecoes: excecoes.dados ?? [], evento: tipoCelebracao,
+    assistencia: lotes.dados ?? [], excecoes: excecoes.dados ?? [], eventos: eventosEfetivos(config.dados), eventoCelebracao: tipoCelebracao,
   });
 
   return (
@@ -113,7 +114,7 @@ export default function Assistencia() {
         </div>
         <div className="acoes">
           {pode('registar') && <a className="btn" href={`${import.meta.env.BASE_URL}#/registos/presencas/novo`}>Registar presenças</a>}
-          <button onClick={() => void calcular()} disabled={aCalcular} title="Vai buscar os registos novos ao Jotform e atualiza o mapa e os domingos em falta">{aCalcular ? 'A calcular…' : 'Calcular'}</button>
+          <button onClick={() => void calcular()} disabled={aCalcular} title="Vai buscar os registos novos ao Jotform e atualiza o mapa e os registos em falta">{aCalcular ? 'A calcular…' : 'Calcular'}</button>
         </div>
       </div>
 
@@ -217,25 +218,25 @@ export default function Assistencia() {
         </div>
       </>}
       <div className="sec">
-        <h2>Domingos sem registo</h2>
-        <p className="muted small">Domingos até hoje sem registo {tipoCelebracao ? `do tipo "${tipoCelebracao}"` : 'no Registo de Presenças'}, por comunidade ativa (filtro de comunidade no topo). Não contam os domingos do quadro de exceções.</p>
+        <h2>Registos em falta</h2>
+        <p className="muted small">Dias até ontem sem registo dos eventos com contagem obrigatória (Configuração → Assistência), por comunidade ativa (filtro de comunidade no topo). Não contam as datas sem assistência esperada (exceções).</p>
         {falta.length ? <>
           <div className="tabela"><table>
-            <thead><tr><th>Comunidade</th><th className="num">Domingos esperados</th><th className="num">Com registo</th><th className="num">Em falta</th><th className="num">Cobertura</th><th>Domingos em falta</th></tr></thead>
+            <thead><tr><th>Comunidade</th><th className="num">Registos esperados</th><th className="num">Com registo</th><th className="num">Em falta</th><th className="num">Cobertura</th><th>Registos em falta</th></tr></thead>
             <tbody>{falta.map((f) => (
               <tr key={f.comunidadeId}>
                 <td>{nomes.get(f.comunidadeId) ?? f.comunidadeId}</td>
                 <td className="num">{num(f.esperados)}</td><td className="num">{num(f.comRegisto)}</td>
                 <td className={'num' + (f.emFalta.length ? ' neg' : '')}>{num(f.emFalta.length)}</td>
                 <td className="num">{f.esperados ? `${num((f.comRegisto / f.esperados) * 100, 1)}%` : '—'}</td>
-                <td className="small">{f.emFalta.length ? f.emFalta.map(dataPt).join(' · ') : '—'}</td>
+                <td className="small">{f.emFalta.length ? f.emFalta.map((x) => `${dataPt(x.data)} (${x.evento})`).join(' · ') : '—'}</td>
               </tr>
             ))}</tbody>
           </table></div>
-        </> : <p className="muted">Sem domingos esperados neste período.</p>}
+        </> : <p className="muted">Sem registos obrigatórios neste período.</p>}
       </div>
 
-      <p className="muted small">Os domingos sem assistência esperada (cultos conjuntos, retiros, encerramentos) registam-se na Configuração, no separador Assistência.</p>
+      <p className="muted small">As datas sem assistência esperada (cultos conjuntos, retiros, encerramentos) registam-se na Configuração, no separador Assistência.</p>
 
     </>
   );

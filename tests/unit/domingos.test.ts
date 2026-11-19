@@ -55,3 +55,27 @@ describe('domingos', () => {
     expect(r[0].emFalta).toEqual(['2026-01-11']);
   });
 });
+
+describe('registos em falta: eventos com contagem obrigatória', () => {
+  const ev = (nome: string, dias: number[], extra: Record<string, unknown> = {}) => ({ id: nome.toLowerCase().replace(/\s/g, '-'), nome, ativo: true, contagens: ['adultos'], dias, horario: { diaTodo: true as const }, ...extra });
+  const lote = (com: string, registos: { data: string; evento: string }[]) => ({ id: `l-${com}`, origem: 'assistencia', ano: 2026, mes: 11, periodo: '2026-11', comunidadeId: com, registos: registos.map((r, i) => ({ id: `${com}${i}`, valor: 10, categoria: 'x', ...r })), total: 0, n: 0, atualizadoEm: '', atualizadoPor: '' });
+  const coms = [{ id: 'almada', nome: 'Almada', ordem: 1 }, { id: 'moita', nome: 'Moita', ordem: 2 }] as never;
+  it('só os eventos obrigatórios (a celebração por omissão) geram registos em falta, com a data e o evento', async () => {
+    const { registosEmFalta } = await import('../../src/lib/domingos');
+    const eventos = [ev('Celebração Domingo', [0]), ev('Reunião Oração', [3], { obrigatorio: true, obrigatorioDesde: '2026-11-01' }), ev('ATOS', [])];
+    const r = registosEmFalta({
+      ano: 2026, hoje: '2026-11-16', comunidades: coms, excecoes: [{ id: 'x', data: '2026-11-08', ambito: 'moita', motivo: 'culto conjunto', criadoPor: '', criadoEm: '' }],
+      assistencia: [lote('almada', [{ data: '2026-11-01', evento: 'Celebração Domingo' }, { data: '2026-11-08', evento: 'celebração domingo' }, { data: '2026-11-15', evento: 'Celebração Domingo' }, { data: '2026-11-04', evento: 'Reunião Oração' }])] as never,
+      eventos, eventoCelebracao: 'Celebração Domingo', desde: '2026-11-01',
+    });
+    expect(r.find((x) => x.comunidadeId === 'almada')).toEqual({ comunidadeId: 'almada', esperados: 5, comRegisto: 4, emFalta: [{ data: '2026-11-11', evento: 'Reunião Oração' }] });
+    expect(r.find((x) => x.comunidadeId === 'moita')!.emFalta).toEqual([
+      { data: '2026-11-01', evento: 'Celebração Domingo' }, { data: '2026-11-04', evento: 'Reunião Oração' }, { data: '2026-11-11', evento: 'Reunião Oração' }, { data: '2026-11-15', evento: 'Celebração Domingo' },
+    ]);
+  });
+  it('a celebração deixa de ser obrigatória se for desmarcada', async () => {
+    const { registosEmFalta } = await import('../../src/lib/domingos');
+    const r = registosEmFalta({ ano: 2026, hoje: '2026-11-16', comunidades: coms, excecoes: [], assistencia: [], eventos: [ev('Celebração Domingo', [0], { obrigatorio: false })], eventoCelebracao: 'Celebração Domingo', desde: '2026-11-01' });
+    expect(r).toEqual([]);
+  });
+});
