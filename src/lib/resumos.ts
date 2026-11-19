@@ -43,18 +43,69 @@ export function repartir(valor: number, pesos: number[]): number[] {
   });
 }
 
-/** Média de jovens e adultos por registo, por comunidade, nos 12 meses que terminam em (ano, mes). */
-export function pesos12m(assistencia: Lote[], assistenciaAnterior: Lote[], ano: number, mes: number, eventoCelebracao?: string | null): Map<string, number> {
+/**
+ * Média de jovens e adultos por domingo (celebração), por comunidade, nos 12 meses que terminam em (ano, mes).
+ * `juntar` indica a comunidade em que cada uma conta (fusões): as comunidades juntas somam-se por data.
+ */
+export function pesos12m(assistencia: Lote[], assistenciaAnterior: Lote[], ano: number, mes: number, eventoCelebracao?: string | null, juntar: (comunidadeId: string) => string = (c) => c): Map<string, number> {
   const fim = ano * 12 + mes;
-  const acc = new Map<string, { soma: number; n: number }>();
+  // Média de cada comunidade de origem em cada data (normalmente um registo por domingo).
+  const porData = new Map<string, { soma: number; n: number }>();
   for (const l of [...assistenciaAnterior, ...assistencia]) {
     const k = l.ano * 12 + l.mes;
     if (k > fim || k <= fim - 12) continue;
-    const a = acc.get(l.comunidadeId) ?? { soma: 0, n: 0 };
-    for (const r of l.registos) if (contaParaMedia(r, eventoCelebracao)) { a.soma += r.valor; a.n++; } // só a celebração
-    acc.set(l.comunidadeId, a);
+    for (const r of l.registos) {
+      if (!contaParaMedia(r, eventoCelebracao)) continue; // só a celebração
+      const chave = `${l.comunidadeId}|${r.data}`;
+      const a = porData.get(chave) ?? { soma: 0, n: 0 };
+      a.soma += r.valor; a.n++; porData.set(chave, a);
+    }
+  }
+  // Soma por comunidade de destino e data; depois a média pelas datas.
+  const destino = new Map<string, number>();
+  for (const [chave, a] of porData) {
+    const [c, data] = chave.split('|');
+    const k = `${juntar(c)}|${data}`;
+    destino.set(k, (destino.get(k) ?? 0) + a.soma / a.n);
+  }
+  const acc = new Map<string, { soma: number; n: number }>();
+  for (const [k, v] of destino) {
+    const c = k.split('|')[0];
+    const a = acc.get(c) ?? { soma: 0, n: 0 };
+    a.soma += v; a.n++; acc.set(c, a);
   }
   return new Map([...acc].filter(([, a]) => a.n).map(([c, a]) => [c, r2(a.soma / a.n)]));
+}
+
+/**
+ * Fusões: depois do fim de uma comunidade com sucessora, o que lhe pertence passa para a sucessora.
+ * `quando` é uma data (AAAA-MM-DD, conta depois do dia do fim) ou um mês (AAAA-MM, conta depois do mês do fim).
+ */
+export function destinoFusao(comunidades: Pick<Comunidade, 'id' | 'fim' | 'sucessora'>[]) {
+  const por = new Map(comunidades.map((c) => [c.id, c]));
+  return (id: string, quando: string): string => {
+    let atual = id;
+    for (let i = 0; i < 5; i++) {
+      const c = por.get(atual);
+      if (!c?.fim || !c.sucessora) return atual;
+      const depois = quando.length === 7 ? quando > c.fim.slice(0, 7) : quando > c.fim.slice(0, 10);
+      if (!depois) return atual;
+      atual = c.sucessora;
+    }
+    return atual;
+  };
+}
+
+/** Lotes com os registos de comunidades já terminadas passados para a sucessora (pela data de cada registo). */
+function lotesComFusao(lotes: Lote[], destino: ReturnType<typeof destinoFusao>): Lote[] {
+  const out: Lote[] = [];
+  for (const l of lotes) {
+    const grupos = new Map<string, Lote['registos']>();
+    for (const r of l.registos) { const c = destino(l.comunidadeId, r.data); grupos.set(c, [...(grupos.get(c) ?? []), r]); }
+    if (grupos.size <= 1 && grupos.has(l.comunidadeId)) { out.push(l); continue; }
+    for (const [c, registos] of grupos) out.push({ ...l, id: `${l.id}>${c}`, comunidadeId: c, registos });
+  }
+  return out;
 }
 
 const vazio = (mes: number): ResumoMes => ({
@@ -107,7 +158,18 @@ export function comunidadeAtiva(c: Comunidade, p: string) {
  * Saídas = custos fixos (tabela) + despesas/reembolsos do Jotform + débitos bancários marcados para contabilizar.
  * A bolsa geral é distribuída, cada mês, pela média de assistência de adultos de cada comunidade nos últimos 12 meses.
  */
-export function calcularResumos(d: DadosCalculo): Resumo[] {
+export function calcularResumos(d0: DadosCalculo): Resumo[] {
+  // Fusões (ex.: Barreiro → Moita depois de 18/07/2026): registos e movimentos depois do fim passam para a sucessora.
+  const destino = destinoFusao(d0.comunidades);
+  const d: DadosCalculo = {
+    ...d0,
+    contribuir: lotesComFusao(d0.contribuir, destino), depositos: lotesComFusao(d0.depositos, destino),
+    despesas: lotesComFusao(d0.despesas, destino), assistencia: lotesComFusao(d0.assistencia, destino),
+    banco: d0.banco.map((b) => ({ ...b, registos: b.registos.map((r) => ({
+      ...r, ...(r.comunidadeId ? { comunidadeId: destino(r.comunidadeId, r.data) } : {}),
+      ...(r.partes?.length ? { partes: r.partes.map((p) => ({ ...p, comunidadeId: destino(p.comunidadeId, r.data) })) } : {}),
+    })) })),
+  };
   const regra = d.regraFechados !== false;
   const fechado = (mes: number) => !regra || d.mesesFechados.has(periodo(d.ano, mes));
   // Com a regra, a previsão dos custos fixos cobre os meses abertos do ano todo; sem ela, os meses decorridos.
@@ -196,12 +258,13 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
     if (!custoAtivo(cf, p)) continue;
     // Mês fechado: conta o pagamento real (banco), não a previsão.
     if (regra && fechado(mes)) continue;
-    const x = m(cf.comunidadeId, mes);
+    const comCf = destino(cf.comunidadeId, p); // custo de uma comunidade já terminada: na sucessora
+    const x = m(comCf, mes);
     const valor = valorImputado(cf);
     x.custosFixos = r2(x.custosFixos + valor);
     soma(x.custosRubricas, cf.nivel === 'confidencial' ? 'Outros custos de funcionamento' : cf.rubrica, valor);
     // Custo fixo confidencial: nunca aparece com a sua rubrica própria.
-    registar(cf.comunidadeId, mes, 'saida', cf.categoria || cf.rubrica, valor, cf.nivel === 'confidencial', true, cf.ambito === 'geral' || cf.comunidadeId === 'bolsa-geral');
+    registar(comCf, mes, 'saida', cf.categoria || cf.rubrica, valor, cf.nivel === 'confidencial', true, cf.ambito === 'geral' || comCf === 'bolsa-geral');
   }
 
   // Distribuição da bolsa geral: cada mês, pela percentagem da média de jovens e adultos de cada comunidade
@@ -211,7 +274,7 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
     const total = r2(bolsa.contribuir + bolsa.coletas + bolsa.transferencias);
     if (!total) continue;
     const p = periodo(d.ano, mes);
-    const w12 = pesos12m(d.assistencia, d.assistenciaAnterior ?? [], d.ano, mes, d.eventoCelebracao);
+    const w12 = pesos12m(d0.assistencia, d.assistenciaAnterior ?? [], d.ano, mes, d.eventoCelebracao, (c) => destino(c, p));
     const elegiveis = d.comunidades.filter((c) => !c.especial && comunidadeAtiva(c, p));
     const pesos = elegiveis.map((c) => w12.get(c.id) ?? 0);
     if (!pesos.reduce((s0, w) => s0 + w, 0)) {
@@ -228,7 +291,7 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
   // Repartição dos gerais pela média de jovens e adultos dos últimos 12 meses.
   for (let mes = 1; mes <= 12; mes++) {
     const p = periodo(d.ano, mes);
-    const w12 = pesos12m(d.assistencia, d.assistenciaAnterior ?? [], d.ano, mes, d.eventoCelebracao);
+    const w12 = pesos12m(d0.assistencia, d.assistenciaAnterior ?? [], d.ano, mes, d.eventoCelebracao, (c) => destino(c, p));
     for (const [c, w] of w12) if (mapa.has(c)) m(c, mes).adultosMedia12m = w;
     const elegiveis = d.comunidades.filter((c) => !c.especial && comunidadeAtiva(c, p) && (w12.get(c.id) ?? 0) > 0);
     const pesos = elegiveis.map((c) => w12.get(c.id)!);

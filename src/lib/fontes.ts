@@ -120,8 +120,8 @@ export function resolverComunidade(texto: unknown, data: string): { id: string; 
     if (chave) id = ALIASES[chave];
   }
   if (!id) return { id: 'bolsa-geral', original: String(texto ?? '') };
-  // Desde 01/11/2026 o Barreiro faz parte da Moita unificada.
-  if (id === 'barreiro' && data >= '2026-11-01') return { id: 'moita', original: String(texto) };
+  // O Barreiro terminou a 18/07/2026 (fusão com a Moita): depois disso conta na Moita (decisão do CAF, 19/11/2026).
+  if (id === 'barreiro' && data > '2026-07-18') return { id: 'moita', original: String(texto) };
   return { id };
 }
 

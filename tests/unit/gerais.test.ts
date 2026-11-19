@@ -270,3 +270,40 @@ describe('texto dos meses fechados e da previsão', () => {
     expect(estadoMeses([{ meses: [{ mes: 1 }] }] as unknown as Resumo[]).regra).toBe(false);
   });
 });
+
+describe('comunidade que termina e passa para outra (fusão: Barreiro → Moita)', () => {
+  const COMS_F: Comunidade[] = [
+    { id: 'almada', nome: 'Almada', ordem: 1 },
+    { id: 'moita', nome: 'Moita', ordem: 2 },
+    { id: 'barreiro', nome: 'Barreiro', ordem: 3, fim: '2026-07-18', sucessora: 'moita' },
+    { id: 'bolsa-geral', nome: 'Geral', ordem: 99, especial: true },
+  ];
+  const cf = (id: string, com: string): CustoFixo => ({ id, comunidadeId: com, rubrica: 'Renda', valorMensal: 1000, inicio: '2026-01', fim: '2026-10', ano: 2026, nivel: 'privado' });
+  it('custos fixos e registos do Barreiro depois do fim contam na Moita; até julho no Barreiro', () => {
+    const rs = calcularResumos(base({
+      comunidades: COMS_F, custosFixos: [cf('b', 'barreiro')],
+      contribuir: [lote('contribuir', 'barreiro', 2026, 7, [{ valor: 70 }]), lote('contribuir', 'barreiro', 2026, 8, [{ valor: 80 }])],
+    }));
+    expect(mes(rs, 'barreiro', 7).custosFixos).toBe(1000);
+    expect(mes(rs, 'barreiro', 7).contribuir).toBe(70);
+    expect(mes(rs, 'barreiro', 8).custosFixos).toBe(0);
+    expect(mes(rs, 'moita', 8).custosFixos).toBe(1000);
+    expect(mes(rs, 'moita', 8).contribuir).toBe(80);
+    expect(mes(rs, 'moita', 10).custosFixos).toBe(1000);
+    expect(mes(rs, 'moita', 11).custosFixos).toBe(0);
+  });
+  it('depois da fusão, o peso de 12 meses da Moita soma a assistência do Barreiro (por domingo)', () => {
+    const rs = calcularResumos(base({
+      comunidades: COMS_F,
+      despesas: [lote('despesas', 'almada', 2026, 9, [{ valor: 300, categoria: 'Renda' }]), lote('despesas', 'almada', 2026, 6, [{ valor: 300, categoria: 'Renda' }])],
+      assistencia: [lote('assistencia', 'almada', 2026, 6, [{ valor: 100 }]), lote('assistencia', 'moita', 2026, 6, [{ valor: 50 }]), lote('assistencia', 'barreiro', 2026, 6, [{ valor: 50 }])],
+    }));
+    // Junho (antes do fim): três comunidades, 100 : 50 : 50.
+    expect(mes(rs, 'almada', 6).geralSaidas).toBe(150);
+    expect(mes(rs, 'barreiro', 6).geralSaidas).toBe(75);
+    // Setembro (depois): o Barreiro já não entra; a Moita pesa 50 + 50 = 100, igual a Almada.
+    expect(mes(rs, 'almada', 9).geralSaidas).toBe(150);
+    expect(mes(rs, 'moita', 9).geralSaidas).toBe(150);
+    expect(mes(rs, 'barreiro', 9).geralSaidas).toBe(0);
+  });
+});
