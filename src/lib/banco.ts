@@ -257,7 +257,8 @@ export function verificarExtratos(lotes: BancoLote[], contaIds: string[]): Aviso
       // Dentro do mês: cada saldo = saldo anterior + movimento (os estornos não mexem no saldo).
       let quebras = 0; let s: number | null = null;
       for (const m of movs) {
-        if (m.saldo == null) continue;
+        // Sem saldo nesta linha: continua a contar a partir do saldo anterior.
+        if (m.saldo == null) { if (s != null && !m.estorno) s = r2(s + m.valor); continue; }
         if (s != null && !m.estorno && Math.abs(s + m.valor - m.saldo) > 0.005) quebras++;
         s = m.saldo;
       }
@@ -300,4 +301,31 @@ export function mesesParaLimpar(lotes: BancoLote[], fechados: Set<string>) {
     porMes.set(l.mes, x);
   }
   return [...porMes.values()].sort((a, b) => a.mes - b.mes).map((x) => ({ ...x, contas: x.contas.sort() }));
+}
+
+/** Quebras de saldo (cada saldo = anterior + movimento) com uma dada coluna da data. */
+function quebrasCom(linhas: Linha[], m: MapaBanco): number {
+  const movs = ordenarMovimentos(mapearExtrato(linhas, m).movimentos);
+  let q = 0; let s: number | null = null;
+  for (const x of movs) {
+    if (x.saldo == null) { if (s != null && !x.estorno) s = r2(s + x.valor); continue; }
+    if (s != null && !x.estorno && Math.abs(s + x.valor - x.saldo) > 0.005) q++;
+    s = x.saldo;
+  }
+  return q;
+}
+
+/** Se outra coluna de datas encadeia melhor os saldos do que a escolhida (ex.: data do movimento em vez da data valor), sugere-a. */
+export function melhorColunaData(linhas: Linha[], m: MapaBanco, colunas: string[]): { coluna: string; quebras: number; quebrasAtual: number } | null {
+  if (!m.saldo || !m.data || !linhas.length) return null;
+  const quebrasAtual = quebrasCom(linhas, m);
+  if (!quebrasAtual) return null;
+  const amostra = linhas.slice(0, 50);
+  const datas = colunas.filter((c) => c !== m.data && amostra.filter((l) => parseData(l[c])).length >= amostra.length * 0.9);
+  let melhor: { coluna: string; quebras: number; quebrasAtual: number } | null = null;
+  for (const c of datas) {
+    const q = quebrasCom(linhas, { ...m, data: c });
+    if (q < quebrasAtual && (!melhor || q < melhor.quebras)) melhor = { coluna: c, quebras: q, quebrasAtual };
+  }
+  return melhor;
 }

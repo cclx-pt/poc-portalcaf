@@ -126,3 +126,30 @@ describe('limpar extrato: só meses abertos', () => {
     ]);
   });
 });
+
+describe('extratos sem linha de cabeçalho e verificação dos saldos', () => {
+  it('CSV sem cabeçalho: colunas "Coluna 1…" e a primeira linha não se perde', async () => {
+    const { paraTabela } = await import('../../src/lib/ficheiros');
+    const t = paraTabela([['18/11/2026', '17/11/2026', '2,0 COM SB', '-0,37', '19.855,25', ''], ['17/11/2026', '17/11/2026', 'ZOOM.COM', '-17,97', '19.855,62', '']]);
+    expect(t.colunas.slice(0, 5)).toEqual(['Coluna 1', 'Coluna 2', 'Coluna 3', 'Coluna 4', 'Coluna 5']);
+    expect(t.linhas).toHaveLength(2);
+    expect(t.linhas[0]['Coluna 3']).toBe('2,0 COM SB');
+    const comCab = paraTabela([['Data mov.', 'Descrição', 'Montante'], ['18/11/2026', 'X', '1,00']]);
+    expect(comCab.colunas).toEqual(['Data mov.', 'Descrição', 'Montante']);
+    expect(comCab.linhas).toHaveLength(1);
+  });
+  it('um movimento sem saldo não conta como quebra', async () => {
+    const { verificarExtratos } = await import('../../src/lib/banco');
+    const mv = (o: number, valor: number, saldo: number | null) => ({ id: `m${o}`, data: '2026-01-05', descricao: 'X', valor, saldo, ordem: o, contabilizar: false, conciliadoCom: null, sugestao: null });
+    const lote = { id: 'l', contaId: 'c', ano: 2026, mes: 1, periodo: '2026-01', registos: [mv(0, -10, 90), mv(1, -20, null), mv(2, -5, 65)], atualizadoEm: '', atualizadoPor: '' };
+    expect(verificarExtratos([lote] as never, ['c'])).toEqual([]);
+  });
+  it('sugere a coluna da data que encadeia os saldos (data do movimento, não a data valor)', async () => {
+    const { melhorColunaData } = await import('../../src/lib/banco');
+    const l = (a: string, b: string, v: string, s: string) => ({ A: a, B: b, C: 'x', D: v, E: s });
+    // Mais recente primeiro; o 2.º movimento tem data valor anterior.
+    const linhas = [l('16/11/2026', '16/11/2026', '10', '120'), l('16/11/2026', '14/11/2026', '-5', '110'), l('15/11/2026', '15/11/2026', '15', '115')];
+    expect(melhorColunaData(linhas, { data: 'B', descricao: 'C', valor: 'D', saldo: 'E' }, ['A', 'B', 'C', 'D', 'E'])).toEqual({ coluna: 'A', quebras: 0, quebrasAtual: 2 });
+    expect(melhorColunaData(linhas, { data: 'A', descricao: 'C', valor: 'D', saldo: 'E' }, ['A', 'B', 'C', 'D', 'E'])).toBeNull();
+  });
+});

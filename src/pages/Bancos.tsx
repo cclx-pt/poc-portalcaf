@@ -8,7 +8,7 @@ import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../compone
 import { apagarBancoLote, auditar, gravar, gravarBancoLote, listarBanco, listarComunidades, listarContas, listarFechos } from '../lib/db';
 import { CamposExtrato, limparMapa } from '../components/MapaExtratoEditor';
 import { lerFicheiro } from '../lib/ficheiros';
-import { NOME_BANCO, bancoDaConta, maioresMovimentos, detetarBanco, dividirPorMes, escolherMapa, mesesParaLimpar, mapaCompleto, mapaDoBanco, mapasDasContas, mapearExtrato, resumoMes, sugerirMapaBanco, type Banco, type MapaBanco } from '../lib/banco';
+import { NOME_BANCO, bancoDaConta, maioresMovimentos, detetarBanco, dividirPorMes, escolherMapa, melhorColunaData, verificarExtratos, mesesParaLimpar, mapaCompleto, mapaDoBanco, mapasDasContas, mapearExtrato, resumoMes, sugerirMapaBanco, type Banco, type MapaBanco } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Conta, EstadoMov, MovBanco } from '../lib/types';
 import type { Linha } from '../lib/fontes';
@@ -197,6 +197,9 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
     return () => { vivo = false; };
   }, [anos]);
   const previa = res && contaId && existentes ? dividirPorMes(contaId, res.movimentos, existentes, acesso!.email) : null;
+  // Verificação antes de gravar: os saldos encadeiam (no ficheiro e com os meses já importados desta conta)?
+  const sugestaoData = useMemo(() => (linhas.length && mapaCompleto(mapa) ? melhorColunaData(linhas, mapa, colunas) : null), [linhas, mapa, colunas]);
+  const avisosPrevia = previa ? verificarExtratos([...(existentes ?? []).filter((e) => e.contaId === contaId && !previa.lotes.some((l) => l.id === e.id)), ...previa.lotes], [contaId]) : [];
   const opcoesConta = bancoFicheiro ? contas.filter((c) => bancoDaConta(c) === bancoFicheiro) : contas;
 
   async function ler(f: File) {
@@ -272,6 +275,18 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
         </div>
       )}
       {res && <p className="small" style={{ marginTop: 10 }}>{res.movimentos.length} movimentos válidos{res.rejeitadas.length ? `, ${res.rejeitadas.length} linhas ignoradas` : ''}{res.movimentos.some((m) => m.estorno) ? `, ${res.movimentos.filter((m) => m.estorno).length} estornos` : ''}.</p>}
+      {sugestaoData && (
+        <div className="aviso" style={{ marginTop: 8 }}>
+          Com a coluna da data "{mapa.data}", {sugestaoData.quebrasAtual} movimentos têm um saldo que não bate com o anterior; com "{sugestaoData.coluna}" são {sugestaoData.quebras}.
+          Use a <b>data do movimento</b>, não a data valor. <button className="link" onClick={() => setMapa({ ...mapa, data: sugestaoData.coluna })}>Usar "{sugestaoData.coluna}"</button>
+        </div>
+      )}
+      {previa && !!avisosPrevia.length && (
+        <div className="aviso" style={{ marginTop: 8 }}>
+          <b>Antes de gravar, confirme a conta e as colunas</b> (os saldos não encadeiam{(existentes ?? []).some((e) => e.contaId === contaId && !previa.lotes.some((l) => l.id === e.id)) ? ' com o ficheiro ou com os meses já importados desta conta' : ''}):
+          <ul style={{ margin: '4px 0 0' }}>{avisosPrevia.slice(0, 6).map((a, i) => <li key={i} className="small">{a.texto}</li>)}{avisosPrevia.length > 6 && <li className="small">… e mais {avisosPrevia.length - 6}.</li>}</ul>
+        </div>
+      )}
       {previa && (
         <>
           <div className="tabela" style={{ maxHeight: 300, marginTop: 8 }}><table>
