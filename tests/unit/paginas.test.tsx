@@ -171,7 +171,8 @@ describe('páginas', () => {
   it('Registar presenças: os campos do formulário Jotform', async () => {
     CONFIG_ASS.atual = { eventoCelebracao: 'Celebração Domingo', eventos: ['Celebração Domingo', 'Reunião Oração', 'ATOS', 'Outra'] } as never;
     const { default: RegistarPresencas } = await import('../../src/pages/RegistarPresencas');
-    const html = renderToString(<RegistarPresencas />);
+    const { MemoryRouter } = await import('react-router-dom');
+    const html = renderToString(<MemoryRouter><RegistarPresencas /></MemoryRouter>);
     CONFIG_ASS.atual = { eventoCelebracao: null };
     // (a celebração só aparece se hoje for domingo: os eventos filtram-se pelo dia da semana da data)
     for (const t of ['Data do evento', 'Evento', 'Comunidade', 'Jovens e adultos', 'Jump (12-14)', 'Crianças (3-11)', 'Connect&#x27;s', 'Observações', 'Reunião Oração', 'ATOS', 'Outra', 'Almada', 'Porto']) expect(html).toContain(t);
@@ -185,7 +186,8 @@ describe('páginas', () => {
   it('Registar presenças: só as comunidades a que o utilizador tem acesso', async () => {
     AUTH.atual = { acesso: { email: 'r@x.pt', papel: 'registos', nivel: 'publico', comunidades: ['porto'] }, pode: (a: string) => a === 'registar', temNivel: () => false, sair: vi.fn() };
     const { default: RegistarPresencas } = await import('../../src/pages/RegistarPresencas');
-    const html = renderToString(<RegistarPresencas />);
+    const { MemoryRouter } = await import('react-router-dom');
+    const html = renderToString(<MemoryRouter><RegistarPresencas /></MemoryRouter>);
     AUTH.atual = { acesso: MASTER_ACESSO, pode: () => true, temNivel: () => true };
     expect(html).toContain('Porto');
     expect(html).not.toContain('Almada');
@@ -320,3 +322,13 @@ describe('páginas', () => {
   });
 });
 
+
+describe('Registos em falta (página própria)', () => {
+  it('Registar presenças abre já preenchido a partir de um registo em falta', async () => {
+    const { MemoryRouter } = await import('react-router-dom');
+    const { default: RegistarPresencas } = await import('../../src/pages/RegistarPresencas');
+    const html = renderToString(<MemoryRouter initialEntries={['/registos/presencas/novo?data=2026-11-15&comunidade=almada&evento=Culto']}><RegistarPresencas /></MemoryRouter>);
+    expect(html).toContain('Ver registos em falta');
+    expect(html).toContain('15/11/2026');
+  });
+});
