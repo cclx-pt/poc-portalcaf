@@ -76,6 +76,7 @@ describe('páginas', () => {
     expect(html).toContain('Mapa mensal');
     expect(html).not.toContain('€');
     expect(html).toContain('>260<'); // total de jovens e adultos no ano (120+100+40)
+    expect(html).toContain('<h3>Registos em falta</h3>'); // KPI com o nº de registos em falta
     expect(html).toContain('>86,7<'); // média por registo (260/3)
     expect(html).toContain('>130,0<'); // média mensal (260/2 meses)
     expect(html).toContain('>314<'); // total de pessoas (149+121+40)
