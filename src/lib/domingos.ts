@@ -80,6 +80,10 @@ export function registosEmFalta(p: {
   eventos: EventoConfig[]; eventoCelebracao?: string | null; desde?: string;
 }): FaltasComunidade[] {
   const obrig = p.eventos.filter((e) => eventoObrigatorio(e, p.eventoCelebracao));
+  // Sem celebração configurada nem eventos obrigatórios: regra antiga (qualquer registo ao domingo).
+  if (!obrig.length && !p.eventoCelebracao && !p.eventos.some((e) => e.obrigatorio === false)) {
+    return domingosEmFalta({ ...p, evento: null }).map((f) => ({ ...f, emFalta: f.emFalta.map((data) => ({ data, evento: 'Domingo' })) }));
+  }
   const excecao = new Set(p.excecoes.map((e) => `${e.data}|${e.ambito}`));
   const comRegisto = new Set(p.assistencia.flatMap((l) => l.registos.map((r) => `${l.comunidadeId}|${r.data}|${norm(r.evento ?? '')}`)));
   // Dias esperados de cada evento obrigatório.
