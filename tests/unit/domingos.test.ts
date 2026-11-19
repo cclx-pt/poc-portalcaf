@@ -79,3 +79,14 @@ describe('registos em falta: eventos com contagem obrigatória', () => {
     expect(r).toEqual([]);
   });
 });
+
+describe('datas possíveis de um evento', () => {
+  it('dias do evento até ontem, sem as exceções da CCLX (e da comunidade, se indicada)', async () => {
+    const { datasPossiveis } = await import('../../src/lib/domingos');
+    const ev = { id: 'c', nome: 'Celebração Domingo', ativo: true, contagens: ['adultos'], dias: [0], horario: { diaTodo: true as const } };
+    const exc = [{ id: '1', data: '2026-11-08', ambito: 'cclx', motivo: '', criadoPor: '', criadoEm: '' }, { id: '2', data: '2026-11-15', ambito: 'moita', motivo: '', criadoPor: '', criadoEm: '' }];
+    expect(datasPossiveis(ev, 2026, '2026-11-16', exc, undefined, '2026-11-01')).toEqual(['2026-11-01', '2026-11-15']);
+    expect(datasPossiveis(ev, 2026, '2026-11-16', exc, 'moita', '2026-11-01')).toEqual(['2026-11-01']);
+    expect(datasPossiveis({ ...ev, dias: [] }, 2026, '2026-11-16', exc)).toEqual([]);
+  });
+});

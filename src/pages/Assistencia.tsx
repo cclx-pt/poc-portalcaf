@@ -4,8 +4,8 @@ import { Estado, GraficoBarras, Kpi, mensagemErro, useCarregar, useFiltros } fro
 import { SyncEstado } from '../components/SyncEstado';
 import { lerConfigAssistencia, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
 import { sincronizarAgora } from '../lib/syncWeb';
-import { MESES, MESES_CURTOS, num } from '../lib/format';
-import { contaParaMedia, eDomingo, registosEmFalta } from '../lib/domingos';
+import { MESES, MESES_CURTOS, norm, num } from '../lib/format';
+import { contaParaMedia, datasPossiveis, eDomingo, registosEmFalta } from '../lib/domingos';
 import { eventosEfetivos } from '../lib/eventos';
 import { CATEGORICAS } from '../lib/cores';
 import { ocorrenciasDeEvento, pesoDasMedias } from '../lib/presencas';
@@ -101,6 +101,7 @@ export default function Assistencia() {
   const mesesComDados = porMes.filter((m) => m.n).length;
   const mediaMensal = (k: Grupo | 'total') => (mesesComDados ? ano_.soma[k] / mesesComDados : null);
   const melhor = porMes.map((m, i) => ({ i, v: media(m, 'adultos') ?? -1 })).sort((a, b) => b.v - a.v)[0];
+  const pior = porMes.map((m, i) => ({ i, v: media(m, 'adultos') })).filter((x): x is { i: number; v: number } => x.v != null).sort((a, b) => a.v - b.v)[0];
   const grafico = porMes.map((m, i) => ({
     rotulo: MESES_CURTOS[i],
     ...Object.fromEntries(GRUPOS.map((g) => [g.key, m.n ? Math.round((m.soma[g.key] / m.n) * 10) / 10 : 0])),
@@ -111,6 +112,10 @@ export default function Assistencia() {
     assistencia: lotes.dados ?? [], excecoes: excecoes.dados ?? [], eventos: eventosEfetivos(config.dados), eventoCelebracao: tipoCelebracao,
   });
 
+  // Datas possíveis do evento escolhido (os seus dias da semana até ontem, sem exceções), para "3/4" no mapa e "x de y".
+  const evCfg = evento !== 'todos' ? eventosEfetivos(config.dados).find((e) => norm(e.nome) === norm(evento)) : undefined;
+  const possiveis = evCfg ? datasPossiveis(evCfg, ano, hojeIso, excecoes.dados ?? [], comunidade === 'todas' ? undefined : comunidade) : [];
+  const possiveisMes = (mes: number) => possiveis.filter((d) => Number(d.slice(5, 7)) === mes).length;
   const emFaltaTotal = falta.reduce((s0, f) => s0 + f.emFalta.length, 0);
   const esperadosTotal = falta.reduce((s0, f) => s0 + f.esperados, 0);
 
@@ -142,8 +147,9 @@ export default function Assistencia() {
       {!!linhas.length && <>
         <div className="cards">
           <Kpi titulo="Média de jovens e adultos" valor={m1(media(ano_, 'adultos'))} sub={`por ${unidade}`} />
-          <Kpi titulo="Média total de pessoas" valor={m1(media(ano_, 'total'))} sub={`por ${unidade}, todas as idades`} />
+          <Kpi titulo="Média total de pessoas" valor={m1(media(ano_, 'total'))} sub={`por ${unidade}, todas as idades, ${possiveis.length ? `em ${num(ano_.n)} de ${num(possiveis.length)} ${unidade === 'domingo' ? 'domingos' : 'eventos'}` : `em ${num(ano_.n)} ${unidade === 'domingo' ? 'domingos' : 'eventos'}`}`} />
           <Kpi titulo="Mês com maior média" valor={melhor && melhor.v >= 0 ? MESES[melhor.i] : '—'} sub={melhor && melhor.v >= 0 ? `${m1(melhor.v)} jovens e adultos` : undefined} />
+          <Kpi titulo="Mês com menor média" valor={pior ? MESES[pior.i] : '—'} sub={pior ? `${m1(pior.v)} jovens e adultos` : undefined} />
           <Kpi titulo={unidade === 'domingo' ? 'Domingos com registo' : 'Eventos com registo'} valor={num(ano_.n)} sub={`${num(doMapa.length)} registos em ${mesesComDados} ${mesesComDados === 1 ? 'mês' : 'meses'}`} />
           <Kpi titulo="Registos em falta" valor={num(emFaltaTotal)} negativo={emFaltaTotal > 0}
             sub={esperadosTotal ? <a href="#registos-em-falta" onClick={(e) => { e.preventDefault(); document.getElementById('registos-em-falta')?.scrollIntoView({ behavior: 'smooth' }); }}>{`de ${num(esperadosTotal)} esperados · ${num((1 - emFaltaTotal / esperadosTotal) * 100, 1)}% registados`}</a> : 'Sem eventos obrigatórios'} />
@@ -182,7 +188,7 @@ export default function Assistencia() {
             <tbody>
               {porMes.map((m, i) => (
                 <tr key={i} className={m.n ? '' : 'muted'}>
-                  <td>{MESES[i]}</td><td className="num">{m.n ? num(m.n) : '—'}</td>
+                  <td>{MESES[i]}</td><td className="num" title={possiveis.length ? 'Registados / possíveis' : undefined}>{possiveis.length ? (possiveisMes(i + 1) || m.n ? `${num(m.n)}/${num(possiveisMes(i + 1))}` : '—') : m.n ? num(m.n) : '—'}</td>
                   <td className="num">{m.n ? num(m.soma.adultos) : '—'}</td><td className="num">{m1(media(m, 'adultos'))}</td><td className="num">{m.n ? num(m.max) : '—'}</td>
                   {(['jump', 'criancas', 'connects', 'total'] as const).map((k) => (
                     <FragCel key={k} total={m.n ? m.soma[k] : null} media={media(m, k)} />
@@ -192,7 +198,7 @@ export default function Assistencia() {
             </tbody>
             <tfoot>
               <tr className="total-geral">
-                <th>Total do ano</th><th className="num">{num(ano_.n)}</th>
+                <th>Total do ano</th><th className="num">{possiveis.length ? `${num(ano_.n)}/${num(possiveis.length)}` : num(ano_.n)}</th>
                 <th className="num">{num(ano_.soma.adultos)}</th><th className="num">{m1(media(ano_, 'adultos'))}</th><th className="num">{num(ano_.max)}</th>
                 {(['jump', 'criancas', 'connects', 'total'] as const).map((k) => <FragCel key={k} total={ano_.soma[k]} media={media(ano_, k)} cab />)}
               </tr>
@@ -203,7 +209,7 @@ export default function Assistencia() {
               </tr>
             </tfoot>
           </table></div>
-          <p className="muted small">Média mensal = total do ano a dividir pelos meses com registos ({mesesComDados}).</p>
+          <p className="muted small">Média mensal = total do ano a dividir pelos meses com registos ({mesesComDados}).{possiveis.length ? ` Na coluna ${unidade === 'domingo' ? 'Domingos' : 'Eventos'}: registados / possíveis (os dias do evento até ontem, sem as datas sem assistência esperada).` : ''}</p>
         </div>
 
         {comunidade === 'todas' && porCom.size > 1 && (
