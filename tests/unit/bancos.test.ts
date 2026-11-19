@@ -113,3 +113,16 @@ describe('vista de saldos dos bancos', () => {
     expect(p[p.length - 1]).toEqual({ mes: 12, saldo: 100 });
   });
 });
+
+describe('limpar extrato: só meses abertos', () => {
+  it('lista os meses com extrato e marca os fechados', async () => {
+    const { mesesParaLimpar } = await import('../../src/lib/banco');
+    const l = (contaId: string, mes: number, n: number) => ({ id: `${contaId}-${mes}`, contaId, ano: 2026, mes, periodo: `2026-${String(mes).padStart(2, '0')}`, registos: Array.from({ length: n }, () => ({})), atualizadoEm: '', atualizadoPor: '' });
+    const r = mesesParaLimpar([l('cgd', 2, 3), l('sant', 2, 1), l('cgd', 1, 5), l('cgd', 3, 2)] as never, new Set(['2026-01']));
+    expect(r).toEqual([
+      { mes: 1, periodo: '2026-01', fechado: true, movimentos: 5, contas: ['cgd'] },
+      { mes: 2, periodo: '2026-02', fechado: false, movimentos: 4, contas: ['cgd', 'sant'] },
+      { mes: 3, periodo: '2026-03', fechado: false, movimentos: 2, contas: ['cgd'] },
+    ]);
+  });
+});
