@@ -101,3 +101,18 @@ export function registosEmFalta(p: {
     })
     .filter((x) => x.esperados > 0);
 }
+
+/**
+ * Datas em que um evento podia ter registo: os seus dias da semana no ano, até ontem, sem as exceções da CCLX
+ * (nem as da comunidade, se indicada). Evento sem dias definidos: nenhuma.
+ */
+export function datasPossiveis(e: Pick<EventoConfig, 'dias'>, ano: number, hoje: string, excecoes: ExcecaoAssistencia[], comunidadeId?: string, desde?: string): string[] {
+  if (!e.dias.length) return [];
+  const exc = new Set(excecoes.filter((x) => x.ambito === 'cclx' || (comunidadeId && x.ambito === comunidadeId)).map((x) => x.data));
+  const out: string[] = [];
+  const d = utc(desde && desde > `${ano}-01-01` ? desde : `${ano}-01-01`);
+  for (; d.getUTCFullYear() === ano && iso(d) < hoje; d.setUTCDate(d.getUTCDate() + 1)) {
+    if (e.dias.includes(d.getUTCDay()) && !exc.has(iso(d))) out.push(iso(d));
+  }
+  return out;
+}

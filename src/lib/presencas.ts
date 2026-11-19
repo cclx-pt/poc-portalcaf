@@ -138,7 +138,11 @@ export function corrigirRegisto(lote: Lote, id: string, e: EntradaPresenca, quem
 }
 
 /** Filtros da lista de registos: comunidade, intervalo de datas (AAAA-MM-DD), tipo de culto/evento e só duplicados. */
-export interface FiltroPresencas { comunidadeId?: string; de?: string; ate?: string; evento?: string; soDuplicados?: boolean }
+export interface FiltroPresencas {
+  comunidadeId?: string; de?: string; ate?: string; evento?: string; soDuplicados?: boolean;
+  /** Elemento de contagem (adultos, jump, criancas, connects ou outro) e se tem de estar preenchido (> 0) ou vazio/0. */
+  contagem?: string; contagemCond?: 'preenchida' | 'vazia';
+}
 
 /** Registos duplicados: mais do que um registo da mesma comunidade, no mesmo dia e com o mesmo evento. Devolve os ids. */
 export function duplicadosPresenca(lotes: Lote[]): Set<string> {
@@ -150,11 +154,17 @@ export function duplicadosPresenca(lotes: Lote[]): Set<string> {
   return new Set([...g.values()].filter((ids) => ids.length > 1).flat());
 }
 
+const cumpreContagem = (r: Registo, f: FiltroPresencas) => {
+  if (!f.contagem) return true;
+  const v = Number(f.contagem === 'adultos' ? r.valor : r.extra?.[f.contagem]) || 0;
+  return f.contagemCond === 'vazia' ? v <= 0 : v > 0;
+};
+
 export function filtrarLotesPresenca(lotes: Lote[], f: FiltroPresencas): Lote[] {
   const dup = f.soDuplicados ? duplicadosPresenca(lotes) : null;
   return lotes
     .filter((l) => !f.comunidadeId || f.comunidadeId === 'todas' || l.comunidadeId === f.comunidadeId)
-    .map((l) => ({ ...l, registos: l.registos.filter((r) => (!f.de || r.data >= f.de) && (!f.ate || r.data <= f.ate) && (!f.evento || norm(r.evento ?? '') === norm(f.evento)) && (!dup || dup.has(r.id))) }))
+    .map((l) => ({ ...l, registos: l.registos.filter((r) => (!f.de || r.data >= f.de) && (!f.ate || r.data <= f.ate) && (!f.evento || norm(r.evento ?? '') === norm(f.evento)) && (!dup || dup.has(r.id)) && cumpreContagem(r, f)) }))
     .filter((l) => l.registos.length);
 }
 

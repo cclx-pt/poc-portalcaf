@@ -334,7 +334,8 @@ export function FiltrosListaPresencas({ comunidades, lotes, filtro, aoMudar }: {
   // Tipos de culto: os configurados e os que existem nos registos (ex.: vindos do Jotform).
   const tipos = [...new Map([...eventosEfetivos(config.dados).map((e) => e.nome), ...lotes.flatMap((l) => l.registos.map((r) => r.evento ?? ''))]
     .filter((x) => x.trim()).map((x) => [norm(x), x] as [string, string])).values()].sort((a, b) => a.localeCompare(b, 'pt'));
-  const ativo = !!(filtro.de || filtro.ate || filtro.evento || filtro.soDuplicados || (filtro.comunidadeId && filtro.comunidadeId !== 'todas'));
+  const ativo = !!(filtro.de || filtro.ate || filtro.evento || filtro.soDuplicados || filtro.contagem || (filtro.comunidadeId && filtro.comunidadeId !== 'todas'));
+  const contagens = catalogoContagens(config.dados);
   const nDup = duplicadosPresenca(filtrarLotesPresenca(lotes, { comunidadeId: filtro.comunidadeId })).size;
   return (
     <div className="filtros linha" style={{ alignItems: 'flex-end', marginBottom: 10 }}>
@@ -352,6 +353,13 @@ export function FiltrosListaPresencas({ comunidades, lotes, filtro, aoMudar }: {
         <select value={filtro.evento ?? ''} onChange={(e) => aoMudar({ ...filtro, evento: e.target.value || undefined })}>
           <option value="">Todos</option>
           {tipos.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </label>
+      <label className="campo">Contagem
+        <select value={filtro.contagem ? `${filtro.contagem}|${filtro.contagemCond ?? 'preenchida'}` : ''} onChange={(e) => { const [c, cond] = e.target.value.split('|'); aoMudar({ ...filtro, contagem: c || undefined, contagemCond: c ? (cond as 'preenchida' | 'vazia') : undefined }); }}>
+          <option value="">Todas</option>
+          {contagens.map((c) => <option key={`${c.id}p`} value={`${c.id}|preenchida`}>{`${c.nome}: preenchida`}</option>)}
+          {contagens.map((c) => <option key={`${c.id}v`} value={`${c.id}|vazia`}>{`${c.nome}: em branco ou 0`}</option>)}
         </select>
       </label>
       <label className="opcao" style={{ alignSelf: 'center' }}><input type="checkbox" checked={!!filtro.soDuplicados} onChange={(e) => aoMudar({ ...filtro, soDuplicados: e.target.checked || undefined })} /> Só duplicados{nDup ? ` (${nDup})` : ''}</label>

@@ -194,3 +194,15 @@ describe('contagens em branco ao gravar', () => {
     expect(validarPresenca(contagensEmBrancoAZero(e, ['adultos', 'jump', 'criancas', 'connects']), '2026-11-16')).toBeNull();
   });
 });
+
+describe('filtro por elemento de contagem', () => {
+  it('mostra os registos com a contagem preenchida (> 0) ou em branco/0', async () => {
+    const { filtrarLotesPresenca } = await import('../../src/lib/presencas');
+    const l = { id: 'l', origem: 'assistencia', ano: 2026, mes: 11, periodo: '2026-11', comunidadeId: 'almada', total: 0, n: 3, atualizadoEm: '', atualizadoPor: '',
+      registos: [{ id: 'a', data: '2026-11-01', evento: 'C', valor: 10, categoria: 'x', extra: { jump: 4 } }, { id: 'b', data: '2026-11-08', evento: 'C', valor: 12, categoria: 'x', extra: { jump: 0 } }, { id: 'c', data: '2026-11-15', evento: 'C', valor: 0, categoria: 'x' }] } as unknown as Lote;
+    const ids = (f: object) => filtrarLotesPresenca([l], f).flatMap((x) => x.registos.map((r) => r.id));
+    expect(ids({ contagem: 'jump', contagemCond: 'preenchida' })).toEqual(['a']);
+    expect(ids({ contagem: 'jump', contagemCond: 'vazia' })).toEqual(['b', 'c']);
+    expect(ids({ contagem: 'adultos', contagemCond: 'vazia' })).toEqual(['c']);
+  });
+});
