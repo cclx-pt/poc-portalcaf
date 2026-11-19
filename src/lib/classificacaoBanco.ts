@@ -149,16 +149,32 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
       const partes = repartirPorPrevisao(m.valor, ctx.custosFixos, '01.02', p);
       return proposto({ categoria: cat('01.02'), centroCusto: 'CC03', ...(partes.length > 1 ? { partes } : partes.length ? { comunidadeId: partes[0].comunidadeId } : {}), nota: partes.length ? 'Repartida pela previsão dos custos fixos' : 'Sem previsão nos custos fixos' });
     }
-    if (m.valor < 0 && VENCIMENTO.test(d) && cat('01.01')) {
+    if (m.valor < 0 && cat('01.01') && (VENCIMENTO.test(d) || TRANSFERENCIA.test(d))) {
+      // Cada pagamento previsto: as linhas partilhadas (incidência < 100%) com a mesma rubrica e o mesmo valor mensal total
+      // são um só pagamento repartido; cada linha a 100% é um pagamento próprio. Compara-se com o valor mensal TOTAL.
       const ativos = ctx.custosFixos.filter((c) => c.categoria?.startsWith('01.01') && custoAtivo(c, p));
-      const grupos = new Map<string, CustoFixo[]>();
-      for (const c of ativos) grupos.set(c.rubrica, [...(grupos.get(c.rubrica) ?? []), c]);
-      const igual = [...grupos.values()].find((g) => Math.abs(g[0].valorMensal - v) < 0.005);
-      if (igual) {
-        const partes = igual.length > 1 ? repartirPorPrevisao(m.valor, igual, '01.01', p) : [];
-        return proposto({ categoria: cat('01.01'), centroCusto: 'CC03', ...(partes.length ? { partes } : { comunidadeId: igual[0].comunidadeId }), nota: `Previsto nos custos fixos (${igual[0].rubrica})` });
+      const pagamentos = new Map<string, CustoFixo[]>();
+      for (const c of ativos) {
+        const k = (c.incidencia ?? 100) < 100 ? `${c.rubrica}|${c.valorMensal}` : `id|${c.id}`;
+        pagamentos.set(k, [...(pagamentos.get(k) ?? []), c]);
       }
-      if (ativos.length) return { ...m, categoria: cat('01.01'), centroCusto: 'CC03', estado: 'rever', nota: `REVER - Dados inconsistentes: ${v.toFixed(2)} € não corresponde a nenhum vencimento previsto` };
+      let iguais = [...pagamentos.values()].filter((g) => Math.abs(g[0].valorMensal - v) < 0.005);
+      if (iguais.length > 1) {
+        // Mesmo valor em mais de um sítio: a memória do mesmo descritivo decide a comunidade.
+        const mem = memoria.get(`-${chaveDescricao(m.descricao)}`);
+        const porMem = mem?.comunidadeId ? iguais.filter((g) => g.some((c) => c.comunidadeId === mem.comunidadeId)) : [];
+        if (porMem.length === 1) iguais = porMem;
+      }
+      if (iguais.length === 1) {
+        const g = iguais[0];
+        const partes = g.length > 1 ? repartirPorPrevisao(m.valor, g, '01.01', p) : [];
+        return proposto({ categoria: cat('01.01'), centroCusto: 'CC03', ...(partes.length > 1 ? { partes } : { comunidadeId: g[0].comunidadeId }), nota: `Previsto nos custos fixos (${g[0].rubrica}, ${eurTxt(g[0].valorMensal)} por mês)` });
+      }
+      if (VENCIMENTO.test(d) && iguais.length > 1) {
+        const opcoes = iguais.map((g) => g.map((c) => c.comunidadeId).join(' + ')).join(', ');
+        return { ...m, categoria: cat('01.01'), centroCusto: 'CC03', estado: 'rever', nota: `REVER - ${v.toFixed(2)} € corresponde a mais de um vencimento previsto (${opcoes}): escolha a comunidade` };
+      }
+      if (VENCIMENTO.test(d) && ativos.length) return { ...m, categoria: cat('01.01'), centroCusto: 'CC03', estado: 'rever', nota: `REVER - Dados inconsistentes: ${v.toFixed(2)} € não corresponde a nenhum vencimento previsto` };
     }
 
     // 4. Memória: o mesmo descritivo já validado.
