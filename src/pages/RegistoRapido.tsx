@@ -81,7 +81,7 @@ export default function RegistoRapido() {
             aoMudar={({ comunidadeId, ...f }) => { setFiltro(f); setComunidade(comunidadeId ?? 'todas'); }} />
           <Estado aCarregar={lotes.aCarregar} erro={lotes.erro} />
           {!lotes.aCarregar && <ListaPresencas lotes={filtrarLotesPresenca(lotes.dados ?? [], { ...filtro, comunidadeId: comunidade })} comunidades={comunidades} soPortal={false} aposApagar={lotes.recarregar} />}
-          <p className="muted small" style={{ marginTop: 8 }}>Inclui os registos do Jotform e os feitos no portal. Só pode apagar os registos que fez no portal.</p>
+          <p className="muted small" style={{ marginTop: 8 }}>Inclui os registos importados do Jotform e os feitos no portal. Corrigir ou apagar no portal não mexe no Jotform; os apagados não voltam a ser importados.</p>
         </>
       )}
     </div>

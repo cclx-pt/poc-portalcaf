@@ -77,7 +77,9 @@ export function acrescentarRegisto(lote: Lote | undefined, r: Registo, quem: str
 
 export function removerRegisto(lote: Lote, id: string): Lote {
   const registos = lote.registos.filter((x) => x.id !== id);
-  return { ...lote, registos, total: r2(registos.reduce((s, x) => s + x.valor, 0)), n: registos.length, atualizadoEm: new Date().toISOString() };
+  // Registo vindo do Jotform: guarda o id, para a sincronização não o voltar a importar.
+  const apagados = eRegistoDoPortal({ id }) ? lote.apagados : [...new Set([...(lote.apagados ?? []), id])];
+  return { ...lote, registos, total: r2(registos.reduce((s, x) => s + x.valor, 0)), n: registos.length, atualizadoEm: new Date().toISOString(), ...(apagados?.length ? { apagados } : {}) };
 }
 
 // ---------- correção de registos anteriores (do portal ou do Jotform) ----------
@@ -135,13 +137,24 @@ export function corrigirRegisto(lote: Lote, id: string, e: EntradaPresenca, quem
   };
 }
 
-/** Filtros da lista de registos: comunidade, intervalo de datas (AAAA-MM-DD) e tipo de culto/evento. */
-export interface FiltroPresencas { comunidadeId?: string; de?: string; ate?: string; evento?: string }
+/** Filtros da lista de registos: comunidade, intervalo de datas (AAAA-MM-DD), tipo de culto/evento e só duplicados. */
+export interface FiltroPresencas { comunidadeId?: string; de?: string; ate?: string; evento?: string; soDuplicados?: boolean }
+
+/** Registos duplicados: mais do que um registo da mesma comunidade, no mesmo dia e com o mesmo evento. Devolve os ids. */
+export function duplicadosPresenca(lotes: Lote[]): Set<string> {
+  const g = new Map<string, string[]>();
+  for (const l of lotes) for (const r of l.registos) {
+    const k = `${l.comunidadeId}|${r.data}|${norm(r.evento ?? '')}`;
+    g.set(k, [...(g.get(k) ?? []), r.id]);
+  }
+  return new Set([...g.values()].filter((ids) => ids.length > 1).flat());
+}
 
 export function filtrarLotesPresenca(lotes: Lote[], f: FiltroPresencas): Lote[] {
+  const dup = f.soDuplicados ? duplicadosPresenca(lotes) : null;
   return lotes
     .filter((l) => !f.comunidadeId || f.comunidadeId === 'todas' || l.comunidadeId === f.comunidadeId)
-    .map((l) => ({ ...l, registos: l.registos.filter((r) => (!f.de || r.data >= f.de) && (!f.ate || r.data <= f.ate) && (!f.evento || norm(r.evento ?? '') === norm(f.evento))) }))
+    .map((l) => ({ ...l, registos: l.registos.filter((r) => (!f.de || r.data >= f.de) && (!f.ate || r.data <= f.ate) && (!f.evento || norm(r.evento ?? '') === norm(f.evento)) && (!dup || dup.has(r.id))) }))
     .filter((l) => l.registos.length);
 }
 

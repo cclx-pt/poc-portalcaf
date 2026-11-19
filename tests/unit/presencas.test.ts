@@ -129,3 +129,32 @@ describe('presenças: filtros, ocorrências e auditoria dos eventos', () => {
     expect(a.atos).toEqual({ registos: 0, ultimo: null, porContagem: { adultos: 0 } });
   });
 });
+
+describe('presenças: duplicados e importação do Jotform só de registos novos', () => {
+  const reg = (id: string, data: string, evento: string, valor = 10) => ({ id, data, evento, valor, categoria: 'Assistência' });
+  const lote = (registos: ReturnType<typeof reg>[], extra: Partial<Lote> = {}): Lote => ({ id: 'assistencia_2026_11_almada', origem: 'assistencia', ano: 2026, mes: 11, periodo: '2026-11', comunidadeId: 'almada', registos, total: 0, n: registos.length, atualizadoEm: '', atualizadoPor: '', ...extra } as Lote);
+  it('identifica registos duplicados (mesma comunidade, dia e evento) e filtra só esses', async () => {
+    const { duplicadosPresenca, filtrarLotesPresenca } = await import('../../src/lib/presencas');
+    const ls = [lote([reg('a', '2026-11-08', 'Celebração Domingo'), reg('b', '2026-11-08', 'celebração domingo'), reg('c', '2026-11-08', 'Reunião Oração'), reg('d', '2026-11-15', 'Celebração Domingo')])];
+    expect([...duplicadosPresenca(ls)].sort()).toEqual(['a', 'b']);
+    expect(filtrarLotesPresenca(ls, { soDuplicados: true }).flatMap((l) => l.registos.map((r) => r.id))).toEqual(['a', 'b']);
+  });
+  it('apagar um registo vindo do Jotform guarda o id, para não voltar a ser importado', async () => {
+    const { removerRegisto } = await import('../../src/lib/presencas');
+    const l = removerRegisto(lote([reg('241', '2026-11-08', 'Celebração Domingo'), reg('portal-1', '2026-11-15', 'Celebração Domingo')]), '241');
+    expect(l.registos.map((r) => r.id)).toEqual(['portal-1']);
+    expect(l.apagados).toEqual(['241']);
+    expect(removerRegisto(l, 'portal-1').apagados).toEqual(['241']);
+  });
+  it('a importação só acrescenta submissões novas: não repete as apagadas nem um dia e evento já registados', async () => {
+    const { fundirAssistencia } = await import('../../src/lib/sync');
+    const existente = lote([reg('portal-1', '2026-11-08', 'Celebração Domingo', 99)], { apagados: ['241'] });
+    const novo = lote([reg('241', '2026-11-01', 'Celebração Domingo'), reg('242', '2026-11-08', 'Celebração Domingo', 50), reg('243', '2026-11-15', 'Celebração Domingo', 70), reg('244', '2026-11-11', 'Reunião Oração')]);
+    const r = fundirAssistencia(existente, novo);
+    expect(r.lote.registos.map((x) => x.id)).toEqual(['portal-1', '244', '243']);
+    expect(r.acrescentados).toBe(2);
+    expect(r.ignorados).toBe(2);
+    expect(r.lote.apagados).toEqual(['241']);
+    expect(fundirAssistencia(r.lote, novo).acrescentados).toBe(0);
+  });
+});

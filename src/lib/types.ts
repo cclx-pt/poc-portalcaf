@@ -109,6 +109,8 @@ export interface Lote {
   n: number;
   atualizadoEm: string;
   atualizadoPor: string;
+  /** Assistência: ids de registos vindos do Jotform apagados no portal (a sincronização não os volta a importar). */
+  apagados?: string[];
 }
 
 export interface MovBanco {
