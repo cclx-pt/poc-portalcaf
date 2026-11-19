@@ -12,6 +12,7 @@ import DemonstracaoResultados from './pages/DemonstracaoResultados';
 import RegistoEvento from './pages/RegistoEvento';
 import RegistarPresencas from './pages/RegistarPresencas';
 import RegistoRapido from './pages/RegistoRapido';
+import RegistosEmFalta from './pages/RegistosEmFalta';
 import Comparacao from './pages/Comparacao';
 import Relatorio from './pages/Relatorio';
 import Bancos from './pages/Bancos';
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="reembolsos" element={<Se nivel="privado"><Fonte key="r" origem="despesas" /></Se>} />
             <Route path="registos/presencas" element={<Se nivel="privado"><Assistencia /></Se>} />
             <Route path="registos/presencas/novo" element={<Se acao="registar"><RegistarPresencas /></Se>} />
+            <Route path="registos/presencas/em-falta" element={<Se acao="registar"><RegistosEmFalta /></Se>} />
             <Route path="registos/batismos" element={<Se nivel="privado"><RegistoEvento key="b" registo="batismos" /></Se>} />
             <Route path="registos/conversoes" element={<Se nivel="privado"><RegistoEvento key="c2" registo="conversoes" /></Se>} />
             <Route path="entradas-conjunto" element={<Se nivel="privado"><EntradasConjunto /></Se>} />

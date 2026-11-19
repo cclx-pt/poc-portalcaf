@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, gravarLote, lerConfigAssistencia, lerLote, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
@@ -350,36 +351,27 @@ export function FiltrosListaPresencas({ comunidades, lotes, filtro, aoMudar }: {
   );
 }
 
-/** Página "Registar presenças" dentro do portal: formulário, registos em falta (à direita) e registos com filtros. */
+/** Página "Registar presenças" dentro do portal: formulário e registos com filtros. Os registos em falta têm página própria. */
 export default function RegistarPresencas() {
   const coms = useComunidadesDoUtilizador();
   const { ano, comunidade, setComunidade } = useFiltros();
   const lotes = useLotesPresencas(ano);
   const comunidades = coms.dados ?? [];
-  // O filtro de comunidade do topo também filtra esta página (só as comunidades do utilizador).
-  const doFiltro = comunidade === 'todas' ? comunidades : comunidades.filter((c) => c.id === comunidade);
-  const [inicial, setInicial] = useState<{ chave: number; v: Partial<EntradaPresenca> }>({ chave: 0, v: comunidade !== 'todas' ? { comunidadeId: comunidade } : {} });
+  // Vindo dos Registos em falta: ?data=…&comunidade=…&evento=… preenche o formulário.
+  const [params] = useSearchParams();
+  const doLink: Partial<EntradaPresenca> = Object.fromEntries(Object.entries({ data: params.get('data'), comunidadeId: params.get('comunidade'), evento: params.get('evento') }).filter(([, v]) => v)) as Partial<EntradaPresenca>;
+  const inicial: Partial<EntradaPresenca> = Object.keys(doLink).length ? doLink : comunidade !== 'todas' ? { comunidadeId: comunidade } : {};
   const [filtro, setFiltro] = useState<Omit<FiltroPresencas, 'comunidadeId'>>({});
   const filtrados = filtrarLotesPresenca(lotes.dados ?? [], { ...filtro, comunidadeId: comunidade });
   return (
     <>
-      <h1>Registar presenças</h1>
+      <div className="linha" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <h1>Registar presenças</h1>
+        <Link className="btn sec" to="/registos/presencas/em-falta">Ver registos em falta</Link>
+      </div>
       <p className="muted">Equivalente ao formulário CCLX : Registo de Presenças. Grava só no portal (o Jotform não é alterado) e entra de imediato no mapa de presenças e nos registos em falta. Link direto para telemóvel: <a href="#/registar">portalcaf.cclx.pt/#/registar</a>.</p>
       <Estado aCarregar={coms.aCarregar} erro={coms.erro} />
-      {!coms.aCarregar && (
-        <div className="presencas-layout">
-          <div id="form-presencas">
-            <FormularioPresencas key={inicial.chave} inicial={inicial.v} comunidades={comunidades} lotes={lotes.dados ?? []} aposGravar={lotes.recarregar} />
-          </div>
-          <aside className="card presencas-lado">
-            <Estado aCarregar={lotes.aCarregar} erro={lotes.erro} />
-            {!lotes.aCarregar && (
-              <RegistosEmFaltaLista compacto ano={ano} hoje={hoje()} comunidades={doFiltro} lotes={lotes.dados ?? []}
-                aoEscolher={(data, comunidadeId, evento) => { setInicial({ chave: Date.now(), v: { data, comunidadeId, evento } }); document.getElementById('form-presencas')?.scrollIntoView?.({ behavior: 'smooth' }); }} />
-            )}
-          </aside>
-        </div>
-      )}
+      {!coms.aCarregar && <FormularioPresencas key={params.toString()} inicial={inicial} comunidades={comunidades} lotes={lotes.dados ?? []} aposGravar={lotes.recarregar} />}
       <div className="sec">
         <h2>Registos de presenças em {ano}</h2>
         <p className="muted small">Do Jotform e do portal, das suas comunidades (ano e comunidade do filtro do topo). Depois de importados, os registos do Jotform passam a ser do portal: corrigir ou apagar não mexe no Jotform, e a sincronização só traz submissões novas (não repete as apagadas nem um dia e evento já registados). Corrigir e apagar ficam na auditoria.</p>
