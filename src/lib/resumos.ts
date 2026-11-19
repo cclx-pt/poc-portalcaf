@@ -105,7 +105,7 @@ export function comunidadeAtiva(c: Comunidade, p: string) {
  * Calcula os resumos mensais por comunidade.
  * Entradas = Contribuir + coletas depositadas + transferências bancárias atribuídas + quota da bolsa geral.
  * Saídas = custos fixos (tabela) + despesas/reembolsos do Jotform + débitos bancários marcados para contabilizar.
- * A bolsa geral é distribuída pela média de assistência de adultos de cada comunidade no mesmo mês.
+ * A bolsa geral é distribuída, cada mês, pela média de assistência de adultos de cada comunidade nos últimos 12 meses.
  */
 export function calcularResumos(d: DadosCalculo): Resumo[] {
   const regra = d.regraFechados !== false;
@@ -204,14 +204,16 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
     registar(cf.comunidadeId, mes, 'saida', cf.categoria || cf.rubrica, valor, cf.nivel === 'confidencial', true, cf.ambito === 'geral' || cf.comunidadeId === 'bolsa-geral');
   }
 
-  // Distribuição da bolsa geral (média de adultos do mesmo mês), também por rubrica.
+  // Distribuição da bolsa geral: cada mês, pela percentagem da média de jovens e adultos de cada comunidade
+  // nos últimos 12 meses (decisão do CAF, 19/11/2026), também por rubrica.
   for (let mes = 1; mes <= 12; mes++) {
     const bolsa = m('bolsa-geral', mes);
     const total = r2(bolsa.contribuir + bolsa.coletas + bolsa.transferencias);
     if (!total) continue;
     const p = periodo(d.ano, mes);
+    const w12 = pesos12m(d.assistencia, d.assistenciaAnterior ?? [], d.ano, mes, d.eventoCelebracao);
     const elegiveis = d.comunidades.filter((c) => !c.especial && comunidadeAtiva(c, p));
-    const pesos = elegiveis.map((c) => m(c.id, mes).adultosMedia ?? 0);
+    const pesos = elegiveis.map((c) => w12.get(c.id) ?? 0);
     if (!pesos.reduce((s0, w) => s0 + w, 0)) {
       for (const [rub, v] of Object.entries(bolsaRub[mes - 1])) somaParte(bolsa.rubricas.entrada, rub, 'local', v);
       continue;
