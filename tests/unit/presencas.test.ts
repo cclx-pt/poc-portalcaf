@@ -183,3 +183,14 @@ describe('peso da média de cada comunidade no total', () => {
     expect(pesoDasMedias({})).toEqual({});
   });
 });
+
+describe('contagens em branco ao gravar', () => {
+  it('as contagens pedidas em branco passam a 0; as não pedidas não mudam', async () => {
+    const { contagensEmBrancoAZero, validarPresenca } = await import('../../src/lib/presencas');
+    const e = { data: '2026-11-15', evento: 'Celebração Domingo', comunidadeId: 'almada', adultos: 120, jump: NaN, criancas: NaN, connects: NaN, observacoes: '', outras: { online: NaN } };
+    const z = contagensEmBrancoAZero(e, ['adultos', 'jump', 'online']);
+    expect([z.adultos, z.jump, z.outras?.online]).toEqual([120, 0, 0]);
+    expect(Number.isNaN(z.criancas)).toBe(true);
+    expect(validarPresenca(contagensEmBrancoAZero(e, ['adultos', 'jump', 'criancas', 'connects']), '2026-11-16')).toBeNull();
+  });
+});

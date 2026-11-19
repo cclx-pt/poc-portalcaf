@@ -5,7 +5,7 @@ import { CampoData, Estado, Modal, mensagemErro, useCarregar, useFiltros, useFoc
 import { auditar, gravarLote, lerConfigAssistencia, lerLote, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
 import { registosEmFalta } from '../lib/domingos';
 import { dataPT, hoje, norm, num } from '../lib/format';
-import { acrescentarRegisto, campoDoErroPresenca, comunidadesDoUtilizador, duplicadosPresenca, filtrarLotesPresenca, type FiltroPresencas, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
+import { acrescentarRegisto, campoDoErroPresenca, comunidadesDoUtilizador, contagensEmBrancoAZero, duplicadosPresenca, filtrarLotesPresenca, type FiltroPresencas, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
 import { recalcularAno } from '../lib/recalcular';
 import { apagarRascunho, armazemLocal, deveGuardarRascunho, guardarRascunho, idRascunho, lerRascunhos } from '../lib/rascunhos';
 import { Contador } from './Contador';
@@ -44,7 +44,8 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   const original = edicao?.lote.registos.find((r) => r.id === edicao.registoId);
   const catalogo = catalogoContagens(config.dados);
   const idsExtra = catalogo.filter((c) => !IDS_BASE.includes(c.id)).map((c) => c.id);
-  const [e, setE] = useState<EntradaPresenca>(original ? entradaDeRegisto(original, edicao!.lote.comunidadeId, idsExtra) : { ...vazio(unica), ...inicial });
+  const [eForm, setE] = useState<EntradaPresenca>(original ? entradaDeRegisto(original, edicao!.lote.comunidadeId, idsExtra) : { ...vazio(unica), ...inicial });
+  const e = eForm;
   const [sucesso, setSucesso] = useState<{ entrada: EntradaPresenca; comunidade: string; nota: string; contagens: Contagem[] } | null>(null);
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
   const [aGuardar, setAGuardar] = useState(false);
@@ -76,7 +77,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   const erroEm = (c: string) => (campoErro === c ? 'com-erro' : undefined);
   const n = (k: keyof EntradaPresenca) => (v: string) => setE((p) => ({ ...p, [k]: v === '' ? NaN : Number(v) }));
 
-  async function guardarCorrecao() {
+  async function guardarCorrecao(e: EntradaPresenca) {
     setMsg(null);
     setAGuardar(true);
     try {
@@ -94,7 +95,10 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   }
 
   async function guardar() {
-    if (edicao) return guardarCorrecao();
+    // Contagens pedidas em branco contam 0 (zero).
+    const e = contagensEmBrancoAZero(eForm, recolhe.map((c) => c.id));
+    setE(e);
+    if (edicao) return guardarCorrecao(e);
     setMsg(null);
     if (e.comunidadeId && !nomes.has(e.comunidadeId)) { setMsg({ tipo: 'erro', texto: 'Não tem acesso a esta comunidade.' }); return; }
     const erro = validarPresenca(e, hoje(), lotes, undefined, evSel, nomesContagens);
@@ -189,7 +193,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
         {recolhe.map(campoNum)}
       </div>
       <label className="campo" style={{ marginTop: 12 }}>Observações<textarea rows={2} value={e.observacoes ?? ''} onChange={(ev) => setE({ ...e, observacoes: ev.target.value })} /></label>
-      <p className="muted small" style={{ marginTop: 8, marginBottom: 0 }}>Campos com * são obrigatórios.{edicao ? ' A correção fica registada no registo e na auditoria (o quê, quem e quando). O Jotform não é alterado.' : ''}</p>
+      <p className="muted small" style={{ marginTop: 8, marginBottom: 0 }}>Campos com * são obrigatórios; as contagens em branco gravam-se como 0 (zero).{edicao ? ' A correção fica registada no registo e na auditoria (o quê, quem e quando). O Jotform não é alterado.' : ''}</p>
       <div className="acoes" style={{ marginTop: 14 }}>
         <button onClick={() => void guardar()} disabled={aGuardar}>{aGuardar ? 'A guardar…' : edicao ? 'Guardar correção' : 'Guardar registo'}</button>
         {edicao

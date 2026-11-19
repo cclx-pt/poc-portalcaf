@@ -15,5 +15,7 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+// Emails do Firebase (link de acesso) em português de Portugal.
+auth.languageCode = 'pt-PT';
 // ignoreUndefinedProperties: campos opcionais por preencher não bloqueiam a gravação.
 export const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
