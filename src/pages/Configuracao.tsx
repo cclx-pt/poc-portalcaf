@@ -419,7 +419,7 @@ export default function Configuracao() {
         {!!regras.dados?.length && <div className="tabela"><table>
           <thead><tr><th>Texto no banco</th><th>Categoria</th><th>Comunidade</th><th>Centro de custo</th><th>Fornecedor</th><th>Estado</th><th /></tr></thead>
           <tbody>{(regras.dados ?? []).map((x) => (
-            <tr key={x.id}><td>{x.padrao}</td><td>{x.categoria}</td><td>{x.comunidadeId ? (coms.dados ?? []).find((c) => c.id === x.comunidadeId)?.nome ?? x.comunidadeId : '—'}</td><td>{x.centroCusto ?? '—'}</td><td>{x.fornecedor ?? '—'}</td><td>{ativoTxt(x.ativo) ?? 'Ativa'}</td>
+            <tr key={x.id}><td>{x.padrao}</td><td>{x.categoria}{!!x.partes?.length && <div className="small muted">{`Dividida em ${x.partes.length} linhas: ${x.partes.map((pt) => `${(coms.dados ?? []).find((c) => c.id === pt.comunidadeId)?.nome ?? pt.comunidadeId} ${pt.pct != null ? `${String(pt.pct).replace('.', ',')}%` : `${String(pt.valor).replace('.', ',')} €`}`).join(' · ')}`}</div>}</td><td>{x.comunidadeId ? (coms.dados ?? []).find((c) => c.id === x.comunidadeId)?.nome ?? x.comunidadeId : '—'}</td><td>{x.centroCusto ?? '—'}</td><td>{x.fornecedor ?? '—'}</td><td>{ativoTxt(x.ativo) ?? 'Ativa'}</td>
               <td><button className="link" onClick={() => setRegra(x)}>Editar</button> · <button className="link" onClick={() => void apagarRegra(x)}>Apagar</button></td></tr>
           ))}</tbody>
         </table></div>}

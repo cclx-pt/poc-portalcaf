@@ -157,6 +157,8 @@ export interface ParteMov {
   projeto?: string;
   /** Definido ao validar: false se a linha é financeira (não conta nos resultados). */
   contabilizar?: boolean;
+  /** Linha em percentagem (do que sobra depois das linhas de valor fixo); sem ela, o valor é fixo. */
+  pct?: number;
 }
 
 export interface BancoLote {

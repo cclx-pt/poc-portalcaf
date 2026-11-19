@@ -251,3 +251,18 @@ describe('cruzar à mão com o Jotform e ver os registos conciliados', () => {
     expect(registosConciliados({ ...mov('3', '2026-03-05', 135, 'X'), conciliadoCom: 'depositos:d1' }, { despesas: desp, depositos: deps, contribuir: [] })[0]).toMatchObject({ id: 'd1', comunidadeId: 'sede', origem: 'depositos' });
   });
 });
+
+describe('divisões com valor fixo ou percentagem', () => {
+  it('as linhas de valor fixo ficam; as percentagens aplicam-se ao que sobra, com o arredondamento na maior', async () => {
+    const { resolverPartes } = await import('../../src/lib/classificacaoBanco');
+    expect(resolverPartes(-1000, [{ valor: 400 }, { pct: 50 }, { pct: 50 }])).toEqual([-400, -300, -300]);
+    expect(resolverPartes(-100, [{ pct: 33.33 }, { pct: 33.33 }, { pct: 33.34 }])).toEqual([-33.33, -33.33, -33.34]);
+    expect(resolverPartes(10, [{ pct: 1 / 3 * 100 }, { pct: 2 / 3 * 100 }])).toEqual([3.33, 6.67]);
+  });
+  it('uma regra com divisões reparte o movimento proposto', () => {
+    const regras = [{ id: 'r', padrao: 'EDP', categoria: '02.02 Energia e água', ativo: true, partes: [{ comunidadeId: 'moita', valor: 20 }, { comunidadeId: 'almada', pct: 50 }, { comunidadeId: 'sede', pct: 50 }] }];
+    const [m] = proporClassificacao([mov('1', '2026-03-05', -120, 'DD EDP COMERCIAL')], ctx({ regras }));
+    expect(m).toMatchObject({ estado: 'proposto', categoria: '02.02 Energia e água' });
+    expect(m.partes).toEqual([{ comunidadeId: 'moita', valor: -20 }, { comunidadeId: 'almada', valor: -50, pct: 50 }, { comunidadeId: 'sede', valor: -50, pct: 50 }]);
+  });
+});

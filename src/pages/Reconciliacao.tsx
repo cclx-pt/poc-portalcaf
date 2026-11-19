@@ -4,7 +4,7 @@ import { LogoBanco } from '../components/LogoBanco';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia } from '../lib/db';
-import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, sugerirPadrao, candidatosReembolso, registosConciliados, type RegistoJotform, temPalavra, validar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
+import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, resolverPartes, sugerirPadrao, candidatosReembolso, registosConciliados, type RegistoJotform, temPalavra, validar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
 import { bancoDaConta } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Categoria, Comunidade, Dimensao, EstadoMov, MovBanco, ParteMov } from '../lib/types';
@@ -308,7 +308,12 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
   const partes = v.partes ?? [];
   const somaPartes = r2(partes.reduce((s, p) => s + p.valor, 0));
   const ativas = comunidades.filter((c) => !c.especial && c.ativo !== false);
-  const setPartes = (ps: ParteMov[]) => setV({ ...v, partes: ps });
+  // As linhas em percentagem recalculam-se sempre (percentagem do que sobra depois das linhas de valor fixo).
+  const setPartes = (ps: ParteMov[]) => {
+    if (!ps.some((x) => x.pct != null)) { setV({ ...v, partes: ps }); return; }
+    const vals = resolverPartes(m.valor, ps.map((x) => (x.pct != null ? { pct: x.pct } : { valor: x.valor })));
+    setV({ ...v, partes: ps.map((x, i) => (x.pct != null ? { ...x, valor: vals[i] } : x)) });
+  };
   const iguais = () => { const n = ativas.length; const base = r2(Math.trunc((m.valor / n) * 100) / 100); setPartes(ativas.map((c, i) => ({ comunidadeId: c.id, valor: i === n - 1 ? r2(m.valor - base * (n - 1)) : base }))); };
   const previsao = () => { if (cat?.codigo) setPartes(repartirPorPrevisao(m.valor, custosFixos, cat.codigo, m.data.slice(0, 7))); };
   const ok = !repartir || (partes.length > 0 && Math.abs(somaPartes - m.valor) < 0.005 && partes.every((p) => p.comunidadeId && (p.categoria || v.categoria)));
@@ -332,7 +337,11 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
     setMsgRegra(null);
     try {
       const id = existente?.id ?? (padrao.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `regra-${Date.now()}`);
-      const nova: RegraBanco = { id, padrao: padrao.trim(), categoria: v.categoria, fornecedor: v.fornecedor, centroCusto: v.centroCusto, comunidadeId: comComunidade && !repartir ? v.comunidadeId : undefined, ativo: true };
+      const partesRegra = repartir && partes.length > 1 ? partes.map((x) => ({
+        comunidadeId: x.comunidadeId, ...(x.categoria ? { categoria: x.categoria } : {}), ...(x.centroCusto ? { centroCusto: x.centroCusto } : {}), ...(x.descricao?.trim() ? { descricao: x.descricao.trim() } : {}),
+        ...(x.pct != null ? { pct: x.pct } : { valor: Math.abs(x.valor) }),
+      })) : undefined;
+      const nova: RegraBanco = { id, padrao: padrao.trim(), categoria: v.categoria, fornecedor: v.fornecedor, centroCusto: v.centroCusto, comunidadeId: comComunidade && !repartir ? v.comunidadeId : undefined, ativo: true, ...(partesRegra ? { partes: partesRegra } : {}) };
       await gravar('regras_banco', nova);
       await auditar(email, 'regra dos extratos', `${existente ? 'Atualizada' : 'Criada'} na reconciliação: ${nova.padrao} → ${nova.categoria}`);
       onRegra();
@@ -397,7 +406,7 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
           <button className="sec" type="button" onClick={iguais}>Repartir em partes iguais</button>
         </div>
         <div className="tabela"><table>
-          <thead><tr><th>Categoria</th><th>Comunidade</th><th>Descrição</th><th className="num">Valor (€)</th><th /></tr></thead>
+          <thead><tr><th>Categoria</th><th>Comunidade</th><th>Descrição</th><th>Tipo</th><th className="num">Valor fixo (€) ou %</th><th className="num">Valor (€)</th><th /></tr></thead>
           <tbody>{partes.map((p, i) => (
             <tr key={i}>
               <td><select value={p.categoria ?? ''} onChange={(e) => mudar(i, { categoria: e.target.value || undefined })} aria-label="Categoria da linha">
@@ -407,13 +416,19 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
                 <option value="">—</option>{comunidades.filter((c) => c.ativo !== false).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select></td>
               <td><input value={p.descricao ?? ''} placeholder="Ex.: lanche do GC" onChange={(e) => mudar(i, { descricao: e.target.value })} aria-label="Descrição da linha" /></td>
-              <td className="num"><input type="number" step="0.01" value={p.valor} style={{ width: 110 }} aria-label="Valor da linha" onChange={(e) => mudar(i, { valor: Number(e.target.value) })} /></td>
+              <td><select value={p.pct != null ? 'pct' : 'valor'} aria-label="Tipo da linha" onChange={(e) => mudar(i, e.target.value === 'pct' ? { pct: Math.round((Math.abs(p.valor) / Math.abs(m.valor || 1)) * 10000) / 100 } : { pct: undefined })}>
+                <option value="valor">Valor fixo</option><option value="pct">Percentagem</option>
+              </select></td>
+              <td className="num">{p.pct != null
+                ? <input type="number" step="0.01" min={0} max={100} value={p.pct} style={{ width: 90 }} aria-label="Percentagem da linha" onChange={(e) => mudar(i, { pct: Number(e.target.value) })} />
+                : <input type="number" step="0.01" value={p.valor} style={{ width: 110 }} aria-label="Valor da linha" onChange={(e) => mudar(i, { valor: Number(e.target.value) })} />}</td>
+              <td className="num">{eur(p.valor)}</td>
               <td><button className="link" type="button" onClick={() => setPartes(partes.filter((_, k) => k !== i))}>Remover</button></td>
             </tr>
           ))}</tbody>
         </table></div>
         <p className="small">{`Soma das linhas: ${eur(somaPartes)} · movimento: ${eur(m.valor)}`}{Math.abs(falta) >= 0.005 && <b>{` · falta repartir ${eur(falta)}`}</b>}</p>
-        <p className="small muted">Os valores têm o sinal do movimento (negativos nas saídas).</p>
+        <p className="small muted">Os valores fixos têm o sinal do movimento (negativos nas saídas). As percentagens aplicam-se ao que sobra depois das linhas de valor fixo; o arredondamento ao cêntimo vai para a linha de maior percentagem.</p>
       </div>}
       {!m.conciliadoCom && <>
         <label className="opcao" style={{ marginTop: 8 }}><input type="checkbox" checked={regraAberta} onChange={(e) => setRegraAberta(e.target.checked)} /> Guardar como regra para os próximos movimentos</label>
@@ -425,6 +440,7 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
           <p className="small">{v.categoria
             ? <>Quando o descritivo tiver "{padrao.trim() || '…'}", propõe <b>{v.categoria}</b>{v.fornecedor ? `, fornecedor ${v.fornecedor}` : ''}{v.centroCusto ? `, ${v.centroCusto}` : ''}{comComunidade && !repartir && v.comunidadeId ? `, comunidade ${comunidades.find((c) => c.id === v.comunidadeId)?.nome}` : ''}.
               {padrao.trim() && !temPalavra(m.descricao, padrao.trim()) ? ' Atenção: este movimento não tem esse texto.' : ` Neste mês: ${comTexto} movimento${comTexto === 1 ? '' : 's'} com este texto.`}
+              {repartir && partes.length > 1 && ` Guarda também a divisão em ${partes.length} linhas (${partes.map((x) => (x.pct != null ? `${String(x.pct).replace('.', ',')}%` : eur(Math.abs(x.valor)))).join(' + ')}).`}
               {existente && ' Já existe uma regra com este texto: vai ser atualizada.'}</>
             : 'Escolha primeiro a categoria.'}</p>
           {msgRegra && <div className="nota">{msgRegra}</div>}

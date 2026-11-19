@@ -7,7 +7,28 @@ import { norm, periodo as periodoDe, r2 } from './format';
 import { custoAtivo, repartir, valorImputadoNoMes } from './resumos';
 import type { Categoria, CustoFixo, Lote, MovBanco, ParteMov } from './types';
 
-export interface RegraBanco { id: string; padrao: string; categoria: string; fornecedor?: string; centroCusto?: string; comunidadeId?: string; ativo?: boolean }
+/** Divisão guardada numa regra: valor fixo (positivo) ou percentagem do que sobra depois dos valores fixos. */
+export interface ParteRegra { comunidadeId: string; categoria?: string; centroCusto?: string; descricao?: string; valor?: number; pct?: number }
+export interface RegraBanco { id: string; padrao: string; categoria: string; fornecedor?: string; centroCusto?: string; comunidadeId?: string; ativo?: boolean; partes?: ParteRegra[] }
+
+/**
+ * Valores das linhas de uma divisão: as de valor fixo ficam (com o sinal do movimento); as percentagens aplicam-se
+ * ao que sobra depois dos valores fixos. O arredondamento ao cêntimo vai para a linha de maior percentagem.
+ */
+export function resolverPartes(total: number, linhas: { valor?: number; pct?: number }[]): number[] {
+  const sinal = total < 0 ? -1 : 1;
+  const abs = Math.abs(total);
+  const fixos = linhas.reduce((s0, l) => s0 + (l.pct == null ? Math.abs(l.valor ?? 0) : 0), 0);
+  const resto = r2(abs - fixos);
+  const out = linhas.map((l) => (l.pct == null ? r2(Math.abs(l.valor ?? 0)) : r2((resto * l.pct) / 100)));
+  const comPct = linhas.map((l, i) => ({ i, p: l.pct })).filter((x) => x.p != null);
+  const somaPct = comPct.reduce((s0, x) => s0 + (x.p ?? 0), 0);
+  if (comPct.length && Math.abs(somaPct - 100) < 0.01) {
+    const dif = r2(abs - out.reduce((s0, v) => s0 + v, 0));
+    if (dif) { const maior = comPct.sort((a, b) => (b.p ?? 0) - (a.p ?? 0))[0].i; out[maior] = r2(out[maior] + dif); }
+  }
+  return out.map((v) => r2(sinal * v) || 0);
+}
 
 const r = (id: string, padrao: string, categoria: string, fornecedor?: string, centroCusto?: string): RegraBanco =>
   ({ id, padrao, categoria, ...(fornecedor ? { fornecedor } : {}), ...(centroCusto ? { centroCusto } : {}), ativo: true });
@@ -190,6 +211,15 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
 
     // 5. Regras por texto do banco.
     const regra = ctx.regras.find((x) => x.ativo !== false && existe(x.categoria) && temPalavra(m.descricao, x.padrao));
+    if (regra?.partes?.length) {
+      // Regra com divisões: valores fixos e percentagens do que sobra.
+      const valores = resolverPartes(m.valor, regra.partes);
+      const partes = regra.partes.map((x, i) => ({
+        comunidadeId: x.comunidadeId, valor: valores[i],
+        ...(x.categoria ? { categoria: x.categoria } : {}), ...(x.centroCusto ? { centroCusto: x.centroCusto } : {}), ...(x.descricao ? { descricao: x.descricao } : {}), ...(x.pct != null ? { pct: x.pct } : {}),
+      }));
+      return proposto({ categoria: regra.categoria, fornecedor: regra.fornecedor, centroCusto: regra.centroCusto, comunidadeId: undefined, partes, nota: `Regra "${regra.padrao}" (dividida em ${partes.length} linhas)` });
+    }
     if (regra) return proposto({ categoria: regra.categoria, fornecedor: regra.fornecedor, centroCusto: regra.centroCusto, comunidadeId: regra.comunidadeId ?? m.comunidadeId, nota: `Regra "${regra.padrao}"` });
 
     // 6. Transferências e MB WAY diretos (entradas): ofertas da comunidade Geral (decisão do CAF).
