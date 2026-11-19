@@ -216,10 +216,11 @@ export default function Reconciliacao() {
                 <td className="num">{m.valor < 0 ? eur(-m.valor) : ''}</td>
                 <td><span className={'etiqueta' + (estadoDe(m) === 'validado' ? ' preta' : '')}>{ESTADO[estadoDe(m)]}</span>{m.conciliadoCom && <div className="small muted">Conciliado</div>}</td>
                 <td>
+                  {itemizado(m) ? <button className="link small" onClick={() => setDetalhe(m)}>{`Itemizado (${m.partes!.length} linhas)`}</button> :
                   <select value={m.categoria ?? ''} disabled={!!m.conciliadoCom} onChange={(e) => alterar(m.loteId, m.id, { categoria: e.target.value || undefined, estado: 'proposto', contabilizar: false })}>
                     <option value="">—</option>
                     {(cats.dados ?? []).filter((c) => (c.ativo !== false || c.nome === m.categoria) && (c.tipo === 'financeiro' || (m.valor > 0 ? c.tipo === 'entrada' : c.tipo === 'saida'))).map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
-                  </select>
+                  </select>}
                 </td>
                 <td>
                   {m.partes?.length ? <span className="small">{`Repartido (${m.partes.length})`}</span> : (
@@ -228,7 +229,7 @@ export default function Reconciliacao() {
                       {(coms.dados ?? []).filter((c) => c.ativo !== false || c.id === m.comunidadeId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                     </select>)}
                 </td>
-                <td><button className="link" onClick={() => setDetalhe(m)}>Detalhe</button></td>
+                <td><button className="link" onClick={() => setDetalhe(m)}>{m.conciliadoCom ? 'Detalhe' : 'Detalhe ou dividir'}</button></td>
               </tr>
             ))}
             {!mostrar.length && <tr><td colSpan={9} className="muted">{lotesMes.length ? 'Sem movimentos neste filtro ou nos bancos visíveis.' : `Sem extratos de ${MESES[mes - 1]} ${ano}. Importe-os em Bancos.`}</td></tr>}
@@ -278,6 +279,9 @@ export default function Reconciliacao() {
 }
 
 /** Classificação completa de um movimento: dimensões do plano, documento e repartição por comunidades. */
+/** Movimento dividido em linhas com categorias diferentes. */
+const itemizado = (m: MovBanco) => !!m.partes?.length && new Set(m.partes.map((p) => p.categoria ?? m.categoria)).size > 1;
+
 function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, onFechar, onAplicar }: {
   m: MovBanco; categorias: Categoria[]; dimensoes: Dimensao[]; comunidades: Comunidade[]; custosFixos: import('../lib/types').CustoFixo[];
   onFechar: () => void; onAplicar: (patch: Partial<MovBanco>) => void;
@@ -292,8 +296,15 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
   const setPartes = (ps: ParteMov[]) => setV({ ...v, partes: ps });
   const iguais = () => { const n = ativas.length; const base = r2(Math.trunc((m.valor / n) * 100) / 100); setPartes(ativas.map((c, i) => ({ comunidadeId: c.id, valor: i === n - 1 ? r2(m.valor - base * (n - 1)) : base }))); };
   const previsao = () => { if (cat?.codigo) setPartes(repartirPorPrevisao(m.valor, custosFixos, cat.codigo, m.data.slice(0, 7))); };
-  const ok = !repartir || (partes.length > 0 && Math.abs(somaPartes - m.valor) < 0.005 && partes.every((p) => p.comunidadeId));
-  const final = (): Partial<MovBanco> => (repartir ? { ...v, comunidadeId: undefined } : { ...v, partes: undefined });
+  const ok = !repartir || (partes.length > 0 && Math.abs(somaPartes - m.valor) < 0.005 && partes.every((p) => p.comunidadeId && (p.categoria || v.categoria)));
+  // Categoria do movimento itemizado: a da linha maior (as linhas guardam a sua).
+  const catPrincipal = () => v.categoria ?? [...partes].sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor))[0]?.categoria;
+  const final = (): Partial<MovBanco> => (repartir
+    ? { ...v, comunidadeId: undefined, categoria: catPrincipal(), partes: partes.map((p) => ({ ...p, categoria: p.categoria || undefined, descricao: p.descricao?.trim() || undefined, contabilizar: undefined })) }
+    : { ...v, partes: undefined });
+  const opcoesCat = categorias.filter((c) => c.ativo !== false && (c.tipo === 'financeiro' || (m.valor > 0 ? c.tipo === 'entrada' : c.tipo === 'saida')));
+  const falta = r2(m.valor - somaPartes);
+  const mudar = (i: number, patch: Partial<ParteMov>) => setPartes(partes.map((x, k) => (k === i ? { ...x, ...patch } : x)));
   return (
     <Modal titulo="Classificar movimento" onFechar={onFechar}>
       <p className="small">{`${m.data.split('-').reverse().join('/')} · ${m.descricao} · `}<b>{eur(m.valor)}</b>{m.conciliadoCom ? ` · Conciliado com ${m.conciliadoCom}` : ''}</p>
@@ -329,26 +340,38 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
             {comunidades.filter((c) => c.ativo !== false || c.id === v.comunidadeId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select></label>}
       </div>
-      <label className="opcao"><input type="checkbox" checked={repartir} onChange={(e) => setRepartir(e.target.checked)} /> Repartir por várias comunidades</label>
+      <label className="opcao"><input type="checkbox" checked={repartir} onChange={(e) => {
+        setRepartir(e.target.checked);
+        if (e.target.checked && !partes.length) setPartes([{ comunidadeId: v.comunidadeId ?? '', valor: m.valor, categoria: v.categoria }]);
+      }} /> Dividir em várias linhas (itemização: categorias, comunidades e valores diferentes)</label>
       {repartir && <div className="card" style={{ marginTop: 6 }}>
+        <p className="small muted" style={{ marginTop: 0 }}>Cada linha conta na sua categoria e comunidade. A soma das linhas tem de dar o valor do movimento. Linhas sem categoria usam a do movimento; linhas financeiras não contam nos resultados.</p>
         <div className="acoes" style={{ margin: '0 0 8px' }}>
-          <button className="sec" type="button" disabled={!cat?.codigo} onClick={previsao} title="Na proporção dos custos fixos desta categoria previstos no mês">Pela previsão dos custos fixos</button>
-          <button className="sec" type="button" onClick={iguais}>Partes iguais</button>
-          <button className="sec" type="button" onClick={() => setPartes([...partes, { comunidadeId: '', valor: 0 }])}>Acrescentar parte</button>
+          <button className="sec" type="button" onClick={() => setPartes([...partes, { comunidadeId: partes[partes.length - 1]?.comunidadeId ?? '', valor: falta, categoria: v.categoria }])}>Acrescentar linha{Math.abs(falta) >= 0.005 ? ` (${eur(falta)})` : ''}</button>
+          <button className="sec" type="button" disabled={!cat?.codigo} onClick={previsao} title="Uma linha por comunidade, na proporção dos custos fixos desta categoria previstos no mês">Repartir pela previsão dos custos fixos</button>
+          <button className="sec" type="button" onClick={iguais}>Repartir em partes iguais</button>
         </div>
-        {partes.map((p, i) => (
-          <div key={i} className="linha" style={{ gap: 8, marginBottom: 6 }}>
-            <select value={p.comunidadeId} onChange={(e) => setPartes(partes.map((x, k) => (k === i ? { ...x, comunidadeId: e.target.value } : x)))} aria-label="Comunidade da parte">
-              <option value="">—</option>{comunidades.filter((c) => c.ativo !== false).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select>
-            <input type="number" step="0.01" value={p.valor} style={{ width: 120 }} aria-label="Valor da parte" onChange={(e) => setPartes(partes.map((x, k) => (k === i ? { ...x, valor: Number(e.target.value) } : x)))} />
-            <button className="link" type="button" onClick={() => setPartes(partes.filter((_, k) => k !== i))}>Remover</button>
-          </div>
-        ))}
-        <p className="small">{`Soma das partes: ${eur(somaPartes)} · movimento: ${eur(m.valor)}${Math.abs(somaPartes - m.valor) >= 0.005 ? ` · diferença ${eur(r2(m.valor - somaPartes))}` : ''}`}</p>
+        <div className="tabela"><table>
+          <thead><tr><th>Categoria</th><th>Comunidade</th><th>Descrição</th><th className="num">Valor (€)</th><th /></tr></thead>
+          <tbody>{partes.map((p, i) => (
+            <tr key={i}>
+              <td><select value={p.categoria ?? ''} onChange={(e) => mudar(i, { categoria: e.target.value || undefined })} aria-label="Categoria da linha">
+                <option value="">{v.categoria ? `Igual ao movimento (${v.categoria})` : '—'}</option>{opcoesCat.map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+              </select></td>
+              <td><select value={p.comunidadeId} onChange={(e) => mudar(i, { comunidadeId: e.target.value })} aria-label="Comunidade da linha">
+                <option value="">—</option>{comunidades.filter((c) => c.ativo !== false).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select></td>
+              <td><input value={p.descricao ?? ''} placeholder="Ex.: lanche do GC" onChange={(e) => mudar(i, { descricao: e.target.value })} aria-label="Descrição da linha" /></td>
+              <td className="num"><input type="number" step="0.01" value={p.valor} style={{ width: 110 }} aria-label="Valor da linha" onChange={(e) => mudar(i, { valor: Number(e.target.value) })} /></td>
+              <td><button className="link" type="button" onClick={() => setPartes(partes.filter((_, k) => k !== i))}>Remover</button></td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+        <p className="small">{`Soma das linhas: ${eur(somaPartes)} · movimento: ${eur(m.valor)}`}{Math.abs(falta) >= 0.005 && <b>{` · falta repartir ${eur(falta)}`}</b>}</p>
+        <p className="small muted">Os valores têm o sinal do movimento (negativos nas saídas).</p>
       </div>}
       <div className="acoes" style={{ marginTop: 14 }}>
-        <button disabled={!ok || !v.categoria || (!repartir && !v.comunidadeId && !v.conciliadoCom)} onClick={() => onAplicar(validar({ ...m, ...final(), nota: v.estado === 'rever' ? undefined : v.nota } as MovBanco, categorias))}>Validar</button>
+        <button disabled={!ok || (!repartir && (!v.categoria || (!v.comunidadeId && !v.conciliadoCom)))} onClick={() => onAplicar(validar({ ...m, ...final(), nota: v.estado === 'rever' ? undefined : v.nota } as MovBanco, categorias))}>Validar</button>
         <button className="sec" disabled={!ok} onClick={() => onAplicar({ ...final(), estado: 'proposto', contabilizar: false })}>Guardar como proposta</button>
         <button className="sec" onClick={() => onAplicar({ estado: 'rever', contabilizar: false, nota: v.nota?.startsWith('REVER') ? v.nota : 'REVER - marcado à mão' })}>Para rever</button>
         <button className="sec" onClick={() => onAplicar({ estado: 'por-classificar', contabilizar: false, categoria: undefined, comunidadeId: undefined, partes: undefined, conciliadoCom: null, centroCusto: undefined, fornecedor: undefined, projeto: undefined, contaAnalitica: undefined, nota: undefined })}>Limpar</button>

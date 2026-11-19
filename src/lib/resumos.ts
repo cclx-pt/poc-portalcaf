@@ -1,5 +1,6 @@
 import { MESES, periodo, r2 } from './format';
 import { OUTROS_FUNCIONAMENTO, classificador } from './rubricas';
+import { pedacosDe } from './classificacaoBanco';
 import { contaParaMedia } from './domingos';
 import type { BancoLote, Categoria, Comunidade, CustoFixo, Lote, ParteRubrica, Publico, PublicoMes, PublicoSite, Resumo, ResumoMes } from './types';
 
@@ -168,7 +169,7 @@ export function calcularResumos(d: DadosCalculo): Resumo[] {
   }
   for (const b of d.banco) for (const r0 of b.registos) {
     // Movimento repartido: cada parte conta na sua comunidade.
-    const pedacos = r0.partes?.length ? r0.partes.map((p) => ({ ...r0, comunidadeId: p.comunidadeId, valor: p.valor })) : [r0];
+    const pedacos = pedacosDe(r0);
     for (const r of pedacos) {
       if (!r.contabilizar || !r.comunidadeId) continue;
       // Movimentos financeiros (depósitos, transferências internas…) não são receita nem despesa.

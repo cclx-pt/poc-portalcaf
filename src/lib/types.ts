@@ -141,7 +141,19 @@ export interface MovBanco {
 }
 
 export type EstadoMov = 'por-classificar' | 'proposto' | 'validado' | 'rever';
-export interface ParteMov { comunidadeId: string; valor: number; centroCusto?: string }
+/** Parte de um movimento repartido ou itemizado (uma linha com categoria, comunidade e valor próprios). */
+export interface ParteMov {
+  comunidadeId: string;
+  valor: number;
+  centroCusto?: string;
+  /** Categoria desta linha; sem ela, vale a do movimento. */
+  categoria?: string;
+  descricao?: string;
+  fornecedor?: string;
+  projeto?: string;
+  /** Definido ao validar: false se a linha é financeira (não conta nos resultados). */
+  contabilizar?: boolean;
+}
 
 export interface BancoLote {
   id: string;

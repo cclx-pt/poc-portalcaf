@@ -170,17 +170,30 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
 
 /** Valida as propostas completas (com categoria e comunidade, repartição ou conciliação). Os financeiros e os conciliados não se contabilizam. */
 export function aceitarPropostas(movs: MovBanco[], categorias: Categoria[]): MovBanco[] {
-  const financeiro = (nome?: string) => categorias.some((c) => c.nome === nome && c.tipo === 'financeiro');
   return movs.map((m) => {
     if (m.estado !== 'proposto' || !m.categoria || !(m.comunidadeId || m.partes?.length || m.conciliadoCom)) return m;
-    return { ...m, estado: 'validado', contabilizar: !m.conciliadoCom && !financeiro(m.categoria) };
+    return validar(m, categorias);
   });
 }
 
-/** Marca um movimento como validado (classificação manual). */
+/** Marca um movimento como validado (classificação manual). Num movimento itemizado, cada linha financeira fica fora dos resultados. */
 export function validar(m: MovBanco, categorias: Categoria[]): MovBanco {
-  const financeiro = categorias.some((c) => c.nome === m.categoria && c.tipo === 'financeiro');
-  return { ...m, estado: 'validado', contabilizar: !m.conciliadoCom && !financeiro };
+  const financeiro = (nome?: string) => categorias.some((c) => c.nome === nome && c.tipo === 'financeiro');
+  if (m.partes?.length) {
+    const partes = m.partes.map((p) => ({ ...p, contabilizar: !m.conciliadoCom && !financeiro(p.categoria ?? m.categoria) }));
+    return { ...m, partes, estado: 'validado', contabilizar: partes.some((p) => p.contabilizar) };
+  }
+  return { ...m, estado: 'validado', contabilizar: !m.conciliadoCom && !financeiro(m.categoria) };
+}
+
+/** As linhas de um movimento (as partes, com o que herdam do movimento) ou o próprio movimento. */
+export function pedacosDe(m: MovBanco): MovBanco[] {
+  if (!m.partes?.length) return [m];
+  return m.partes.map((p) => ({
+    ...m, comunidadeId: p.comunidadeId, valor: p.valor, categoria: p.categoria ?? m.categoria, centroCusto: p.centroCusto ?? m.centroCusto,
+    fornecedor: p.fornecedor ?? m.fornecedor, projeto: p.projeto ?? m.projeto, descricao: p.descricao ? `${m.descricao} · ${p.descricao}` : m.descricao,
+    contabilizar: m.contabilizar && p.contabilizar !== false, partes: undefined,
+  }));
 }
 
 export type DimensaoRelatorio = 'rubrica' | 'categoria' | 'comunidade' | 'centroCusto' | 'fornecedor' | 'projeto';
@@ -197,8 +210,8 @@ export function relatorioExtratos(movs: MovBanco[], categorias: Categoria[], dim
     if (mes < de || mes > ate) continue;
     if (m.estado !== 'validado') { porValidar++; continue; }
     if (!m.contabilizar) { fora = r2(fora + Math.abs(m.valor)); nFora++; continue; }
-    const pedacos = m.partes?.length ? m.partes.map((p) => ({ ...m, comunidadeId: p.comunidadeId, valor: p.valor, centroCusto: p.centroCusto ?? m.centroCusto })) : [m];
-    for (const p of pedacos) {
+    for (const p of pedacosDe(m)) {
+      if (!p.contabilizar) continue;
       const bruto = dim === 'rubrica' ? rubricaDe.get(p.categoria ?? '') : dim === 'comunidade' ? p.comunidadeId : p[dim];
       const chave = bruto || SEM[dim];
       const a = acc.get(chave) ?? { chave, receitas: 0, despesas: 0, n: 0 };
@@ -221,6 +234,11 @@ export function controloMes(movs: MovBanco[]) {
     const v = Math.abs(m.valor);
     c.total = r2(c.total + v);
     const estado = m.estado ?? (m.contabilizar || m.conciliadoCom ? 'validado' : 'por-classificar');
+    if (estado === 'validado' && !m.conciliadoCom && m.partes?.some((p) => p.contabilizar !== undefined)) {
+      // Movimento itemizado: cada linha conta como contabilizada ou financeira.
+      for (const p of m.partes) { const k = p.contabilizar ? 'contabilizado' : 'financeiro'; c[k] = r2(c[k] + Math.abs(p.valor)); }
+      continue;
+    }
     const k = estado === 'rever' ? 'rever' : estado === 'proposto' ? 'proposto' : estado === 'por-classificar' ? 'porClassificar'
       : m.conciliadoCom ? 'conciliado' : m.contabilizar ? 'contabilizado' : 'financeiro';
     c[k] = r2(c[k] + v);
