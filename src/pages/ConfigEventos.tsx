@@ -99,6 +99,12 @@ export default function ConfigEventos() {
     setEdit({ ...edit, contagens: c });
   };
 
+  // Campo com erro (validarEvento): destacado a amarelo; a janela põe lá o cursor.
+  const erroEm = (c: 'nome' | 'contagens' | 'dias' | 'inicio' | 'fim') => {
+    const t = norm(erro ?? '');
+    const k = /nome|ja existe/.test(t) ? 'nome' : /contagem/.test(t) ? 'contagens' : /dias/.test(t) ? 'dias' : /fim/.test(t) ? 'fim' : /inicio/.test(t) ? 'inicio' : null;
+    return k === c ? 'com-erro' : '';
+  };
   const alternar = <T,>(lista: T[], v: T) => (lista.includes(v) ? lista.filter((x) => x !== v) : [...lista, v]);
 
   return (
@@ -151,10 +157,10 @@ export default function ConfigEventos() {
         <Modal titulo={edit.id ? `Editar evento: ${edit.nome}` : 'Novo evento'} onFechar={() => setEdit(null)}>
           {erro && <div className="aviso">{erro}</div>}
           <div className="grelha-form">
-            <label className="campo">Nome *<input value={edit.nome} onChange={(e) => setEdit({ ...edit, nome: e.target.value })} /></label>
+            <label className={`campo ${erroEm('nome')}`}>Nome *<input value={edit.nome} onChange={(e) => setEdit({ ...edit, nome: e.target.value })} /></label>
             <label className="campo">Descrição<input value={edit.descricao ?? ''} onChange={(e) => setEdit({ ...edit, descricao: e.target.value })} /></label>
           </div>
-          <fieldset className="grupo-campos">
+          <fieldset className={`grupo-campos ${erroEm('contagens')}`}>
             <legend>O que se recolhe *</legend>
             {catalogo.map((c) => (
               <label key={c.id} className="opcao"><input type="checkbox" checked={edit.contagens.includes(c.id)} onChange={() => setEdit({ ...edit, contagens: alternar(edit.contagens, c.id) })} /> {c.nome}</label>
@@ -174,7 +180,7 @@ export default function ConfigEventos() {
               </ol>
             </fieldset>
           )}
-          <fieldset className="grupo-campos">
+          <fieldset className={`grupo-campos ${erroEm('dias')}`}>
             <legend>Dias da semana</legend>
             <label className="opcao"><input type="radio" name="dias" checked={!edit.dias.length} onChange={() => setEdit({ ...edit, dias: [] })} /> Qualquer dia</label>
             <label className="opcao"><input type="radio" name="dias" checked={!!edit.dias.length} onChange={() => setEdit({ ...edit, dias: edit.dias.length ? edit.dias : [0] })} /> Dias específicos</label>
@@ -192,8 +198,8 @@ export default function ConfigEventos() {
             <label className="opcao"><input type="radio" name="horario" checked={!edit.horario.diaTodo} onChange={() => setEdit({ ...edit, horario: { diaTodo: false, inicio: '10:00' } })} /> Horário específico</label>
             {!edit.horario.diaTodo && (
               <div className="linha" style={{ marginTop: 6 }}>
-                <label className="campo">Início (hh:mm) *<input inputMode="numeric" placeholder="10:30" maxLength={5} value={edit.horario.inicio} onChange={(e) => setEdit({ ...edit, horario: { ...(edit.horario as { diaTodo: false; inicio: string; fim?: string }), inicio: horaMascara(e.target.value) } })} style={{ width: 100 }} /></label>
-                <label className="campo">Fim (opcional)<input inputMode="numeric" placeholder="12:30" maxLength={5} value={edit.horario.fim ?? ''} onChange={(e) => { const h = edit.horario as { diaTodo: false; inicio: string; fim?: string }; const fim = horaMascara(e.target.value); setEdit({ ...edit, horario: fim ? { ...h, fim } : { diaTodo: false, inicio: h.inicio } }); }} style={{ width: 100 }} /></label>
+                <label className={`campo ${erroEm('inicio')}`}>Início (hh:mm) *<input inputMode="numeric" placeholder="10:30" maxLength={5} value={edit.horario.inicio} onChange={(e) => setEdit({ ...edit, horario: { ...(edit.horario as { diaTodo: false; inicio: string; fim?: string }), inicio: horaMascara(e.target.value) } })} style={{ width: 100 }} /></label>
+                <label className={`campo ${erroEm('fim')}`}>Fim (opcional)<input inputMode="numeric" placeholder="12:30" maxLength={5} value={edit.horario.fim ?? ''} onChange={(e) => { const h = edit.horario as { diaTodo: false; inicio: string; fim?: string }; const fim = horaMascara(e.target.value); setEdit({ ...edit, horario: fim ? { ...h, fim } : { diaTodo: false, inicio: h.inicio } }); }} style={{ width: 100 }} /></label>
               </div>
             )}
           </fieldset>

@@ -158,3 +158,20 @@ describe('presenças: duplicados e importação do Jotform só de registos novos
     expect(fundirAssistencia(r.lote, novo).acrescentados).toBe(0);
   });
 });
+
+describe('erro do formulário de presenças → campo a destacar', () => {
+  it('liga cada mensagem de validação ao campo com erro', async () => {
+    const { campoDoErroPresenca, validarPresenca } = await import('../../src/lib/presencas');
+    const e = { data: '2026-11-15', evento: 'Celebração Domingo', comunidadeId: 'almada', adultos: 120, jump: 8, criancas: 20, connects: 5, observacoes: '' };
+    const campo = (x: Partial<typeof e>) => campoDoErroPresenca(validarPresenca({ ...e, ...x }, '2026-11-16') ?? '');
+    expect(campo({ data: '' })).toBe('data');
+    expect(campo({ data: '2026-11-17' })).toBe('data');
+    expect(campo({ evento: '' })).toBe('evento');
+    expect(campo({ evento: 'Outra' })).toBe('descricao');
+    expect(campo({ comunidadeId: '' })).toBe('comunidade');
+    expect(campo({ adultos: NaN })).toBe('adultos');
+    expect(campo({ criancas: 2.5 })).toBe('criancas');
+    expect(campo({ jump: -1 })).toBe('jump');
+    expect(campoDoErroPresenca('Indique o número de Online (0 se não houve).', { online: 'Online' })).toBe('online');
+  });
+});

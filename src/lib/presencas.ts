@@ -190,3 +190,17 @@ export function auditoriaEventos(eventos: Pick<EventoConfig, 'id' | 'nome' | 'co
   }
   return out;
 }
+
+/** Campo do formulário de presenças a que se refere uma mensagem de `validarPresenca` (para o destacar e pôr lá o cursor). */
+export function campoDoErroPresenca(texto: string, nomes: Record<string, string> = {}): string | null {
+  const t = norm(texto);
+  if (!t) return null;
+  if (/descricao/.test(t)) return 'descricao';
+  if (/comunidade/.test(t) && /escolha/.test(t)) return 'comunidade';
+  if (/evento/.test(t) && /escolha/.test(t) || /so ocorre/.test(t)) return 'evento';
+  if (/\bdata\b|ja existe um registo/.test(t)) return 'data';
+  const contagens: [string, RegExp][] = [['adultos', /jovens e adultos/], ['jump', /jump/], ['criancas', /criancas/], ['connects', /connect/],
+    ...Object.entries(nomes).map(([id, nome]) => [id, new RegExp(norm(nome).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))] as [string, RegExp])];
+  for (const [id, re] of contagens) if (re.test(t)) return id;
+  return null;
+}

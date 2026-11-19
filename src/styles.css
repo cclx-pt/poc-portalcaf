@@ -369,3 +369,7 @@ label.campo, div.campo { font-size: 12px; font-weight: 600; }
 .df-data .df-evento { font-weight: 700; }
 .etiqueta.neg { color: var(--branco); background: var(--preto); border-color: var(--preto); }
 tr.duplicado td { background: #f2f2f2; }
+/* Erros e avisos a amarelo, para dar destaque; o campo com erro também fica a amarelo. */
+.aviso { background: #fff3b0; border: 1px solid #e0b400; border-left: 4px solid #e0b400; color: var(--preto); }
+.com-erro input, .com-erro select, .com-erro textarea, input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] { background: #fff3b0; border-color: #e0b400; outline: 2px solid #e0b400; outline-offset: 0; }
+.com-erro > label, label.com-erro { font-weight: 700; }
