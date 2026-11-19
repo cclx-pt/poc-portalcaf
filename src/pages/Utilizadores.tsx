@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, mensagemErro, useCarregar } from '../components/ui';
+import { sendSignInLinkToEmail } from 'firebase/auth';
+import { auth } from '../firebase';
 import { apagarPerfil, auditar, gravarPerfil, listarComunidades, listarPerfis } from '../lib/db';
+import { urlRegresso } from './Login';
 import { MASTER_EMAILS, NIVEIS, NIVEL_LABEL, PAPEL_LABEL, type Nivel, type Papel, type Perfil } from '../lib/types';
 
 const NIVEL_DEFEITO: Record<Papel, Nivel> = { master: 'confidencial', caf: 'confidencial', tesoureiro: 'privado', leitura: 'publico', registos: 'publico' };
@@ -13,6 +16,15 @@ export default function Utilizadores() {
   const coms = useCarregar(listarComunidades, []);
   const [edit, setEdit] = useState<Perfil | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [enviarEmail, setEnviarEmail] = useState(true);
+  /** Envia ao utilizador o email de acesso do portal (link de entrada, em português). Não guarda nada neste dispositivo. */
+  async function enviarAcesso(email: string) {
+    await sendSignInLinkToEmail(auth, email, { url: urlRegresso(), handleCodeInApp: true });
+    await auditar(acesso!.email, 'email de acesso enviado', email);
+  }
+  async function reenviar(email: string) {
+    try { await enviarAcesso(email); setMsg(`Email de acesso enviado para ${email}.`); } catch (e) { setMsg(mensagemErro(e)); }
+  }
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
 
   async function guardar() {
@@ -20,8 +32,15 @@ export default function Utilizadores() {
     try {
       const p = { ...edit, email: edit.email.trim().toLowerCase(), comunidades: edit.papel === 'caf' ? ['*'] : edit.comunidades };
       if (p.papel !== 'caf' && !p.comunidades.length) { setMsg('Escolha "Todas" ou pelo menos uma comunidade.'); return; }
+      const eNovo = !(perfis.dados ?? []).some((x) => x.email === p.email);
       await gravarPerfil(p);
       await auditar(acesso!.email, 'utilizador', `${p.email}: ${p.papel}, ${p.nivel}, ${p.comunidades.join(',')}, ${p.ativo ? 'ativo' : 'inativo'}`);
+      let enviado = '';
+      if (eNovo && p.ativo && enviarEmail) {
+        try { await enviarAcesso(p.email); enviado = ` Enviámos o email de acesso para ${p.email}.`; }
+        catch (e) { enviado = ` Não foi possível enviar o email de acesso (${mensagemErro(e)}); use "Enviar email de acesso" na lista.`; }
+      }
+      setMsg(`Utilizador ${p.email} guardado.${enviado}`);
       setEdit(null); await perfis.recarregar();
     } catch (e) { setMsg(mensagemErro(e)); }
   }
@@ -37,7 +56,7 @@ export default function Utilizadores() {
           <h1>Utilizadores</h1>
           <p className="muted">Master (fixos): {MASTER_EMAILS.join(', ')}. O CAF vê toda a organização; o tesoureiro e a leitura veem tudo ou só as comunidades escolhidas; a leitura só consulta, até ao nível definido. O perfil Registos só regista e consulta presenças das suas comunidades, sem dados financeiros; entra pelo link direto <b>portalcaf.cclx.pt/#/registar</b> (telemóvel ou computador).</p>
         </div>
-        <button onClick={() => setEdit(novo())}>Novo utilizador</button>
+        <button onClick={() => { setEnviarEmail(true); setEdit(novo()); }}>Novo utilizador</button>
       </div>
       {msg && <div className="aviso">{msg}</div>}
       <Estado aCarregar={perfis.aCarregar} erro={perfis.erro} />
@@ -49,7 +68,7 @@ export default function Utilizadores() {
               <td>{p.email}</td><td>{PAPEL_LABEL[p.papel]}</td><td>{NIVEL_LABEL[p.nivel]}</td>
               <td>{p.comunidades.includes('*') ? 'Todas' : p.comunidades.map((c) => nomes.get(c) ?? c).join(', ')}</td>
               <td>{p.ativo ? 'Ativo' : 'Inativo'}</td>
-              <td><button className="link" onClick={() => setEdit(p)}>Editar</button> · <button className="link" onClick={() => remover(p.email)}>Remover</button></td>
+              <td><button className="link" onClick={() => { setEnviarEmail(false); setEdit(p); }}>Editar</button> · {p.ativo && <><button className="link" onClick={() => void reenviar(p.email)} title="Envia o link de entrada no portal para este email">Enviar email de acesso</button> · </>}<button className="link" onClick={() => remover(p.email)}>Remover</button></td>
             </tr>
           ))}
           {!perfis.dados?.length && !perfis.aCarregar && <tr><td colSpan={6} className="muted">Ainda não há utilizadores além dos Master.</td></tr>}
@@ -60,7 +79,7 @@ export default function Utilizadores() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>{edit.email ? edit.email : 'Novo utilizador'}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
-              <label className="campo">Email (conta Google ou email/senha)<input type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></label>
+              <label className="campo">Email<input type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></label>
               <label className="campo">Perfil
                 <select value={edit.papel} onChange={(e) => { const papel = e.target.value as Papel; setEdit({ ...edit, papel, nivel: NIVEL_DEFEITO[papel], comunidades: papel === 'caf' ? ['*'] : edit.comunidades }); }}>
                   {(['caf', 'tesoureiro', 'leitura', 'registos'] as Papel[]).map((p) => <option key={p} value={p}>{PAPEL_LABEL[p]}</option>)}
@@ -85,6 +104,9 @@ export default function Utilizadores() {
                 ))}
                 <p className="muted" style={{ margin: '6px 0 0' }}>Vale para tudo o que o utilizador vê no portal, dentro do seu nível de privacidade. É imposto nas regras da base de dados, não só no ecrã.</p>
               </fieldset>
+            )}
+            {!(perfis.dados ?? []).some((x) => x.email === edit.email.trim().toLowerCase()) && (
+              <label className="opcao" style={{ marginTop: 10 }}><input type="checkbox" checked={enviarEmail} onChange={(e) => setEnviarEmail(e.target.checked)} /> Enviar o email de acesso ao portal (link de entrada, sem senha)</label>
             )}
             <div className="acoes" style={{ marginTop: 14 }}>
               <button disabled={!edit.email.includes('@')} onClick={guardar}>Guardar</button>

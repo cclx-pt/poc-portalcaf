@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  GoogleAuthProvider, isSignInWithEmailLink, sendSignInLinkToEmail, signInWithEmailLink, signInWithPopup,
-} from 'firebase/auth';
+import { isSignInWithEmailLink, sendSignInLinkToEmail, signInWithEmailLink } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useAuth } from '../auth/AuthProvider';
 import { Rodape } from '../components/ui';
@@ -13,7 +11,6 @@ const CHAVE_DESTINO = 'caf-portal:destino-login';
 
 function traduzir(e: unknown) {
   const c = (e as { code?: string }).code ?? '';
-  if (c.includes('popup-closed')) return 'A janela de login foi fechada.';
   if (c.includes('unauthorized-domain') || c.includes('unauthorized-continue-uri')) return 'Este endereço não está autorizado no Firebase.';
   if (c.includes('operation-not-allowed')) return 'O login por link de email ainda não está ativo no Firebase (Authentication → Email/senha → Link do email).';
   if (c.includes('invalid-action-code') || c.includes('expired-action-code')) return 'Este link já foi usado ou expirou. Peça um novo.';
@@ -22,7 +19,7 @@ function traduzir(e: unknown) {
 }
 
 /** Endereço de regresso do link: a raiz do portal, sem parâmetros. */
-const urlRegresso = () => `${window.location.origin}${BASE}`;
+export const urlRegresso = () => `${window.location.origin}${BASE}`;
 
 export default function Login() {
   const { user, motivo, sair } = useAuth();
@@ -84,10 +81,9 @@ export default function Login() {
           <div className="nota">Enviámos um link de acesso para <b>{email}</b>. Abra o email neste dispositivo e carregue no link para entrar. O link é válido uma vez.</div>
           <button className="sec" onClick={() => setEnviado(false)}>Usar outro email</button>
         </> : <>
-          <button disabled={ocupado} onClick={() => correr(() => signInWithPopup(auth, new GoogleAuthProvider()))}>Entrar com Google</button>
-          <div className="muted" style={{ textAlign: 'center' }}>ou receba um link de acesso por email (sem senha)</div>
+          <div className="muted" style={{ textAlign: 'center' }}>Receba um link de acesso por email (sem senha).</div>
           <label className="campo">Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></label>
-          <button className="sec" disabled={ocupado || !email.includes('@')} onClick={() => correr(async () => {
+          <button disabled={ocupado || !email.includes('@')} onClick={() => correr(async () => {
             const endereco = email.trim().toLowerCase();
             await sendSignInLinkToEmail(auth, endereco, { url: urlRegresso(), handleCodeInApp: true });
             window.localStorage.setItem(CHAVE_EMAIL, endereco);

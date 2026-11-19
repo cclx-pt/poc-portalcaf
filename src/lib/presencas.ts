@@ -210,3 +210,14 @@ export function pesoDasMedias(medias: Record<string, number>): Record<string, nu
   const soma = Object.values(medias).reduce((s, v) => s + v, 0);
   return soma ? Object.fromEntries(Object.entries(medias).map(([k, v]) => [k, Math.round((v / soma) * 10000) / 10000])) : {};
 }
+
+/** Ao gravar: as contagens pedidas pelo evento que ficaram em branco contam 0 (zero). */
+export function contagensEmBrancoAZero(e: EntradaPresenca, pedidas: string[]): EntradaPresenca {
+  const vazio = (v: number | undefined) => v == null || Number.isNaN(v);
+  const out: EntradaPresenca = { ...e, ...(e.outras ? { outras: { ...e.outras } } : {}) };
+  for (const id of pedidas) {
+    if (IDS_BASE.includes(id)) { if (vazio(out[id as 'adultos'])) (out as unknown as Record<string, number>)[id] = 0; }
+    else if (vazio(out.outras?.[id])) out.outras = { ...(out.outras ?? {}), [id]: 0 };
+  }
+  return out;
+}

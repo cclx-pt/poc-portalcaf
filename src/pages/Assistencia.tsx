@@ -92,6 +92,9 @@ export default function Assistencia() {
   }
   const linhasCom = [...porCom.entries()].sort((a, b) => (media(b[1], 'adultos') ?? 0) - (media(a[1], 'adultos') ?? 0));
   const pesos = pesoDasMedias(Object.fromEntries(linhasCom.map(([c, a]) => [c, media(a, 'adultos') ?? 0])));
+  const pesosMediaTotal = pesoDasMedias(Object.fromEntries(linhasCom.map(([c, a]) => [c, media(a, 'total') ?? 0])));
+  const pesosAdultos = pesoDasMedias(Object.fromEntries(linhasCom.map(([c, a]) => [c, a.soma.adultos])));
+  const pesosPessoas = pesoDasMedias(Object.fromEntries(linhasCom.map(([c, a]) => [c, a.soma.total])));
   const somaMedias = (k: Grupo | 'total') => linhasCom.reduce((s0, [, a]) => s0 + (media(a, k) ?? 0), 0);
   const pct1 = (v?: number) => (v == null ? '—' : `${num(v * 100, 1)}%`);
   const unidade = tipoCelebracao && evento !== 'todos' && evento === tipoCelebracao ? 'domingo' : 'evento';
@@ -206,16 +209,16 @@ export default function Assistencia() {
         {comunidade === 'todas' && porCom.size > 1 && (
           <div className="sec">
             <h2>Por comunidade</h2>
-            <p className="muted small">{`Médias por ${unidade}, arredondadas. "% do total" = média de jovens e adultos da comunidade a dividir pela soma das médias de todas as comunidades. Na linha do total, as médias são a soma das médias das comunidades e os ${unidade === 'domingo' ? 'domingos' : 'eventos'} são a soma dos de cada comunidade.`}</p>
+            <p className="muted small">{`Médias por ${unidade}, arredondadas. Cada coluna "%" é o peso da comunidade no total dessa coluna (ex.: média de jovens e adultos da comunidade a dividir pela soma das médias de todas as comunidades). Na linha do total, as médias são a soma das médias das comunidades e os ${unidade === 'domingo' ? 'domingos' : 'eventos'} são a soma dos de cada comunidade.`}</p>
             <div className="tabela"><table>
-              <thead><tr><th>Comunidade</th><th className="num">{unidade === 'domingo' ? 'Domingos' : 'Eventos'}</th><th className="num">{`Média jovens e adultos por ${unidade}`}</th><th className="num">% do total</th><th className="num">{`Média total de pessoas por ${unidade}`}</th><th className="num">Total jovens e adultos</th><th className="num">Total de pessoas</th></tr></thead>
+              <thead><tr><th>Comunidade</th><th className="num">{unidade === 'domingo' ? 'Domingos' : 'Eventos'}</th><th className="num">{`Média jovens e adultos por ${unidade}`}</th><th className="num">%</th><th className="num">{`Média total de pessoas por ${unidade}`}</th><th className="num">%</th><th className="num">Total jovens e adultos</th><th className="num">%</th><th className="num">Total de pessoas</th><th className="num">%</th></tr></thead>
               <tbody>{linhasCom.map(([c, a]) => (
-                <tr key={c}><td>{nomes.get(c) ?? c}</td><td className="num">{num(a.n)}</td><td className="num">{num(media(a, 'adultos') ?? 0)}</td><td className="num">{pct1(pesos[c])}</td><td className="num">{num(media(a, 'total') ?? 0)}</td><td className="num">{num(a.soma.adultos)}</td><td className="num">{num(a.soma.total)}</td></tr>
+                <tr key={c}><td>{nomes.get(c) ?? c}</td><td className="num">{num(a.n)}</td><td className="num">{num(media(a, 'adultos') ?? 0)}</td><td className="num">{pct1(pesos[c])}</td><td className="num">{num(media(a, 'total') ?? 0)}</td><td className="num">{pct1(pesosMediaTotal[c])}</td><td className="num">{num(a.soma.adultos)}</td><td className="num">{pct1(pesosAdultos[c])}</td><td className="num">{num(a.soma.total)}</td><td className="num">{pct1(pesosPessoas[c])}</td></tr>
               ))}</tbody>
               <tfoot><tr className="total-geral">
                 <th>Total</th><th className="num">{num(linhasCom.reduce((s0, [, a]) => s0 + a.n, 0))}</th>
-                <th className="num">{num(somaMedias('adultos'))}</th><th className="num">100,0%</th><th className="num">{num(somaMedias('total'))}</th>
-                <th className="num">{num(linhasCom.reduce((s0, [, a]) => s0 + a.soma.adultos, 0))}</th><th className="num">{num(linhasCom.reduce((s0, [, a]) => s0 + a.soma.total, 0))}</th>
+                <th className="num">{num(somaMedias('adultos'))}</th><th className="num">100,0%</th><th className="num">{num(somaMedias('total'))}</th><th className="num">100,0%</th>
+                <th className="num">{num(linhasCom.reduce((s0, [, a]) => s0 + a.soma.adultos, 0))}</th><th className="num">100,0%</th><th className="num">{num(linhasCom.reduce((s0, [, a]) => s0 + a.soma.total, 0))}</th><th className="num">100,0%</th>
               </tr></tfoot>
             </table></div>
           </div>
