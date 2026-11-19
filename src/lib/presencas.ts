@@ -134,3 +134,46 @@ export function corrigirRegisto(lote: Lote, id: string, e: EntradaPresenca, quem
     alteracoes,
   };
 }
+
+/** Filtros da lista de registos: comunidade, intervalo de datas (AAAA-MM-DD) e tipo de culto/evento. */
+export interface FiltroPresencas { comunidadeId?: string; de?: string; ate?: string; evento?: string }
+
+export function filtrarLotesPresenca(lotes: Lote[], f: FiltroPresencas): Lote[] {
+  return lotes
+    .filter((l) => !f.comunidadeId || f.comunidadeId === 'todas' || l.comunidadeId === f.comunidadeId)
+    .map((l) => ({ ...l, registos: l.registos.filter((r) => (!f.de || r.data >= f.de) && (!f.ate || r.data <= f.ate) && (!f.evento || norm(r.evento ?? '') === norm(f.evento))) }))
+    .filter((l) => l.registos.length);
+}
+
+/**
+ * Uma ocorrência de um evento (ex.: a celebração de um domingo) junta os registos com a mesma data e o mesmo evento
+ * (de várias comunidades). As médias "por domingo/evento" usam ocorrências, não registos.
+ */
+export function ocorrenciasDeEvento<T extends { data: string; evento: string }, K extends keyof T & string>(linhas: T[], campos: K[]) {
+  const g = new Map<string, { data: string; evento: string; registos: number } & Record<K, number>>();
+  for (const l of linhas) {
+    const k = `${l.data}|${norm(l.evento)}`;
+    let o = g.get(k);
+    if (!o) { o = { data: l.data, evento: l.evento, registos: 0, ...Object.fromEntries(campos.map((c) => [c, 0])) } as { data: string; evento: string; registos: number } & Record<K, number>; g.set(k, o); }
+    o.registos++;
+    for (const c of campos) (o as Record<string, number>)[c] += Number(l[c]) || 0;
+  }
+  return [...g.values()].sort((a, b) => a.data.localeCompare(b.data) || a.evento.localeCompare(b.evento));
+}
+
+/** Valor de uma contagem num registo (adultos = valor; as outras em extra). */
+const valorContagem = (r: Registo, id: string) => (id === 'adultos' ? r.valor : r.extra?.[id]);
+
+/** Auditoria dos eventos: registos com o evento, último registo e quantos têm cada contagem preenchida (> 0). */
+export function auditoriaEventos(eventos: Pick<EventoConfig, 'id' | 'nome' | 'contagens'>[], lotes: Lote[]) {
+  const out: Record<string, { registos: number; ultimo: string | null; porContagem: Record<string, number> }> = {};
+  for (const e of eventos) {
+    const regs = lotes.flatMap((l) => l.registos).filter((r) => norm(r.evento ?? '') === norm(e.nome));
+    out[e.id] = {
+      registos: regs.length,
+      ultimo: regs.reduce<string | null>((m, r) => (!m || r.data > m ? r.data : m), null),
+      porContagem: Object.fromEntries(e.contagens.map((id) => [id, regs.filter((r) => Number(valorContagem(r, id)) > 0).length])),
+    };
+  }
+  return out;
+}

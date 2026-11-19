@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
-import { auditar, gravarConfigAssistencia, lerConfigAssistencia } from '../lib/db';
+import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
+import { auditar, gravarConfigAssistencia, lerConfigAssistencia, listarLotes } from '../lib/db';
+import { auditoriaEventos } from '../lib/presencas';
 import { DIAS_SEMANA, IDS_BASE, catalogoContagens, descreverQuando, eventosEfetivos, validarEvento, type Contagem, type EventoConfig } from '../lib/eventos';
-import { norm, slug } from '../lib/format';
+import { dataPT, norm, num, slug } from '../lib/format';
 
 const novoEvento = (): EventoConfig => ({ id: '', nome: '', descricao: '', ativo: true, contagens: ['adultos'], dias: [], horario: { diaTodo: true } });
 
@@ -19,6 +20,9 @@ export default function ConfigEventos() {
   const [msg, setMsg] = useState<string | null>(null);
   const [novaContagem, setNovaContagem] = useState('');
   const master = acesso?.papel === 'master';
+  const { ano } = useFiltros();
+  // Auditoria: registos de cada evento no ano do filtro (todas as comunidades a que tem acesso).
+  const lotes = useCarregar(() => listarLotes(acesso!, 'assistencia', ano, false), [ano, acesso?.email]);
 
   if (config.aCarregar || config.erro) return <Estado aCarregar={config.aCarregar} erro={config.erro} />;
   const cfg = config.dados ?? { eventoCelebracao: null };
@@ -44,7 +48,8 @@ export default function ConfigEventos() {
       ...edit, nome: edit.nome.trim(), descricao: edit.descricao?.trim() || undefined,
       id: edit.id || slug(edit.nome) || `evento-${Date.now().toString(36)}`,
       dias: [...edit.dias].sort((a, b) => a - b),
-      contagens: catalogo.map((c) => c.id).filter((id) => edit.contagens.includes(id)),
+      // A ordem das contagens é a ordem das perguntas no formulário de registo.
+      contagens: edit.contagens.filter((id) => catalogo.some((c) => c.id === id)),
     };
     if (!ev.descricao) delete ev.descricao;
     const e = validarEvento(ev, eventos);
@@ -77,22 +82,48 @@ export default function ConfigEventos() {
     catch (err) { setMsg(mensagemErro(err)); }
   }
 
+  async function apagarEvento(e: EventoConfig) {
+    const a = auditoria[e.id];
+    if (cfg.eventoCelebracao && norm(cfg.eventoCelebracao) === norm(e.nome)) { setMsg(`"${e.nome}" é o evento da celebração de domingo: escolha outro na Assistência antes de o apagar.`); return; }
+    if (!confirm(`Apagar o evento "${e.nome}"?${a?.registos ? ` Há ${a.registos} registos com este evento em ${ano}: continuam guardados e nos mapas, mas o evento deixa de aparecer no formulário.` : ''} Pode, em alternativa, desativá-lo.`)) return;
+    try { await gravar(eventos.filter((x) => x.id !== e.id), extra, `apagado: ${e.nome}${a?.registos ? ` (${a.registos} registos em ${ano} mantidos)` : ''}`); setMsg(`Evento "${e.nome}" apagado.`); }
+    catch (err) { setMsg(mensagemErro(err)); }
+  }
+  const auditoria = auditoriaEventos(eventos, lotes.dados ?? []);
+  const mover = (i: number, d: -1 | 1) => {
+    if (!edit) return;
+    const c = [...edit.contagens]; const j = i + d;
+    if (j < 0 || j >= c.length) return;
+    [c[i], c[j]] = [c[j], c[i]];
+    setEdit({ ...edit, contagens: c });
+  };
+
   const alternar = <T,>(lista: T[], v: T) => (lista.includes(v) ? lista.filter((x) => x !== v) : [...lista, v]);
 
   return (
     <div className="sec card">
       <h2>Eventos do registo de presenças</h2>
-      <p className="small">Para cada evento: o que se recolhe, em que dias da semana ocorre e o horário. O formulário de registo só mostra os eventos que ocorrem no dia escolhido e só as contagens desse evento. Mudar o nome de um evento não altera os registos já feitos.</p>
+      <p className="small">{`A coluna "Registos em ${ano}" audita se o evento tem contagens introduzidas (ano do filtro do topo, Jotform e portal) e quantos registos têm cada contagem preenchida.`} Para cada evento: o que se recolhe, em que dias da semana ocorre e o horário. O formulário de registo só mostra os eventos que ocorrem no dia escolhido e só as contagens desse evento. Mudar o nome de um evento não altera os registos já feitos.</p>
       {msg && <p className="small">{msg}</p>}
       <div className="tabela"><table>
-        <thead><tr><th>Evento</th><th>Quando</th><th>Contagens</th><th>Estado</th>{master && <th />}</tr></thead>
+        <thead><tr><th>Evento</th><th>Quando</th><th>Contagens (pela ordem do formulário)</th><th>{`Registos em ${ano}`}</th><th>Estado</th>{master && <th />}</tr></thead>
         <tbody>{eventos.map((e) => (
           <tr key={e.id}>
             <td><b>{e.nome}</b>{e.descricao && <div className="small muted">{e.descricao}</div>}</td>
             <td>{descreverQuando(e)}</td>
             <td className="small">{e.contagens.map(nomeContagem).join(', ')}</td>
+            <td className="small">{lotes.aCarregar ? '…' : (() => {
+              const a = auditoria[e.id];
+              if (!a?.registos) return <span className="neg">Sem contagens introduzidas</span>;
+              const vazias = e.contagens.filter((id) => !a.porContagem[id]);
+              return <>
+                <b>{num(a.registos)}</b> registos · último {dataPT(a.ultimo!)}
+                <div className="muted">{e.contagens.map((id) => `${nomeContagem(id)}: ${num(a.porContagem[id] ?? 0)}`).join(' · ')}</div>
+                {!!vazias.length && <div className="neg">Nunca preenchido: {vazias.map(nomeContagem).join(', ')}</div>}
+              </>;
+            })()}</td>
             <td className="small">{e.ativo ? 'Ativo' : 'Inativo'}{cfg.eventoCelebracao && norm(cfg.eventoCelebracao) === norm(e.nome) ? ' · celebração' : ''}{e.pedeDescricao ? ' · pede descrição' : ''}</td>
-            {master && <td><button className="link" onClick={() => { setErro(null); setEdit({ ...e, descricao: e.descricao ?? '' }); }}>Editar</button></td>}
+            {master && <td style={{ whiteSpace: 'nowrap' }}><button className="link" onClick={() => { setErro(null); setEdit({ ...e, descricao: e.descricao ?? '' }); }}>Editar</button> · <button className="link" onClick={() => void apagarEvento(e)}>Apagar</button></td>}
           </tr>
         ))}</tbody>
       </table></div>
@@ -128,6 +159,20 @@ export default function ConfigEventos() {
               <label key={c.id} className="opcao"><input type="checkbox" checked={edit.contagens.includes(c.id)} onChange={() => setEdit({ ...edit, contagens: alternar(edit.contagens, c.id) })} /> {c.nome}</label>
             ))}
           </fieldset>
+          {edit.contagens.length > 1 && (
+            <fieldset className="grupo-campos">
+              <legend>Ordem das perguntas no formulário</legend>
+              <ol style={{ margin: 0, paddingLeft: 20 }}>
+                {edit.contagens.map((id, i) => (
+                  <li key={id} style={{ margin: '2px 0' }}>
+                    {nomeContagem(id)}{' '}
+                    <button type="button" className="link" disabled={i === 0} aria-label={`Subir ${nomeContagem(id)}`} onClick={() => mover(i, -1)}>↑</button>{' '}
+                    <button type="button" className="link" disabled={i === edit.contagens.length - 1} aria-label={`Descer ${nomeContagem(id)}`} onClick={() => mover(i, 1)}>↓</button>
+                  </li>
+                ))}
+              </ol>
+            </fieldset>
+          )}
           <fieldset className="grupo-campos">
             <legend>Dias da semana</legend>
             <label className="opcao"><input type="radio" name="dias" checked={!edit.dias.length} onChange={() => setEdit({ ...edit, dias: [] })} /> Qualquer dia</label>

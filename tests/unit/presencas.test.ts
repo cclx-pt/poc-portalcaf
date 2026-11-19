@@ -99,3 +99,33 @@ describe('registo de presenças no portal', () => {
   });
 });
 
+
+describe('presenças: filtros, ocorrências e auditoria dos eventos', () => {
+  const reg = (id: string, data: string, evento: string, valor: number, extra: Record<string, number> = {}) => ({ id, data, evento, valor, categoria: 'Assistência', extra });
+  const lote = (com: string, mes: number, registos: ReturnType<typeof reg>[]): Lote => ({ id: `assistencia_2026_${String(mes).padStart(2, '0')}_${com}`, origem: 'assistencia', ano: 2026, mes, periodo: `2026-${String(mes).padStart(2, '0')}`, comunidadeId: com, registos, total: 0, n: registos.length, atualizadoEm: '', atualizadoPor: '' } as unknown as Lote);
+  const lotes = [
+    lote('almada', 11, [reg('a1', '2026-11-08', 'Celebração Domingo', 100, { jump: 5 }), reg('a2', '2026-11-15', 'Celebração Domingo', 120), reg('a3', '2026-11-11', 'Reunião Oração', 20)]),
+    lote('moita', 11, [reg('m1', '2026-11-08', 'Celebração Domingo', 60, { jump: 3, criancas: 10 }), reg('m2', '2026-11-15', 'celebração domingo', 70)]),
+  ];
+  it('filtra os registos por comunidade, datas e tipo de culto', async () => {
+    const { filtrarLotesPresenca } = await import('../../src/lib/presencas');
+    const ids = (ls: Lote[]) => ls.flatMap((l) => l.registos.map((r) => r.id));
+    expect(ids(filtrarLotesPresenca(lotes, { comunidadeId: 'almada' }))).toEqual(['a1', 'a2', 'a3']);
+    expect(ids(filtrarLotesPresenca(lotes, { de: '2026-11-10', ate: '2026-11-14' }))).toEqual(['a3']);
+    expect(ids(filtrarLotesPresenca(lotes, { evento: 'Celebração Domingo' }))).toEqual(['a1', 'a2', 'm1', 'm2']);
+    expect(ids(filtrarLotesPresenca(lotes, {}))).toHaveLength(5);
+  });
+  it('agrupa por ocorrência do evento (data + evento): a média é por domingo, não por registo', async () => {
+    const { ocorrenciasDeEvento } = await import('../../src/lib/presencas');
+    const linhas = lotes.flatMap((l) => l.registos.map((r) => ({ data: r.data, evento: r.evento, comunidadeId: l.comunidadeId, adultos: r.valor, jump: Number(r.extra?.jump ?? 0) })));
+    const oc = ocorrenciasDeEvento(linhas.filter((l) => /celebra/i.test(l.evento)), ['adultos', 'jump']);
+    expect(oc.map((o) => [o.data, o.adultos, o.jump, o.registos])).toEqual([['2026-11-08', 160, 8, 2], ['2026-11-15', 190, 0, 2]]);
+  });
+  it('auditoria dos eventos: quantos registos têm cada contagem preenchida', async () => {
+    const { auditoriaEventos } = await import('../../src/lib/presencas');
+    const eventos = [{ id: 'cel', nome: 'Celebração Domingo', ativo: true, contagens: ['adultos', 'jump', 'criancas'], dias: [0], horario: { diaTodo: true as const } }, { id: 'atos', nome: 'ATOS', ativo: true, contagens: ['adultos'], dias: [], horario: { diaTodo: true as const } }];
+    const a = auditoriaEventos(eventos, lotes);
+    expect(a.cel).toEqual({ registos: 4, ultimo: '2026-11-15', porContagem: { adultos: 4, jump: 2, criancas: 1 } });
+    expect(a.atos).toEqual({ registos: 0, ultimo: null, porContagem: { adultos: 0 } });
+  });
+});

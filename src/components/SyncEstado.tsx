@@ -28,6 +28,7 @@ export function SyncEstado({ detalhe, versao = 0 }: { detalhe?: boolean; versao?
               {nomeOrigem(k)}: +{v.novos ?? 0} novos
               {v.rejeitadas ? `, ${v.rejeitadas} rejeitadas` : ''}
               {v.naoPagas ? `, ${v.naoPagas} por pagar ou sem líquido (não contam)` : ''}
+              {v.ignoradas ? `, ${v.ignoradas} ignorados (${k === 'despesas' ? 'sem reembolso necessário' : 'registo inválido'})` : ''}
               {v.mesesFechadosIgnorados ? `, ${v.mesesFechadosIgnorados} lote(s) em meses fechados não alterados` : ''}
               {v.removidos ? `, ${v.removidos} lote(s) removidos` : ''}
               {d.marcadores?.[k as Origem] && <span className="muted"> · última submissão integrada: {dataJot(d.marcadores[k as Origem])}</span>}

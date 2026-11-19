@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { CampoData, Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
+import { CampoData, Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, gravarLote, lerConfigAssistencia, lerLote, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
 import { domingosEmFalta } from '../lib/domingos';
 import { dataPT, hoje, norm, num } from '../lib/format';
-import { acrescentarRegisto, comunidadesDoUtilizador, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
+import { acrescentarRegisto, comunidadesDoUtilizador, filtrarLotesPresenca, type FiltroPresencas, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
 import { recalcularAno } from '../lib/recalcular';
 import { apagarRascunho, armazemLocal, deveGuardarRascunho, guardarRascunho, idRascunho, lerRascunhos } from '../lib/rascunhos';
 import { Contador } from './Contador';
@@ -220,8 +220,10 @@ export function ResumoRegistoGuardado({ entrada: e, comunidade, nota, aoFechar, 
 }
 
 /** Domingos sem registo de celebração, por comunidade do utilizador. Tocar num domingo abre o registo desse dia. */
-export function DomingosEmFaltaLista({ ano, hoje: hojeIso, comunidades, lotes, aoEscolher }: {
+export function DomingosEmFaltaLista({ ano, hoje: hojeIso, comunidades, lotes, aoEscolher, compacto }: {
   ano: number; hoje: string; comunidades: Comunidade[]; lotes: Lote[]; aoEscolher: (data: string, comunidadeId: string) => void;
+  /** Painel lateral: título mais pequeno e só as comunidades com domingos em falta. */
+  compacto?: boolean;
 }) {
   const config = useCarregar(lerConfigAssistencia, []);
   const excecoes = useCarregar(listarExcecoes, []);
@@ -229,11 +231,14 @@ export function DomingosEmFaltaLista({ ano, hoje: hojeIso, comunidades, lotes, a
   const evento = config.dados?.eventoCelebracao ?? null;
   const falta = domingosEmFalta({ ano, hoje: hojeIso, comunidades, assistencia: lotes, excecoes: excecoes.dados ?? [], evento });
   const nomes = new Map(comunidades.map((c) => [c.id, c.nome]));
+  const mostrar = compacto ? falta.filter((f) => f.emFalta.length) : falta;
+  const totalFalta = falta.reduce((s0, f) => s0 + f.emFalta.length, 0);
   return (
-    <div className="sec domingos-falta">
-      <h2>Domingos em falta</h2>
+    <div className={compacto ? 'domingos-falta compacto' : 'sec domingos-falta'}>
+      {compacto ? <h2 style={{ marginTop: 0 }}>Domingos em falta <span className={totalFalta ? 'neg' : 'muted'}>({num(totalFalta)})</span></h2> : <h2>Domingos em falta</h2>}
       <p className="muted small">Domingos até hoje sem registo {evento ? `de "${evento}"` : 'de presenças'}. Não contam as exceções (cultos conjuntos, retiros). Toque num domingo para o registar.</p>
-      {falta.map((f) => (
+      {compacto && !totalFalta && falta.length > 0 && <p className="ok-box small">Todos os domingos estão registados.</p>}
+      {mostrar.map((f) => (
         <div key={f.comunidadeId} className="card df-comunidade">
           <div className="df-cabeca"><b>{nomes.get(f.comunidadeId) ?? f.comunidadeId}</b>
             <span className={f.emFalta.length ? 'neg' : 'muted'}>{f.emFalta.length ? `${num(f.emFalta.length)} em falta` : 'Tudo registado'}</span>
@@ -307,22 +312,74 @@ export function ListaPresencas({ lotes, comunidades, soPortal, aposApagar }: { l
   );
 }
 
-/** Página "Registar presenças" dentro do portal. */
+/** Filtros da lista de registos: comunidade, intervalo de datas e tipo de culto. */
+export function FiltrosListaPresencas({ comunidades, lotes, filtro, aoMudar }: {
+  comunidades: Comunidade[]; lotes: Lote[]; filtro: FiltroPresencas; aoMudar: (f: FiltroPresencas) => void;
+}) {
+  const config = useCarregar(lerConfigAssistencia, []);
+  // Tipos de culto: os configurados e os que existem nos registos (ex.: vindos do Jotform).
+  const tipos = [...new Map([...eventosEfetivos(config.dados).map((e) => e.nome), ...lotes.flatMap((l) => l.registos.map((r) => r.evento ?? ''))]
+    .filter((x) => x.trim()).map((x) => [norm(x), x] as [string, string])).values()].sort((a, b) => a.localeCompare(b, 'pt'));
+  const ativo = !!(filtro.de || filtro.ate || filtro.evento || (filtro.comunidadeId && filtro.comunidadeId !== 'todas'));
+  return (
+    <div className="filtros linha" style={{ alignItems: 'flex-end', marginBottom: 10 }}>
+      {comunidades.length > 1 && (
+        <label className="campo">Comunidade
+          <select value={filtro.comunidadeId ?? 'todas'} onChange={(e) => aoMudar({ ...filtro, comunidadeId: e.target.value })}>
+            <option value="todas">Todas as minhas</option>
+            {comunidades.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+        </label>
+      )}
+      <CampoData rotulo="De" valor={filtro.de ?? ''} onChange={(d) => aoMudar({ ...filtro, de: d || undefined })} />
+      <CampoData rotulo="Até" valor={filtro.ate ?? ''} onChange={(d) => aoMudar({ ...filtro, ate: d || undefined })} />
+      <label className="campo">Tipo de culto
+        <select value={filtro.evento ?? ''} onChange={(e) => aoMudar({ ...filtro, evento: e.target.value || undefined })}>
+          <option value="">Todos</option>
+          {tipos.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </label>
+      {ativo && <button className="sec" onClick={() => aoMudar({ comunidadeId: filtro.comunidadeId && comunidades.length > 1 ? 'todas' : undefined })}>Limpar filtros</button>}
+    </div>
+  );
+}
+
+/** Página "Registar presenças" dentro do portal: formulário, domingos em falta (à direita) e registos com filtros. */
 export default function RegistarPresencas() {
   const coms = useComunidadesDoUtilizador();
-  const ano = new Date().getFullYear();
+  const { ano, comunidade, setComunidade } = useFiltros();
   const lotes = useLotesPresencas(ano);
   const comunidades = coms.dados ?? [];
+  // O filtro de comunidade do topo também filtra esta página (só as comunidades do utilizador).
+  const doFiltro = comunidade === 'todas' ? comunidades : comunidades.filter((c) => c.id === comunidade);
+  const [inicial, setInicial] = useState<{ chave: number; v: Partial<EntradaPresenca> }>({ chave: 0, v: comunidade !== 'todas' ? { comunidadeId: comunidade } : {} });
+  const [filtro, setFiltro] = useState<Omit<FiltroPresencas, 'comunidadeId'>>({});
+  const filtrados = filtrarLotesPresenca(lotes.dados ?? [], { ...filtro, comunidadeId: comunidade });
   return (
     <>
       <h1>Registar presenças</h1>
       <p className="muted">Equivalente ao formulário CCLX : Registo de Presenças. Grava só no portal (o Jotform não é alterado) e entra de imediato no mapa de presenças e nos domingos em falta. Link direto para telemóvel: <a href="#/registar">portalcaf.cclx.pt/#/registar</a>.</p>
       <Estado aCarregar={coms.aCarregar} erro={coms.erro} />
-      {!coms.aCarregar && <FormularioPresencas comunidades={comunidades} lotes={lotes.dados ?? []} aposGravar={lotes.recarregar} />}
+      {!coms.aCarregar && (
+        <div className="presencas-layout">
+          <div id="form-presencas">
+            <FormularioPresencas key={inicial.chave} inicial={inicial.v} comunidades={comunidades} lotes={lotes.dados ?? []} aposGravar={lotes.recarregar} />
+          </div>
+          <aside className="card presencas-lado">
+            <Estado aCarregar={lotes.aCarregar} erro={lotes.erro} />
+            {!lotes.aCarregar && (
+              <DomingosEmFaltaLista compacto ano={ano} hoje={hoje()} comunidades={doFiltro} lotes={lotes.dados ?? []}
+                aoEscolher={(data, comunidadeId) => { setInicial({ chave: Date.now(), v: { data, comunidadeId } }); document.getElementById('form-presencas')?.scrollIntoView?.({ behavior: 'smooth' }); }} />
+            )}
+          </aside>
+        </div>
+      )}
       <div className="sec">
         <h2>Registos de presenças em {ano}</h2>
-        <p className="muted small">Do Jotform e do portal, das suas comunidades. Corrigir guarda quem alterou e quando, e fica na auditoria; só se apagam registos feitos no portal.</p>
-        <ListaPresencas lotes={lotes.dados ?? []} comunidades={comunidades} soPortal={false} aposApagar={lotes.recarregar} />
+        <p className="muted small">Do Jotform e do portal, das suas comunidades (ano e comunidade do filtro do topo). Corrigir guarda quem alterou e quando, e fica na auditoria; só se apagam registos feitos no portal.</p>
+        <FiltrosListaPresencas comunidades={comunidades} lotes={lotes.dados ?? []} filtro={{ ...filtro, comunidadeId: comunidade }}
+          aoMudar={({ comunidadeId, ...f }) => { setFiltro(f); if (comunidadeId) setComunidade(comunidadeId); }} />
+        <ListaPresencas lotes={filtrados} comunidades={comunidades} soPortal={false} aposApagar={lotes.recarregar} />
       </div>
     </>
   );
