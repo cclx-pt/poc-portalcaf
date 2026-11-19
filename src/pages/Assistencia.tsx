@@ -104,6 +104,9 @@ export default function Assistencia() {
     assistencia: lotes.dados ?? [], excecoes: excecoes.dados ?? [], eventos: eventosEfetivos(config.dados), eventoCelebracao: tipoCelebracao,
   });
 
+  const emFaltaTotal = falta.reduce((s0, f) => s0 + f.emFalta.length, 0);
+  const esperadosTotal = falta.reduce((s0, f) => s0 + f.esperados, 0);
+
   return (
     <>
       <div className="linha" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
@@ -134,6 +137,8 @@ export default function Assistencia() {
           <Kpi titulo={unidade === 'domingo' ? 'Domingos com registo' : 'Eventos com registo'} valor={num(ano_.n)} sub={`${num(doMapa.length)} registos em ${mesesComDados} ${mesesComDados === 1 ? 'mês' : 'meses'}`} />
           <Kpi titulo="Média de jovens e adultos" valor={m1(media(ano_, 'adultos'))} sub={`por ${unidade}`} />
           <Kpi titulo="Média total de pessoas" valor={m1(media(ano_, 'total'))} sub={`por ${unidade}, todas as idades`} />
+          <Kpi titulo="Registos em falta" valor={num(emFaltaTotal)} negativo={emFaltaTotal > 0}
+            sub={esperadosTotal ? <a href="#registos-em-falta" onClick={(e) => { e.preventDefault(); document.getElementById('registos-em-falta')?.scrollIntoView({ behavior: 'smooth' }); }}>{`de ${num(esperadosTotal)} esperados · ${num((1 - emFaltaTotal / esperadosTotal) * 100, 1)}% registados`}</a> : 'Sem eventos obrigatórios'} />
           <Kpi titulo="Mês com maior média" valor={melhor && melhor.v >= 0 ? MESES[melhor.i] : '—'} sub={melhor && melhor.v >= 0 ? `${m1(melhor.v)} jovens e adultos` : undefined} />
         </div>
 
@@ -217,7 +222,7 @@ export default function Assistencia() {
           </table></div>
         </div>
       </>}
-      <div className="sec">
+      <div className="sec" id="registos-em-falta">
         <h2>Registos em falta</h2>
         <p className="muted small">Dias até ontem sem registo dos eventos com contagem obrigatória (Configuração → Assistência), por comunidade ativa (filtro de comunidade no topo). Não contam as datas sem assistência esperada (exceções).</p>
         {falta.length ? <>
