@@ -4,7 +4,7 @@ import { LogoBanco } from '../components/LogoBanco';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia } from '../lib/db';
-import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, sugerirPadrao, temPalavra, validar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
+import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, sugerirPadrao, candidatosReembolso, registosConciliados, type RegistoJotform, temPalavra, validar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
 import { bancoDaConta } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Categoria, Comunidade, Dimensao, EstadoMov, MovBanco, ParteMov } from '../lib/types';
@@ -31,6 +31,11 @@ export default function Reconciliacao() {
   }, [ano]);
   const dims = useCarregar(listarDimensoes, []);
   const regras = useCarregar(listarRegrasBanco, []);
+  // Registos do Jotform para cruzar à mão e para ver os dados dos movimentos conciliados.
+  const jot = useCarregar(async () => {
+    const [depositos, desp, despAntes, contribuir] = await Promise.all([listarLotes(acesso!, 'depositos', ano), listarLotes(acesso!, 'despesas', ano), listarLotes(acesso!, 'despesas', ano - 1), listarLotes(acesso!, 'contribuir', ano)]);
+    return { depositos, despesas: [...despAntes, ...desp], contribuir };
+  }, [ano, acesso?.email]);
   const cfixos = useCarregar(() => listarCustosFixos(acesso!), [acesso?.email]);
   const [detalhe, setDetalhe] = useState<MovVista | null>(null);
   const [relDim, setRelDim] = useState<DimensaoRelatorio>('rubrica');
@@ -278,7 +283,8 @@ export default function Reconciliacao() {
         ))}
       </div>
       {detalhe && <DetalheMovimento m={detalhe} categorias={cats.dados ?? []} dimensoes={dims.dados ?? []} comunidades={coms.dados ?? []} custosFixos={cfixos.dados ?? []}
-        movsMes={movs} regras={regras.dados ?? []} email={acesso!.email} onRegra={() => void regras.recarregar()}
+        movsMes={movs} regras={regras.dados ?? []} jotform={jot.dados ?? null}
+        usados={new Set((banco.dados ?? []).flatMap((l) => (alterados[l.id] ?? l).registos).filter((x) => x.id !== detalhe.id && x.conciliadoCom?.startsWith('despesas:')).flatMap((x) => x.conciliadoCom!.slice(9).split(',')))} email={acesso!.email} onRegra={() => void regras.recarregar()}
         onFechar={() => setDetalhe(null)} onAplicar={(patch) => { alterar(detalhe.loteId, detalhe.id, patch); setDetalhe(null); }} />}
     </>
   );
@@ -288,9 +294,10 @@ export default function Reconciliacao() {
 /** Movimento dividido em linhas com categorias diferentes. */
 const itemizado = (m: MovBanco) => !!m.partes?.length && new Set(m.partes.map((p) => p.categoria ?? m.categoria)).size > 1;
 
-function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, movsMes, regras, email, onRegra, onFechar, onAplicar }: {
+function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, movsMes, regras, jotform, usados, email, onRegra, onFechar, onAplicar }: {
   m: MovBanco; categorias: Categoria[]; dimensoes: Dimensao[]; comunidades: Comunidade[]; custosFixos: import('../lib/types').CustoFixo[];
   movsMes: MovBanco[]; regras: RegraBanco[]; email: string; onRegra: () => void;
+  jotform: { despesas: import('../lib/types').Lote[]; depositos: import('../lib/types').Lote[]; contribuir: import('../lib/types').Lote[] } | null; usados: Set<string>;
   onFechar: () => void; onAplicar: (patch: Partial<MovBanco>) => void;
 }) {
   const [v, setV] = useState<MovBanco>(m);
@@ -335,6 +342,17 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
     <Modal titulo="Classificar movimento" onFechar={onFechar}>
       <p className="small">{`${m.data.split('-').reverse().join('/')} · ${m.descricao} · `}<b>{eur(m.valor)}</b>{m.conciliadoCom ? ` · Conciliado com ${m.conciliadoCom}` : ''}</p>
       {m.nota && <div className={m.estado === 'rever' ? 'aviso' : 'nota'}>{m.nota}</div>}
+      {m.conciliadoCom && <RegistosJotformConciliados m={m} jotform={jotform} comunidades={comunidades} />}
+      {!m.conciliadoCom && m.valor < 0 && <CruzarReembolsos m={m} jotform={jotform} usados={usados} comunidades={comunidades}
+        onConciliar={(regs) => {
+          const soma = r2(regs.reduce((s0, x) => s0 + x.valor, 0));
+          const dif = r2(soma - Math.abs(m.valor));
+          if (Math.abs(dif) >= 0.005 && !confirm(`A soma dos reembolsos escolhidos (${eur(soma)}) é diferente do movimento (${eur(Math.abs(m.valor))}). Conciliar mesmo assim?`)) return;
+          const coms = [...new Set(regs.map((x) => x.comunidadeId))];
+          const cat = categorias.find((c) => c.codigo === 'F3.02')?.nome;
+          onAplicar(validar({ ...m, conciliadoCom: `despesas:${regs.map((x) => x.id).join(',')}`, categoria: cat ?? m.categoria, comunidadeId: coms.length === 1 ? coms[0] : undefined, partes: undefined,
+            nota: `Conciliado à mão com o Jotform: ${regs.map((x) => x.codigo ?? x.id).join(', ')}${Math.abs(dif) >= 0.005 ? ` (diferença ${eur(dif)})` : ''} (contado pelo Jotform)` } as MovBanco, categorias));
+        }} />}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
         <label className="campo">Categoria
           <select value={v.categoria ?? ''} onChange={(e) => setV({ ...v, categoria: e.target.value || undefined, contaAnalitica: undefined })}>
@@ -420,5 +438,65 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
         <button className="sec" onClick={() => onAplicar({ estado: 'por-classificar', contabilizar: false, categoria: undefined, comunidadeId: undefined, partes: undefined, conciliadoCom: null, centroCusto: undefined, fornecedor: undefined, projeto: undefined, contaAnalitica: undefined, nota: undefined })}>Limpar</button>
       </div>
     </Modal>
+  );
+}
+
+const ORIGEM_JOT: Record<RegistoJotform['origem'], string> = { despesas: 'Reembolso', depositos: 'Depósito', contribuir: 'Contribuir' };
+
+/** Os registos do Jotform com que o movimento está conciliado. */
+function RegistosJotformConciliados({ m, jotform, comunidades }: { m: MovBanco; jotform: Parameters<typeof registosConciliados>[1] | null; comunidades: Comunidade[] }) {
+  const [aberto, setAberto] = useState(false);
+  const nome = (id: string) => comunidades.find((c) => c.id === id)?.nome ?? id;
+  const regs = jotform ? registosConciliados(m, jotform) : [];
+  const soma = r2(regs.reduce((s0, x) => s0 + (x.liquido ?? x.valor), 0));
+  return (
+    <div className="card" style={{ margin: '8px 0', padding: 10 }}>
+      <button className="link" onClick={() => setAberto(!aberto)}>{aberto ? '▾' : '▸'} Ver os registos do Jotform conciliados ({m.conciliadoCom})</button>
+      {aberto && (!jotform ? <p className="small muted">A carregar…</p> : !regs.length ? <p className="small muted">Não encontrei os registos no Jotform sincronizado (podem ter sido apagados ou ser de outro ano).</p> : <>
+        <div className="tabela" style={{ maxHeight: 240, marginTop: 6 }}><table>
+          <thead><tr><th>Origem</th><th>Data</th><th>Código</th><th>Comunidade</th><th>Categoria</th><th>Descrição</th><th className="num">Valor</th>{regs.some((x) => x.liquido != null) && <th className="num">Líquido</th>}</tr></thead>
+          <tbody>{regs.map((x) => (
+            <tr key={`${x.origem}-${x.id}`}><td>{ORIGEM_JOT[x.origem]}</td><td>{dataPt(x.data)}</td><td>{x.codigo ?? '—'}</td><td>{nome(x.comunidadeId)}</td><td className="small">{x.categoria ?? '—'}</td><td className="small">{x.descricao ?? '—'}</td>
+              <td className="num">{eur(x.valor)}</td>{regs.some((y) => y.liquido != null) && <td className="num">{x.liquido != null ? eur(x.liquido) : '—'}</td>}</tr>
+          ))}</tbody>
+        </table></div>
+        <p className="small">{`${regs.length} ${regs.length === 1 ? 'registo' : 'registos'} · soma ${eur(soma)} · movimento ${eur(Math.abs(m.valor))}`}{Math.abs(soma - Math.abs(m.valor)) >= 0.005 ? ` · diferença ${eur(r2(Math.abs(m.valor) - soma))}` : ' · confere'}</p>
+      </>)}
+    </div>
+  );
+}
+
+/** Débito do banco: procurar e escolher reembolsos do Jotform da mesma semana e com valor aproximado, e conciliar. */
+function CruzarReembolsos({ m, jotform, usados, comunidades, onConciliar }: {
+  m: MovBanco; jotform: { despesas: import('../lib/types').Lote[] } | null; usados: Set<string>; comunidades: Comunidade[]; onConciliar: (regs: RegistoJotform[]) => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [sel, setSel] = useState<string[]>([]);
+  const [largo, setLargo] = useState(false);
+  const nome = (id: string) => comunidades.find((c) => c.id === id)?.nome ?? id;
+  const cands = jotform ? candidatosReembolso(m, jotform.despesas, usados, largo ? 15 : 7, largo ? 1 : 0.1) : [];
+  const escolhidos = cands.filter((x) => sel.includes(x.id));
+  const soma = r2(escolhidos.reduce((s0, x) => s0 + x.valor, 0));
+  return (
+    <div className="card" style={{ margin: '8px 0', padding: 10 }}>
+      <button className="link" onClick={() => setAberto(!aberto)}>{aberto ? '▾' : '▸'} Cruzar com os reembolsos do Jotform</button>
+      {aberto && (!jotform ? <p className="small muted">A carregar…</p> : <>
+        <p className="small muted" style={{ margin: '6px 0' }}>{largo ? 'Até 15 dias antes ou depois, qualquer valor.' : 'Reembolsos até 7 dias antes ou depois, com valor até 10% de diferença.'} Os já conciliados noutros movimentos não aparecem. <button className="link" onClick={() => setLargo(!largo)}>{largo ? 'Só a mesma semana e valor aproximado' : 'Alargar a pesquisa'}</button></p>
+        {!cands.length ? <p className="small">Nenhum reembolso encontrado.</p> : (
+          <div className="tabela" style={{ maxHeight: 260 }}><table>
+            <thead><tr><th /><th>Data</th><th>Código</th><th>Comunidade</th><th>Categoria</th><th>Descrição</th><th className="num">Valor</th><th className="num">Diferença</th></tr></thead>
+            <tbody>{cands.slice(0, 50).map((x) => (
+              <tr key={x.id}>
+                <td><input type="checkbox" aria-label={`Escolher ${x.codigo ?? x.id}`} checked={sel.includes(x.id)} onChange={() => setSel(sel.includes(x.id) ? sel.filter((y) => y !== x.id) : [...sel, x.id])} /></td>
+                <td>{dataPt(x.data)}</td><td>{x.codigo ?? '—'}</td><td>{nome(x.comunidadeId)}</td><td className="small">{x.categoria ?? '—'}</td><td className="small">{x.descricao ?? '—'}</td>
+                <td className="num">{eur(x.valor)}</td><td className="num">{x.diferenca ? eur(x.diferenca) : 'igual'}</td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        )}
+        {!!escolhidos.length && <p className="small">{`${escolhidos.length} escolhido(s) · soma ${eur(soma)} · movimento ${eur(Math.abs(m.valor))}`}{Math.abs(soma - Math.abs(m.valor)) >= 0.005 ? <b>{` · diferença ${eur(r2(soma - Math.abs(m.valor)))}`}</b> : ' · confere'}</p>}
+        <button className="sec" disabled={!escolhidos.length} onClick={() => onConciliar(escolhidos)}>Conciliar com os escolhidos</button>
+      </>)}
+    </div>
   );
 }

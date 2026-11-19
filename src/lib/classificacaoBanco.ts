@@ -282,3 +282,45 @@ export function descricaoContem(descricao: string, filtro: string): boolean {
   const d = norm(descricao);
   return norm(filtro).split(/\s+/).filter(Boolean).every((p) => d.includes(p));
 }
+
+/** Registo do Jotform ligado (ou candidato) a um movimento do banco. */
+export interface RegistoJotform {
+  origem: 'despesas' | 'depositos' | 'contribuir'; id: string; data: string; valor: number; comunidadeId: string;
+  categoria?: string; descricao?: string; codigo?: string; liquido?: number; diferenca?: number;
+}
+
+const paraRegisto = (origem: RegistoJotform['origem'], l: Lote, x: Lote['registos'][number]): RegistoJotform => ({
+  origem, id: x.id, data: x.data, valor: x.valor, comunidadeId: l.comunidadeId, categoria: x.categoria, descricao: x.descricao,
+  ...(x.extra?.codigo ? { codigo: String(x.extra.codigo) } : {}),
+  ...(Number.isFinite(Number(x.extra?.liquido)) && x.extra?.liquido != null ? { liquido: Number(x.extra.liquido) } : {}),
+});
+
+/**
+ * Reembolsos do Jotform que podem corresponder a um débito do banco: até `diasJanela` dias antes ou depois
+ * e com valor até `tolerancia` (10%) de diferença; os mais parecidos primeiro. `usados`: ids já conciliados noutro movimento.
+ */
+export function candidatosReembolso(m: MovBanco, despesas: Lote[], usados: Set<string> = new Set(), diasJanela = 7, tolerancia = 0.1): RegistoJotform[] {
+  const v = Math.abs(m.valor);
+  return despesas.flatMap((l) => l.registos.map((x) => paraRegisto('despesas', l, x)))
+    .filter((x) => !usados.has(x.id) && dias(x.data, m.data) <= diasJanela && dias(m.data, x.data) <= diasJanela && Math.abs(x.valor - v) <= v * tolerancia + 0.005)
+    .map((x) => ({ ...x, diferenca: r2(x.valor - v) }))
+    .sort((a, b) => Math.abs(a.diferenca!) - Math.abs(b.diferenca!) || Math.abs(dias(a.data, m.data)) - Math.abs(dias(b.data, m.data)));
+}
+
+/** Os registos do Jotform com que um movimento está conciliado (para os ver no detalhe). */
+export function registosConciliados(m: MovBanco, ctx: { despesas: Lote[]; depositos: Lote[]; contribuir: Lote[] }): RegistoJotform[] {
+  const c = m.conciliadoCom ?? '';
+  const [origem, resto = ''] = c.split(':');
+  if (origem === 'despesas' || origem === 'depositos') {
+    const ids = resto.split(',').filter(Boolean);
+    const lotes = origem === 'despesas' ? ctx.despesas : ctx.depositos;
+    return ids.flatMap((id) => lotes.flatMap((l) => l.registos.filter((x) => x.id === id).map((x) => paraRegisto(origem, l, x))));
+  }
+  if (origem === 'contribuir') {
+    // Lote IFTHENPAY: as contribuições pagas nos 7 dias anteriores ao movimento (com o líquido).
+    return ctx.contribuir.flatMap((l) => l.registos.map((x) => paraRegisto('contribuir', l, x)))
+      .filter((x) => x.liquido != null && dias(x.data, m.data) >= 0 && dias(x.data, m.data) <= 7)
+      .sort((a, b) => a.data.localeCompare(b.data));
+  }
+  return [];
+}
