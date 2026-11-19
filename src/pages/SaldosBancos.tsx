@@ -1,9 +1,9 @@
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { bancoDaConta, estatisticasSaldos, previsaoSaldos, saldosMensais, verificarExtratos } from '../lib/banco';
+import { estatisticasSaldos, previsaoSaldos, saldosMensais, verificarExtratos } from '../lib/banco';
 import { CATEGORICAS, CORES } from '../lib/cores';
 import { eur, eurK, MESES, MESES_CURTOS, XLSX_EUR } from '../lib/format';
 import type { BancoLote, Conta } from '../lib/types';
-import { LogoBanco } from '../components/LogoBanco';
+import { LogoConta } from '../components/LogoBanco';
 
 const pctTxt = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : '—');
 
@@ -67,7 +67,7 @@ export default function SaldosBancos({ contas, lotes, ano, aoAbrirMes }: { conta
         {avisos.length ? (
           <ul className="avisos-extrato">
             {avisos.map((a) => (
-              <li key={`${a.contaId}-${a.tipo}-${a.mes}`}><LogoBanco banco={bancoDaConta(contas.find((c) => c.id === a.contaId) ?? { id: a.contaId })} tamanho={16} /> <b>{nome(a.contaId)}:</b> {a.texto}</li>
+              <li key={`${a.contaId}-${a.tipo}-${a.mes}`}><LogoConta conta={contas.find((c) => c.id === a.contaId)} tamanho={16} /> <b>{nome(a.contaId)}:</b> {a.texto}</li>
             ))}
           </ul>
         ) : <p className="small">✓ Extratos sem meses em falta e com os saldos encadeados de mês para mês e dentro de cada mês.</p>}
@@ -101,7 +101,7 @@ export default function SaldosBancos({ contas, lotes, ano, aoAbrirMes }: { conta
       <div className="tabela sec">
         <table className="tabela-saldos">
           <thead>
-            <tr><th>Mês</th>{ids.map((id) => <th key={id} className="num"><LogoBanco banco={bancoDaConta(contas.find((c) => c.id === id)!)} tamanho={14} /> {nome(id)}</th>)}
+            <tr><th>Mês</th>{ids.map((id) => <th key={id} className="num"><LogoConta conta={contas.find((c) => c.id === id)} tamanho={14} /> {nome(id)}</th>)}
               <th className="num">Saldo inicial</th><th className="num">Entradas</th><th className="num">Saídas</th><th className="num">Saldo final</th><th className="num">Classificados</th><th className="num">Conciliados</th><th /></tr>
           </thead>
           <tbody>

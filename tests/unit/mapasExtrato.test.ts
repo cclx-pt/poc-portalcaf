@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { assinaturaColunas, escolherMapa, mapaCompleto, type MapaExtrato } from '../../src/lib/banco';
 
 const m = (id: string, colunas: string[], campos: MapaExtrato['campos'], extra: Partial<MapaExtrato> = {}): MapaExtrato =>
-  ({ id, nome: id, colunas: assinaturaColunas(colunas), campos, ...extra });
+  ({ id, nome: id, contaId: id, colunas: assinaturaColunas(colunas), campos, ...extra });
 
 describe('mapeamento guardado dos extratos', () => {
   it('a assinatura não depende de maiúsculas, acentos nem ordem', () => {
@@ -24,5 +24,18 @@ describe('mapeamento guardado dos extratos', () => {
     expect(mapaCompleto({ data: 'D', debito: 'Db' })).toBe(true);
     expect(mapaCompleto({ valor: 'V' })).toBe(false);
     expect(mapaCompleto({ data: 'D', descricao: 'X' })).toBe(false);
+  });
+});
+
+describe('mapeamento ligado à conta', () => {
+  it('só as contas com mapeamento entram e o ficheiro escolhe a conta', async () => {
+    const { mapasDasContas } = await import('../../src/lib/banco');
+    const contas = [
+      { id: 'mb', nome: 'Millennium', banco: 'Millennium BCP', tipo: 'corrente' as const, mapa: { data: 'Data', valor: 'Montante', descricao: 'Texto' }, mapaColunas: ['data', 'montante', 'texto'] },
+      { id: 'cgd', nome: 'CGD', banco: 'Caixa Geral de Depósitos', tipo: 'principal' as const },
+    ];
+    const ms = mapasDasContas(contas);
+    expect(ms.map((m) => m.contaId)).toEqual(['mb']);
+    expect(escolherMapa(['Data', 'Texto', 'Montante'], ms)?.contaId).toBe('mb');
   });
 });

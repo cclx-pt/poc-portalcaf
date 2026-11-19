@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { SyncEstado } from '../components/SyncEstado';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
-import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarDimensoes, listarRegrasBanco, listarMapasExtrato, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
+import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarDimensoes, listarRegrasBanco, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
 import { COMUNIDADES, CONTAS, JOTFORM_FORMS } from '../lib/seed';
 import { categoriasDoPlano, dimensoesDoPlano } from '../lib/plano';
 import { REGRAS_INICIAIS, type RegraBanco } from '../lib/classificacaoBanco';
@@ -18,9 +18,9 @@ import { testarChave, type ResultadoTeste } from '../lib/jotform';
 import { sincronizarAgora } from '../lib/syncWeb';
 import { categoriasEmFalta, rubricaInicial } from '../lib/rubricas';
 import { recalcularAno } from '../lib/recalcular';
-import { EditorMapaExtrato, CAMPOS_EXTRATO } from '../components/MapaExtratoEditor';
-import { NOME_BANCO, detetarBanco, mapaDoBanco, sugerirMapaBanco, type MapaBanco, type MapaExtrato } from '../lib/banco';
-import { lerFicheiro } from '../lib/ficheiros';
+import { EditorConta, resumoMapa } from '../components/MapaExtratoEditor';
+import { LogoConta } from '../components/LogoBanco';
+import { NOME_BANCO, bancoDaConta } from '../lib/banco';
 
 type Edicao =
   | { tipo: 'comunidade'; novo: boolean; v: Comunidade }
@@ -42,8 +42,7 @@ export default function Configuracao() {
   const dims = useCarregar(listarDimensoes, []);
   const regras = useCarregar(listarRegrasBanco, []);
   const [regra, setRegra] = useState<RegraBanco | null>(null);
-  const mapasExt = useCarregar(listarMapasExtrato, []);
-  const [mapaEd, setMapaEd] = useState<{ inicial: Partial<MapaExtrato> & { campos: MapaBanco }; colunas?: string[] } | null>(null);
+  const [contaExt, setContaExt] = useState<Conta | null>(null);
   const [tipoDim, setTipoDim] = useState<Dimensao['tipo']>('centro');
   const [msg, setMsg] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -196,17 +195,6 @@ export default function Configuracao() {
       setRegra(null); await regras.recarregar();
     } catch (e) { setMsg(mensagemErro(e)); }
   }
-  async function novoMapaDeFicheiro(f: File) {
-    try {
-      const t = await lerFicheiro(f);
-      const b = detetarBanco(t.colunas);
-      setMapaEd({ inicial: { nome: '', banco: b ?? '', campos: b ? mapaDoBanco(b, t.colunas) : sugerirMapaBanco(t.colunas) }, colunas: t.colunas });
-    } catch (e) { setMsg(mensagemErro(e)); }
-  }
-  async function apagarMapa(x: MapaExtrato) {
-    if (!confirm(`Apagar o mapeamento "${x.nome}"? Os extratos já importados não mudam.`)) return;
-    try { await apagar('mapas_extrato', x.id); await auditar(acesso!.email, 'apagar mapeamento de extrato', x.nome); await mapasExt.recarregar(); } catch (e) { setMsg(mensagemErro(e)); }
-  }
   async function apagarRegra(x: RegraBanco) {
     if (!confirm(`Apagar a regra "${x.padrao}"?`)) return;
     try { await apagar('regras_banco', x.id); await auditar(acesso!.email, 'apagar regra dos extratos', x.padrao); await regras.recarregar(); } catch (e) { setMsg(mensagemErro(e)); }
@@ -349,17 +337,22 @@ export default function Configuracao() {
           <h2>Contas bancárias</h2>
           <button onClick={() => setEdit({ tipo: 'conta', novo: true, v: { id: '', nome: '', banco: '', tipo: 'corrente', iban: '', ativo: true } })}>Nova conta</button>
         </div>
+        <p className="muted">Em <b>Extrato e logótipo</b> indica as colunas do extrato de cada conta (a partir de um ficheiro de exemplo) e carrega o logótipo. Ao importar, o portal reconhece o ficheiro, escolhe a conta e aplica as colunas sozinho. Os extratos da CGD e do Santander são reconhecidos mesmo sem mapeamento.</p>
         <div className="tabela"><table>
-          <thead><tr><th>Conta</th><th>Banco</th><th>Tipo</th><th>IBAN</th><th>Nota</th><th>Estado</th><th /></tr></thead>
+          <thead><tr><th /><th>Conta</th><th>Banco</th><th>Tipo</th><th>IBAN</th><th>Colunas do extrato</th><th>Nota</th><th>Estado</th><th /></tr></thead>
           <tbody>{(contas.dados ?? []).map((c) => (
             <tr key={c.id}>
-              <td>{c.nome}</td><td>{c.banco}</td><td>{c.tipo === 'investimentos' ? 'Investimentos' : c.tipo === 'principal' ? 'Principal' : 'Corrente'}</td>
+              <td><LogoConta conta={c} tamanho={22} /></td><td>{c.nome}</td><td>{c.banco}</td><td>{c.tipo === 'investimentos' ? 'Investimentos' : c.tipo === 'principal' ? 'Principal' : 'Corrente'}</td>
               <td className="small" style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{formatarIban(c.iban) || <span className="muted">por preencher</span>}</td>
-              <td className="small">{c.etiqueta}</td><td>{ativoTxt(c.ativo) ?? 'Ativa'}</td><td>{acoes('conta', c)}</td>
+              <td className="small">{resumoMapa(c) ?? (bancoDaConta(c) ? <span className="muted">Automático ({NOME_BANCO[bancoDaConta(c)!]})</span> : <span className="muted">por definir</span>)}</td>
+              <td className="small">{c.etiqueta}</td><td>{ativoTxt(c.ativo) ?? 'Ativa'}</td>
+              <td style={{ whiteSpace: 'nowrap' }}><button className="link" onClick={() => setContaExt(c)}>Extrato e logótipo</button> · {acoes('conta', c)}</td>
             </tr>
           ))}</tbody>
         </table></div>
       </div>
+
+      {contaExt && <EditorConta conta={contaExt} email={acesso!.email} onFechar={() => setContaExt(null)} onGuardado={() => { setContaExt(null); void contas.recarregar(); }} />}
 
       <div className="sec">
         <div className="linha" style={{ justifyContent: 'space-between' }}>
@@ -414,31 +407,6 @@ export default function Configuracao() {
       </div>
 
       </>}
-
-      {area === 'estrutura' && <div className="sec">
-        <div className="linha" style={{ justifyContent: 'space-between' }}>
-          <h2>Mapeamento dos extratos</h2>
-          <span>
-            <button onClick={() => document.getElementById('ficheiro-mapa-extrato')?.click()}>Novo a partir de um extrato</button>
-            <input id="ficheiro-mapa-extrato" type="file" accept=".csv,.xlsx,.xls,.txt" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void novoMapaDeFicheiro(f); }} />
-          </span>
-        </div>
-        <p className="muted">Diz que coluna do ficheiro do banco é a data, a descrição, o montante (ou débito e crédito) e o saldo, e que conta se usa por omissão. Ao importar, o portal aplica sozinho o mapeamento cujas colunas existem no ficheiro. Os extratos da CGD e do Santander também são reconhecidos sem mapeamento; um mapeamento guardado tem prioridade.</p>
-        <Estado aCarregar={mapasExt.aCarregar} erro={mapasExt.erro} vazio={!mapasExt.dados?.length} />
-        {!!mapasExt.dados?.length && <div className="tabela"><table>
-          <thead><tr><th>Nome</th><th>Banco</th><th>Conta por omissão</th><th>Colunas</th><th>Atualizado</th><th /></tr></thead>
-          <tbody>{(mapasExt.dados ?? []).map((x) => (
-            <tr key={x.id}><td>{x.nome}</td><td>{x.banco ? NOME_BANCO[x.banco] : 'Outro'}</td>
-              <td>{(contas.dados ?? []).find((c) => c.id === x.contaId)?.nome ?? 'Escolher ao importar'}</td>
-              <td className="small">{CAMPOS_EXTRATO.filter(([k]) => x.campos[k]).map(([k, l]) => `${l.replace(' *', '')}: ${x.campos[k]}`).join(' · ')}</td>
-              <td className="small">{x.atualizadoEm ? dataPT(x.atualizadoEm.slice(0, 10)) : '—'}</td>
-              <td><button className="link" onClick={() => setMapaEd({ inicial: x })}>Editar</button> · <button className="link" onClick={() => void apagarMapa(x)}>Apagar</button></td></tr>
-          ))}</tbody>
-        </table></div>}
-      </div>}
-
-      {mapaEd && <EditorMapaExtrato inicial={mapaEd.inicial} colunasFicheiro={mapaEd.colunas} contas={(contas.dados ?? []).filter((c) => c.ativo !== false)} email={acesso!.email}
-        onFechar={() => setMapaEd(null)} onGuardado={() => { setMapaEd(null); void mapasExt.recarregar(); }} />}
 
       {area === 'estrutura' && <div className="sec">
         <div className="linha" style={{ justifyContent: 'space-between' }}>

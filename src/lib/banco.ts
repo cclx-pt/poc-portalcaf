@@ -6,19 +6,20 @@ export interface MapaBanco { data?: string; descricao?: string; valor?: string; 
 
 export type Banco = 'cgd' | 'santander';
 
-/** Mapeamento de colunas guardado nas Configurações, para não o indicar a cada importação. */
+/** Mapeamento de colunas do extrato de uma conta (guardado na própria conta, em Configuração). */
 export interface MapaExtrato {
   id: string;
   nome: string;
-  banco?: Banco | '';
-  /** Conta escolhida por omissão ao importar com este mapeamento. */
-  contaId?: string;
-  /** Colunas do ficheiro de exemplo (normalizadas e ordenadas). */
+  contaId: string;
+  /** Assinatura das colunas do ficheiro de exemplo (normalizadas e ordenadas). */
   colunas: string[];
   campos: MapaBanco;
-  atualizadoEm?: string;
-  atualizadoPor?: string;
 }
+
+/** Os mapeamentos das contas que os têm definidos. */
+export const mapasDasContas = (contas: { id: string; nome: string; mapa?: MapaBanco; mapaColunas?: string[]; ativo?: boolean }[]): MapaExtrato[] =>
+  contas.filter((c) => c.ativo !== false && c.mapa && mapaCompleto(c.mapa))
+    .map((c) => ({ id: c.id, nome: c.nome, contaId: c.id, colunas: assinaturaColunas(c.mapaColunas ?? []), campos: c.mapa! }));
 
 export const assinaturaColunas = (colunas: string[]) => [...new Set(colunas.map((c) => norm(c)).filter(Boolean))].sort();
 

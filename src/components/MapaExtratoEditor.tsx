@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { Modal, mensagemErro } from './ui';
+import { LogoConta } from './LogoBanco';
 import { auditar, gravar } from '../lib/db';
-import { NOME_BANCO, assinaturaColunas, mapaCompleto, type Banco, type MapaBanco, type MapaExtrato } from '../lib/banco';
-import { norm } from '../lib/format';
+import { detetarBanco, mapaCompleto, mapaDoBanco, mapearExtrato, sugerirMapaBanco, type MapaBanco } from '../lib/banco';
+import { lerFicheiro } from '../lib/ficheiros';
+import { reduzirImagem } from '../lib/imagem';
+import type { Linha } from '../lib/fontes';
 import type { Conta } from '../lib/types';
 
 export const CAMPOS_EXTRATO: [keyof MapaBanco, string][] = [
@@ -25,57 +28,72 @@ export function CamposExtrato({ colunas, mapa, onChange }: { colunas: string[]; 
   );
 }
 
-const idDe = (nome: string) => norm(nome).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `mapa-${Date.now()}`;
+export const limparMapa = (m: MapaBanco) => Object.fromEntries(Object.entries(m).filter(([, v]) => v)) as MapaBanco;
 
-/** Cria ou edita um mapeamento guardado (nome, banco, conta por omissão e colunas). */
-export function EditorMapaExtrato({ inicial, colunasFicheiro, contas, email, onFechar, onGuardado }: {
-  inicial: Partial<MapaExtrato> & { campos: MapaBanco };
-  /** Colunas do ficheiro de exemplo; sem ficheiro, usam-se as colunas guardadas no mapa. */
-  colunasFicheiro?: string[];
-  contas: Conta[];
-  email: string;
-  onFechar: () => void;
-  onGuardado: (m: MapaExtrato) => void;
-}) {
-  const colunas = colunasFicheiro ?? [...new Set([...(inicial.colunas ?? []), ...Object.values(inicial.campos).filter((v): v is string => !!v)])];
-  const [m, setM] = useState<{ nome: string; banco: string; contaId: string; campos: MapaBanco }>({ nome: inicial.nome ?? '', banco: inicial.banco ?? '', contaId: inicial.contaId ?? '', campos: inicial.campos });
+/** Resumo do mapeamento de uma conta, para a tabela das contas. */
+export const resumoMapa = (c: Conta) =>
+  c.mapa && mapaCompleto(c.mapa)
+    ? CAMPOS_EXTRATO.filter(([k]) => c.mapa![k]).map(([k, l]) => `${l.replace(' *', '')}: ${c.mapa![k]}`).join(' · ')
+    : null;
+
+/** Mapeamento do extrato e logótipo de uma conta. */
+export function EditorConta({ conta, email, onFechar, onGuardado }: { conta: Conta; email: string; onFechar: () => void; onGuardado: () => void }) {
+  const [colunas, setColunas] = useState<string[]>(conta.mapaColunas ?? Object.values(conta.mapa ?? {}).filter((v): v is string => !!v));
+  const [linhas, setLinhas] = useState<Linha[]>([]);
+  const [mapa, setMapa] = useState<MapaBanco>(conta.mapa ?? {});
+  const [logo, setLogo] = useState<string | undefined>(conta.logo);
   const [msg, setMsg] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  const ok = !!m.nome.trim() && mapaCompleto(m.campos);
+  const teste = linhas.length && mapaCompleto(mapa) ? mapearExtrato(linhas, mapa) : null;
 
+  async function lerExemplo(f: File) {
+    setMsg(null);
+    try {
+      const t = await lerFicheiro(f);
+      const b = detetarBanco(t.colunas);
+      setColunas(t.colunas); setLinhas(t.linhas);
+      const atuais = Object.values(mapa).filter((v): v is string => !!v);
+      if (!mapaCompleto(mapa) || !atuais.every((v) => t.colunas.includes(v))) setMapa(b ? mapaDoBanco(b, t.colunas) : sugerirMapaBanco(t.colunas));
+      setMsg(`${f.name}: ${t.colunas.length} colunas e ${t.linhas.length} linhas lidas. Confirme as colunas.`);
+    } catch (e) { setMsg(mensagemErro(e)); }
+  }
+  async function lerLogo(f: File) {
+    setMsg(null);
+    try { setLogo(await reduzirImagem(f)); } catch (e) { setMsg(mensagemErro(e)); }
+  }
   async function guardar() {
     setOcupado(true); setMsg(null);
     try {
-      const final: MapaExtrato = {
-        id: inicial.id || idDe(m.nome), nome: m.nome.trim(), banco: m.banco as Banco | '', contaId: m.contaId || undefined,
-        colunas: colunasFicheiro ? assinaturaColunas(colunasFicheiro) : inicial.colunas ?? assinaturaColunas(colunas),
-        campos: Object.fromEntries(Object.entries(m.campos).filter(([, v]) => v)) as MapaBanco,
-        atualizadoEm: new Date().toISOString(), atualizadoPor: email,
-      };
-      await gravar('mapas_extrato', final);
-      await auditar(email, 'mapeamento de extrato', `${inicial.id ? 'Alterado' : 'Criado'}: ${final.nome}`);
-      onGuardado(final);
+      const temMapa = mapaCompleto(mapa);
+      const nova: Conta = { ...conta, logo, mapa: temMapa ? limparMapa(mapa) : undefined, mapaColunas: temMapa ? colunas : undefined };
+      await gravar('contas', nova);
+      await auditar(email, 'conta: extrato e logótipo', `${conta.nome}: ${temMapa ? 'mapeamento guardado' : 'sem mapeamento'}${logo ? ', com logótipo' : ''}`);
+      onGuardado();
     } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
 
   return (
-    <Modal titulo={inicial.id ? 'Editar mapeamento do extrato' : 'Guardar mapeamento do extrato'} onFechar={onFechar}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 12 }}>
-        <label className="campo">Nome<input value={m.nome} placeholder="Ex.: Millennium conta corrente" onChange={(e) => setM({ ...m, nome: e.target.value })} /></label>
-        <label className="campo">Banco
-          <select value={m.banco} onChange={(e) => setM({ ...m, banco: e.target.value })}>
-            <option value="">Outro</option>{(Object.keys(NOME_BANCO) as Banco[]).map((b) => <option key={b} value={b}>{NOME_BANCO[b]}</option>)}
-          </select></label>
-        <label className="campo">Conta por omissão
-          <select value={m.contaId} onChange={(e) => setM({ ...m, contaId: e.target.value })}>
-            <option value="">Escolher ao importar</option>{contas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-          </select></label>
+    <Modal titulo={`Extrato e logótipo · ${conta.nome}`} onFechar={onFechar}>
+      <h3 style={{ marginTop: 0 }}>Logótipo</h3>
+      <div className="linha" style={{ alignItems: 'center', gap: 12 }}>
+        <LogoConta conta={{ ...conta, logo }} tamanho={40} />
+        <button className="sec" onClick={() => document.getElementById('logo-conta')?.click()}>Carregar imagem</button>
+        <input id="logo-conta" type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void lerLogo(f); }} />
+        {logo && <button className="link" onClick={() => setLogo(undefined)}>Remover (usar o do banco)</button>}
       </div>
-      <CamposExtrato colunas={colunas} mapa={m.campos} onChange={(campos) => setM({ ...m, campos })} />
-      {!mapaCompleto(m.campos) && <p className="small muted">Indique a data e o montante (ou o débito e o crédito).</p>}
-      {msg && <div className="aviso">{msg}</div>}
+      <p className="small muted">PNG, JPG, SVG ou WebP. É reduzido a 128 × 128 px.</p>
+
+      <h3>Colunas do extrato</h3>
+      <p className="small">Carregue um extrato desta conta, tal como sai do homebanking, e indique as colunas. Ao importar, o portal reconhece o ficheiro, escolhe esta conta e aplica estas colunas.</p>
+      <button className="sec" onClick={() => document.getElementById('exemplo-extrato')?.click()}>Carregar extrato de exemplo</button>
+      <input id="exemplo-extrato" type="file" accept=".csv,.xlsx,.xls,.txt" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void lerExemplo(f); }} />
+      {!!colunas.length && <div style={{ marginTop: 10 }}><CamposExtrato colunas={colunas} mapa={mapa} onChange={setMapa} /></div>}
+      {!!colunas.length && !mapaCompleto(mapa) && <p className="small muted">Indique a data e o montante (ou o débito e o crédito).</p>}
+      {teste && <p className="small">Teste: {teste.movimentos.length} movimentos válidos{teste.rejeitadas.length ? `, ${teste.rejeitadas.length} linhas ignoradas` : ''}.</p>}
+      {!!conta.mapa && <p className="small"><button className="link" onClick={() => { setMapa({}); setColunas([]); setLinhas([]); }}>Apagar o mapeamento</button></p>}
+      {msg && <div className="nota">{msg}</div>}
       <div className="acoes" style={{ marginTop: 14 }}>
-        <button disabled={!ok || ocupado} onClick={() => void guardar()}>{ocupado ? 'A guardar…' : 'Guardar'}</button>
+        <button disabled={ocupado} onClick={() => void guardar()}>{ocupado ? 'A guardar…' : 'Guardar'}</button>
         <button className="sec" onClick={onFechar}>Cancelar</button>
       </div>
     </Modal>

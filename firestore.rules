@@ -63,8 +63,6 @@ service cloud.firestore {
     match /dimensoes/{id}   { allow read: if isActive(); allow write: if hasRole(['master', 'caf']); }
     // Regras de classificação dos extratos (texto do banco → categoria, fornecedor, centro de custo).
     match /regras_banco/{id} { allow read: if isActive(); allow write: if hasRole(['master', 'caf']); }
-    // Mapeamentos de colunas dos extratos (Configuração), aplicados ao importar.
-    match /mapas_extrato/{id} { allow read: if hasRole(['master', 'caf']); allow write: if hasRole(['master', 'caf']); }
 
     // ---------- dados de origem (Jotform), em lotes mensais ----------
     // Confidencial: com nomes, NIF, email, IBAN.

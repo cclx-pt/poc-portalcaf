@@ -8,7 +8,6 @@ import type {
 } from './types';
 import { NIVEIS, nivelNum } from './types';
 import type { RegraBanco } from './classificacaoBanco';
-import type { MapaExtrato } from './banco';
 
 export interface Acesso {
   email: string;
@@ -54,7 +53,6 @@ export const listarComunidades = async () => (await lista<Comunidade>('comunidad
 export const listarContas = () => lista<Conta>('contas');
 export const listarCategorias = async () => (await lista<Categoria>('categorias')).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
 export const listarRegrasBanco = async () => (await lista<RegraBanco>('regras_banco')).sort((a, b) => a.padrao.localeCompare(b.padrao, 'pt'));
-export const listarMapasExtrato = async () => (await lista<MapaExtrato>('mapas_extrato')).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
 export const listarDimensoes = async () => (await lista<Dimensao>('dimensoes')).sort((a, b) => (a.codigo ?? a.nome).localeCompare(b.codigo ?? b.nome, 'pt'));
 export const gravar = <T extends { id: string }>(col: string, o: T) => setDoc(doc(db, col, o.id), o);
 export const apagar = (col: string, id: string) => deleteDoc(doc(db, col, id));

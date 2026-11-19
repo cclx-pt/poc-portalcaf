@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { LogoBanco } from '../components/LogoBanco';
+import { LogoBanco, LogoConta } from '../components/LogoBanco';
 import SaldosBancos from './SaldosBancos';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
-import { apagarBancoLote, auditar, gravar, gravarBancoLote, listarBanco, listarComunidades, listarContas, listarMapasExtrato } from '../lib/db';
-import { CamposExtrato } from '../components/MapaExtratoEditor';
+import { apagarBancoLote, auditar, gravar, gravarBancoLote, listarBanco, listarComunidades, listarContas } from '../lib/db';
+import { CamposExtrato, limparMapa } from '../components/MapaExtratoEditor';
 import { lerFicheiro } from '../lib/ficheiros';
-import { NOME_BANCO, bancoDaConta, maioresMovimentos, assinaturaColunas, detetarBanco, dividirPorMes, escolherMapa, mapaCompleto, mapaDoBanco, mapearExtrato, resumoMes, sugerirMapaBanco, type Banco, type MapaBanco, type MapaExtrato } from '../lib/banco';
+import { NOME_BANCO, bancoDaConta, maioresMovimentos, detetarBanco, dividirPorMes, escolherMapa, mapaCompleto, mapaDoBanco, mapasDasContas, mapearExtrato, resumoMes, sugerirMapaBanco, type Banco, type MapaBanco } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Conta, EstadoMov, MovBanco } from '../lib/types';
 import type { Linha } from '../lib/fontes';
@@ -37,7 +37,7 @@ export default function Bancos() {
   const mes = mesEscolhido ?? (mesesComDados[mesesComDados.length - 1] ?? new Date().getMonth() + 1);
 
   const ativas = (contas.dados ?? []).filter((c) => c.ativo !== false);
-  const bancoDe = new Map(ativas.map((c) => [c.id, bancoDaConta(c)]));
+  const contaDe = new Map(ativas.map((c) => [c.id, c]));
   const visiveis = ativas.filter((c) => !ocultas.includes(c.id));
   const lotesMes = useMemo(() => (banco.dados ?? []).filter((l) => l.mes === mes), [banco.dados, mes]);
   const porConta = new Map(ativas.map((c) => [c.id, lotesMes.filter((l) => l.contaId === c.id).flatMap((l) => l.registos)]));
@@ -83,7 +83,7 @@ export default function Bancos() {
           {ativas.map((c) => (
             <label key={c.id} className={`chip-banco${ocultas.includes(c.id) ? ' desligado' : ''}`}>
               <input type="checkbox" checked={!ocultas.includes(c.id)} onChange={() => setOcultas(ocultas.includes(c.id) ? ocultas.filter((x) => x !== c.id) : [...ocultas, c.id])} />
-              <LogoBanco banco={bancoDe.get(c.id) ?? null} />
+              <LogoConta conta={c} />
               <span>{c.nome}{c.tipo === 'investimentos' ? ' (investimentos)' : ''}</span>
               <span className="muted small">{(porConta.get(c.id) ?? []).length}</span>
             </label>
@@ -99,7 +99,7 @@ export default function Bancos() {
       <div className="cards">
         {resumos.map(({ c, r }) => (
           <div key={c.id} className="kpi">
-            <h3 className="kpi-banco"><LogoBanco banco={bancoDe.get(c.id) ?? null} tamanho={16} /> {c.nome}</h3>
+            <h3 className="kpi-banco"><LogoConta conta={c} tamanho={16} /> {c.nome}</h3>
             <div className="valor">{eur(r.saldoFinal)}</div>
             <div className="sub">Saldo final · inicial {eur(r.saldoInicial)}<br />Entradas {eur(r.entradas)} · Saídas {eur(r.saidas)}{!r.n && <><br />Sem extrato neste mês.</>}</div>
           </div>
@@ -129,7 +129,7 @@ export default function Bancos() {
           <tbody>
             {mostrar.slice(0, 600).map((m) => (
               <tr key={`${m.contaId}-${m.id}`}>
-                <td><LogoBanco banco={bancoDe.get(m.contaId) ?? null} /></td>
+                <td><LogoConta conta={contaDe.get(m.contaId)} /></td>
                 <td>{dataPt(m.data)}</td>
                 <td className="small">{m.descricao}{m.estorno && <> <span className="etiqueta">Estorno</span></>}</td>
                 <td className="num">{m.valor > 0 ? eur(m.valor) : ''}</td>
@@ -154,7 +154,7 @@ export default function Bancos() {
             const mm = maioresMovimentos(porConta.get(c.id) ?? [], 5);
             return (
               <div key={c.id}>
-                <h3 className="kpi-banco"><LogoBanco banco={bancoDe.get(c.id) ?? null} tamanho={16} /> {c.nome}</h3>
+                <h3 className="kpi-banco"><LogoConta conta={c} tamanho={16} /> {c.nome}</h3>
                 <table><tbody>
                   {mm.entradas.map((m) => <tr key={m.id}><td>{dataPt(m.data)}</td><td className="small">{m.descricao}</td><td className="num">{eur(m.valor)}</td></tr>)}
                   {mm.saidas.map((m) => <tr key={m.id}><td>{dataPt(m.data)}</td><td className="small">{m.descricao}</td><td className="num">({eur(-m.valor)})</td></tr>)}
@@ -186,10 +186,8 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
   const [existentes, setExistentes] = useState<BancoLote[] | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  const mapas = useCarregar(listarMapasExtrato, []);
-  const [guardado, setGuardado] = useState<MapaExtrato | null>(null);
   const [ajustar, setAjustar] = useState(false);
-  const [nomeMapa, setNomeMapa] = useState('');
+  const [daConta, setDaConta] = useState(false);
   const res = useMemo(() => (linhas.length && mapaCompleto(mapa) ? mapearExtrato(linhas, mapa) : null), [linhas, mapa]);
   const anos = useMemo(() => [...new Set((res?.movimentos ?? []).map((m) => Number(m.data.slice(0, 4))))].sort(), [res]);
   useEffect(() => {
@@ -205,30 +203,35 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
     setMsg(null); setExistentes(null);
     try {
       const t = await lerFicheiro(f);
-      // 1.º um mapeamento guardado nas Configurações; 2.º os formatos conhecidos (CGD, Santander); 3.º indicar as colunas.
-      const g = escolherMapa(t.colunas, mapas.dados ?? []);
-      const b = g ? (g.banco || detetarBanco(t.colunas)) : detetarBanco(t.colunas);
-      setNome(f.name); setColunas(t.colunas); setLinhas(t.linhas); setBancoFicheiro(b || null); setGuardado(g);
+      // 1.º o mapeamento de uma conta (Configuração); 2.º os formatos conhecidos (CGD, Santander); 3.º indicar as colunas.
+      const g = escolherMapa(t.colunas, mapasDasContas(contas));
+      const contaG = g ? contas.find((c) => c.id === g.contaId) : undefined;
+      const b = contaG ? bancoDaConta(contaG) : detetarBanco(t.colunas);
+      setNome(f.name); setColunas(t.colunas); setLinhas(t.linhas); setBancoFicheiro(contaG ? null : b); setDaConta(!!g);
       setMapa(g ? g.campos : b ? mapaDoBanco(b, t.colunas) : sugerirMapaBanco(t.colunas));
-      setAjustar(!g && !b); setNomeMapa('');
+      setAjustar(!g && !b);
       const sug = b ? contas.filter((c) => bancoDaConta(c) === b) : [];
-      const contaG = g?.contaId && contas.some((c) => c.id === g.contaId) ? g.contaId : '';
-      setContaId(contaG || (sug.find((c) => c.tipo !== 'investimentos')?.id ?? sug[0]?.id ?? ''));
-      setMsg(g ? `Mapeamento guardado «${g.nome}»: ${t.linhas.length} linhas lidas.`
+      setContaId(contaG?.id ?? (sug.find((c) => c.tipo !== 'investimentos')?.id ?? sug[0]?.id ?? ''));
+      setMsg(contaG ? `Extrato de ${contaG.nome} (colunas definidas na conta): ${t.linhas.length} linhas lidas.`
         : b ? `Extrato ${NOME_BANCO[b]}: ${t.linhas.length} linhas lidas.`
-        : `Formato não reconhecido: indique as colunas (pode guardá-las para a próxima vez). ${t.linhas.length} linhas lidas.`);
+        : `Formato não reconhecido: escolha a conta e indique as colunas (pode guardá-las na conta para a próxima vez). ${t.linhas.length} linhas lidas.`);
     } catch (e) { setMsg(mensagemErro(e)); }
   }
-  async function guardarMapa() {
-    if (!nomeMapa.trim() || !mapaCompleto(mapa)) return;
+  /** Escolher a conta aplica as colunas dessa conta, se servirem a este ficheiro. */
+  function escolherConta(id: string) {
+    setContaId(id);
+    const c = contas.find((x) => x.id === id);
+    const g = c ? escolherMapa(colunas, mapasDasContas([c])) : null;
+    if (g) { setMapa(g.campos); setDaConta(true); setAjustar(false); }
+  }
+  async function guardarNaConta() {
+    const c = contas.find((x) => x.id === contaId);
+    if (!c || !mapaCompleto(mapa)) return;
     try {
-      const id = (guardado?.id ?? nomeMapa.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-')) || `mapa-${Date.now()}`;
-      const m: MapaExtrato = { id, nome: nomeMapa.trim(), banco: bancoFicheiro ?? '', contaId: contaId || undefined, colunas: assinaturaColunas(colunas),
-        campos: Object.fromEntries(Object.entries(mapa).filter(([, v]) => v)) as MapaBanco, atualizadoEm: new Date().toISOString(), atualizadoPor: acesso!.email };
-      await gravar('mapas_extrato', m);
-      await auditar(acesso!.email, 'mapeamento de extrato', `Guardado ao importar: ${m.nome}`);
-      setGuardado(m); setAjustar(false); void mapas.recarregar();
-      setMsg(`Mapeamento «${m.nome}» guardado: da próxima vez é aplicado sozinho. Pode alterá-lo em Configuração.`);
+      await gravar('contas', { ...c, mapa: limparMapa(mapa), mapaColunas: colunas });
+      await auditar(acesso!.email, 'conta: extrato e logótipo', `${c.nome}: mapeamento guardado ao importar`);
+      setDaConta(true); setAjustar(false);
+      setMsg(`Colunas guardadas na conta ${c.nome}: da próxima vez são aplicadas sozinhas. Pode alterá-las em Configuração.`);
     } catch (e) { setMsg(mensagemErro(e)); }
   }
   async function gravarMeses() {
@@ -249,23 +252,22 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
     <Modal titulo="Importar extrato" onFechar={onFechar}>
       <div className="nota">Exporte o extrato do homebanking da CGD ou do Santander (CSV ou Excel), tal como sai. O portal reconhece o banco, divide os movimentos por mês e <b>substitui</b> esses meses da conta, mantendo as classificações já feitas.</div>
       <input type="file" accept=".csv,.xlsx,.xls,.txt" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void ler(f); }} />
-      {msg && <p className="small" style={{ marginTop: 8 }}>{bancoFicheiro && <LogoBanco banco={bancoFicheiro} tamanho={16} />} {msg}</p>}
+      {msg && <p className="small" style={{ marginTop: 8 }}>{contaId ? <LogoConta conta={contas.find((c) => c.id === contaId)} tamanho={16} /> : bancoFicheiro && <LogoBanco banco={bancoFicheiro} tamanho={16} />} {msg}</p>}
       {!!colunas.length && (
         <label className="campo" style={{ marginTop: 10, maxWidth: 360 }}>Conta
-          <select value={contaId} onChange={(e) => setContaId(e.target.value)}>
+          <select value={contaId} onChange={(e) => escolherConta(e.target.value)}>
             <option value="">Escolha…</option>
             {opcoesConta.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         </label>
       )}
-      {!!colunas.length && !ajustar && <p className="small"><button className="link" onClick={() => { setAjustar(true); setNomeMapa(guardado?.nome ?? ''); }}>Ajustar as colunas</button></p>}
+      {!!colunas.length && !ajustar && <p className="small"><button className="link" onClick={() => setAjustar(true)}>Ajustar as colunas</button></p>}
       {!!colunas.length && ajustar && (
         <div style={{ marginTop: 12 }}>
           <CamposExtrato colunas={colunas} mapa={mapa} onChange={setMapa} />
-          <div className="linha" style={{ marginTop: 8, alignItems: 'flex-end', gap: 8 }}>
-            <label className="campo" style={{ maxWidth: 320 }}>Guardar para as próximas importações
-              <input value={nomeMapa} placeholder="Nome, ex.: Millennium conta corrente" onChange={(e) => setNomeMapa(e.target.value)} /></label>
-            <button className="sec" disabled={!nomeMapa.trim() || !mapaCompleto(mapa)} onClick={() => void guardarMapa()}>Guardar mapeamento</button>
+          <div className="linha" style={{ marginTop: 8, gap: 8 }}>
+            <button className="sec" disabled={!contaId || !mapaCompleto(mapa)} onClick={() => void guardarNaConta()}>{daConta ? 'Atualizar as colunas da conta' : 'Guardar as colunas na conta'}</button>
+            {!contaId && <span className="small muted">Escolha a conta para guardar.</span>}
           </div>
         </div>
       )}
@@ -323,7 +325,7 @@ function LimparExtrato({ contas, lotes, mes, ano, onFechar, onFeito }: { contas:
         return (
           <label key={c.id} className="opcao" style={{ display: 'flex' }}>
             <input type="checkbox" checked={escolhidas.includes(c.id)} onChange={() => setEscolhidas(escolhidas.includes(c.id) ? escolhidas.filter((x) => x !== c.id) : [...escolhidas, c.id])} />
-            <LogoBanco banco={bancoDaConta(c)} /> {c.nome} · {l.registos.length} movimentos
+            <LogoConta conta={c} /> {c.nome} · {l.registos.length} movimentos
           </label>
         );
       })}
