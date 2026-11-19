@@ -1,6 +1,7 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth, type Acao } from './auth/AuthProvider';
 import { FiltrosProvider } from './components/ui';
+import { SaidaSemGravarProvider } from './components/SaidaSemGravar';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Publico from './pages/Publico';
@@ -54,6 +55,7 @@ export default function App() {
   return (
     <AuthProvider>
       <HashRouter>
+      <SaidaSemGravarProvider>
         <Routes>
           <Route path="/publico" element={<Publico />} />
           <Route path="/registar" element={<ProtegidoRegisto />} />
@@ -84,6 +86,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" />} />
           </Route>
         </Routes>
+      </SaidaSemGravarProvider>
       </HashRouter>
     </AuthProvider>
   );

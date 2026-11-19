@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
+import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { Estado, Kpi, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, gravarOrcamento, gravarVersaoOrcamento, lerOrcamento, listarComunidades, listarCustosFixos, listarResumos } from '../lib/db';
 import { eur, hoje, pct, periodo, r2 } from '../lib/format';
@@ -55,7 +56,7 @@ export default function Orcamento() {
     } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
 
-  async function guardar(aprovar: boolean) {
+  async function guardar(aprovar: boolean): Promise<boolean> {
     setOcupado(true); setMsg(null);
     try {
       const anterior = orc.dados;
@@ -71,11 +72,14 @@ export default function Orcamento() {
       await auditar(acesso!.email, aprovar ? 'aprovar orçamento' : 'guardar orçamento', `${ano} v${o.versao}`);
       await orc.recarregar();
       setMsg(aprovar ? `Orçamento ${ano} aprovado (versão ${o.versao}).` : 'Rascunho guardado.');
-    } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
+      return true;
+    } catch (e) { setMsg(mensagemErro(e)); return false; } finally { setOcupado(false); }
   }
 
   const estado = orc.dados?.estado;
   const alterado = JSON.stringify(linhas) !== JSON.stringify(orc.dados?.linhas ?? []);
+  // Sair com o orçamento alterado e por gravar: pergunta (grava como rascunho).
+  useAvisoSaida(alterado && !orc.aCarregar, () => guardar(false));
   const grupos: LinhaOrcamento['grupo'][] = ['entradas', 'custosFixos', 'despesas'];
 
   return (

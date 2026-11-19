@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar, useFiltros, useFocarErro } from '../components/ui';
+import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { auditar, gravarLote, lerConfigAssistencia, lerLote, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
 import { registosEmFalta } from '../lib/domingos';
 import { dataPT, hoje, norm, num } from '../lib/format';
@@ -74,10 +75,12 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   const raiz = useRef<HTMLDivElement>(null);
   const campoErro = msg?.tipo === 'erro' ? campoDoErroPresenca(msg.texto, nomesContagens) : null;
   useFocarErro(msg?.tipo === 'erro' ? msg : null, raiz);
+  // Registo começado e por gravar: ao sair do ecrã pergunta se quer gravar (o rascunho fica no dispositivo).
+  useAvisoSaida(!edicao && comRascunho, () => guardar());
   const erroEm = (c: string) => (campoErro === c ? 'com-erro' : undefined);
   const n = (k: keyof EntradaPresenca) => (v: string) => setE((p) => ({ ...p, [k]: v === '' ? NaN : Number(v) }));
 
-  async function guardarCorrecao(e: EntradaPresenca) {
+  async function guardarCorrecao(e: EntradaPresenca): Promise<boolean> {
     setMsg(null);
     setAGuardar(true);
     try {
@@ -90,19 +93,20 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
       if (podeRecalcular) await recalcularAno(acesso!, lote.ano);
       await aposGravar();
       aoFechar?.();
-    } catch (err) { setMsg({ tipo: 'erro', texto: mensagemErro(err) }); }
+      return true;
+    } catch (err) { setMsg({ tipo: 'erro', texto: mensagemErro(err) }); return false; }
     finally { setAGuardar(false); }
   }
 
-  async function guardar() {
+  async function guardar(): Promise<boolean> {
     // Contagens pedidas em branco contam 0 (zero).
     const e = contagensEmBrancoAZero(eForm, recolhe.map((c) => c.id));
     setE(e);
     if (edicao) return guardarCorrecao(e);
     setMsg(null);
-    if (e.comunidadeId && !nomes.has(e.comunidadeId)) { setMsg({ tipo: 'erro', texto: 'Não tem acesso a esta comunidade.' }); return; }
+    if (e.comunidadeId && !nomes.has(e.comunidadeId)) { setMsg({ tipo: 'erro', texto: 'Não tem acesso a esta comunidade.' }); return false; }
     const erro = validarPresenca(e, hoje(), lotes, undefined, evSel, nomesContagens);
-    if (erro) { setMsg({ tipo: 'erro', texto: erro }); return; }
+    if (erro) { setMsg({ tipo: 'erro', texto: erro }); return false; }
     setAGuardar(true);
     try {
       const r = novoRegistoPresenca(e, acesso!.email);
@@ -116,7 +120,8 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
       setRascunhos(lerRascunhos(armazemLocal(), acesso!.email));
       setE({ ...vazio(e.comunidadeId), data: e.data });
       await aposGravar();
-    } catch (err) { setMsg({ tipo: 'erro', texto: mensagemErro(err) }); }
+      return true;
+    } catch (err) { setMsg({ tipo: 'erro', texto: mensagemErro(err) }); return false; }
     finally { setAGuardar(false); }
   }
 

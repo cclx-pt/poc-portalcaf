@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { LogoBanco } from '../components/LogoBanco';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
+import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia } from '../lib/db';
 import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, resolverPartes, sugerirPadrao, candidatosReembolso, registosConciliados, type RegistoJotform, temPalavra, validar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
 import { bancoDaConta } from '../lib/banco';
@@ -90,15 +91,18 @@ export default function Reconciliacao() {
     for (const l of lotesMes) if (!ocultas.includes(l.contaId)) novo[l.id] = { ...l, registos: aceitarPropostas(l.registos, cats.dados ?? []) };
     setAlterados(novo);
   }
-  async function guardar() {
+  async function guardar(): Promise<boolean> {
     setMsg(null);
     try {
       const ls = Object.values(alterados);
       for (const l of ls) await gravarBancoLote({ ...l, atualizadoEm: new Date().toISOString(), atualizadoPor: acesso!.email });
       await auditar(acesso!.email, 'classificar banco', `${ls.map((l) => `${l.contaId} ${l.periodo}`).join(', ')}`);
       setAlterados({}); await banco.recarregar(); setMsg('Classificação guardada. Recalcule os resumos no Painel para atualizar os totais.');
-    } catch (e) { setMsg(mensagemErro(e)); }
+      return true;
+    } catch (e) { setMsg(mensagemErro(e)); return false; }
   }
+  // Sair do ecrã com classificações por guardar: pergunta (gravar e sair, sair sem gravar, ficar).
+  useAvisoSaida(Object.keys(alterados).length > 0, guardar);
   const mudarMes = (m: number) => { if (Object.keys(alterados).length && !confirm('Há classificações por guardar. Mudar de mês e perdê-las?')) return; setAlterados({}); setMes(m); };
 
   // Pré-visualização da distribuição da bolsa geral pela média de adultos dos últimos 12 meses (a mesma regra dos resumos).
@@ -123,7 +127,7 @@ export default function Reconciliacao() {
           <p className="muted">Trabalho mensal: classificar os movimentos dos extratos com o plano financeiro, conciliar com o Jotform (depósitos, reembolsos, Contribuir) e repartir pelas comunidades. Cada euro conta uma só vez; os movimentos conciliados e os financeiros não entram nos resultados.</p>
         </div>
         <div className="acoes">
-          <button disabled={!Object.keys(alterados).length} onClick={guardar}>Guardar classificação</button>
+          <button disabled={!Object.keys(alterados).length} onClick={() => void guardar()}>Guardar classificação</button>
         </div>
       </div>
       {msg && <div className="nota">{msg}</div>}
