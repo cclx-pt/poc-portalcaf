@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, Kpi, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, gravarOrcamento, gravarVersaoOrcamento, lerOrcamento, listarComunidades, listarCustosFixos, listarResumos } from '../lib/db';
 import { eur, hoje, pct, periodo, r2 } from '../lib/format';
-import { comunidadeAtiva, custoAtivo, mesesDecorridos, somarMeses, partesMes, valorImputado } from '../lib/resumos';
+import { comunidadeAtiva, custoAtivo, mesesDecorridos, somarMeses, partesMes, valorImputadoNoMes } from '../lib/resumos';
 import type { LinhaOrcamento, Orcamento as Orc } from '../lib/types';
 
 const GRUPO_LABEL = { entradas: 'Entradas', custosFixos: 'Custos fixos', despesas: 'Despesas e reembolsos' } as const;
@@ -46,7 +46,7 @@ export default function Orcamento() {
         const ent = Object.entries(t.entradasPorCategoria);
         if (ent.length) ent.forEach(([cat, v]) => novas.push({ comunidadeId: c.id, grupo: 'entradas', categoria: cat, anual: r2(v * fator) }));
         else novas.push({ comunidadeId: c.id, grupo: 'entradas', categoria: 'Total', anual: 0 });
-        const custoAno = r2(cf.filter((x) => x.comunidadeId === c.id).reduce((s, x) => s + Array.from({ length: 12 }, (_, i) => (custoAtivo(x, periodo(ano, i + 1)) ? valorImputado(x) : 0)).reduce((a, b) => a + b, 0), 0));
+        const custoAno = r2(cf.filter((x) => x.comunidadeId === c.id).reduce((s, x) => s + Array.from({ length: 12 }, (_, i) => (custoAtivo(x, periodo(ano, i + 1)) ? valorImputadoNoMes(x, periodo(ano, i + 1)) : 0)).reduce((a, b) => a + b, 0), 0));
         novas.push({ comunidadeId: c.id, grupo: 'custosFixos', categoria: 'Custos fixos (tabela)', anual: custoAno });
         Object.entries(t.despesasPorCategoria).forEach(([cat, v]) => novas.push({ comunidadeId: c.id, grupo: 'despesas', categoria: cat, anual: r2(v * fator) }));
       }

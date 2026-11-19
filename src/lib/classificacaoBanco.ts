@@ -4,7 +4,7 @@
  * Regra de ouro: cada euro conta uma só vez. Os movimentos conciliados e os financeiros não entram nos resultados.
  */
 import { norm, periodo as periodoDe, r2 } from './format';
-import { custoAtivo, repartir, valorImputado } from './resumos';
+import { custoAtivo, repartir, valorImputadoNoMes } from './resumos';
 import type { Categoria, CustoFixo, Lote, MovBanco, ParteMov } from './types';
 
 export interface RegraBanco { id: string; padrao: string; categoria: string; fornecedor?: string; centroCusto?: string; comunidadeId?: string; ativo?: boolean }
@@ -70,8 +70,8 @@ export interface Contexto {
 export function repartirPorPrevisao(valor: number, custos: CustoFixo[], codigo: string, p: string): ParteMov[] {
   const ativos = custos.filter((c) => c.categoria?.startsWith(codigo) && custoAtivo(c, p));
   const porCom = new Map<string, number>();
-  for (const c of ativos) porCom.set(c.comunidadeId, r2((porCom.get(c.comunidadeId) ?? 0) + valorImputado(c)));
-  const coms = [...porCom.keys()];
+  for (const c of ativos) porCom.set(c.comunidadeId, r2((porCom.get(c.comunidadeId) ?? 0) + valorImputadoNoMes(c, p)));
+  const coms = [...porCom.keys()].filter((c) => porCom.get(c)! > 0);
   if (!coms.length) return [];
   const sinal = valor < 0 ? -1 : 1;
   return repartir(Math.abs(valor), coms.map((c) => porCom.get(c)!)).map((v, i) => ({ comunidadeId: coms[i], valor: r2(sinal * v) }));

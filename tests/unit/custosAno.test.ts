@@ -68,3 +68,19 @@ describe('totaisPorRubrica (gráfico)', () => {
     expect(totaisPorRubrica(linhas, () => 0, 2)).toEqual([]);
   });
 });
+
+describe('periodicidade dos custos fixos', () => {
+  const base = { id: 'x', comunidadeId: 'almada', rubrica: 'IMI', valorMensal: 600, inicio: '2026-01', fim: '2026-12', ano: 2026, nivel: 'privado' as const };
+  it('mensal por omissão; a cada N meses ou anos a partir da primeira ocorrência; a cada X dias conta as vezes no mês', async () => {
+    const { ocorrenciasNoMes, valorImputadoNoMes } = await import('../../src/lib/resumos');
+    expect(ocorrenciasNoMes(base, '2026-05')).toBe(1);
+    const tri = { ...base, periodicidade: { cada: 3, unidade: 'meses' as const }, desde: '2026-02-15' };
+    expect(['2026-01', '2026-02', '2026-03', '2026-05', '2026-08', '2026-11'].map((p) => ocorrenciasNoMes(tri, p))).toEqual([0, 1, 0, 1, 1, 1]);
+    const anual = { ...base, periodicidade: { cada: 1, unidade: 'anos' as const }, desde: '2025-04-30' };
+    expect(Array.from({ length: 12 }, (_, i) => ocorrenciasNoMes(anual, `2026-${String(i + 1).padStart(2, '0')}`))).toEqual([0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const dias = { ...base, valorMensal: 10, incidencia: 50, periodicidade: { cada: 14, unidade: 'dias' as const }, desde: '2026-01-04' };
+    expect(ocorrenciasNoMes(dias, '2026-01')).toBe(2); // dias 4 e 18 (o seguinte é 1 de fevereiro)
+    expect(ocorrenciasNoMes(dias, '2026-02')).toBe(2); // 1 e 15
+    expect(valorImputadoNoMes(dias, '2026-01')).toBe(10);
+  });
+});

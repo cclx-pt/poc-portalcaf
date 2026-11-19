@@ -193,6 +193,10 @@ export interface CustoFixo {
   fim: string | null;
   nivel: Nivel;
   notas?: string;
+  /** Periodicidade: a cada N meses, anos ou dias (sem ela, todos os meses). Com ela, valorMensal é o valor de cada vez. */
+  periodicidade?: { cada: number; unidade: 'meses' | 'anos' | 'dias' };
+  /** Data da primeira ocorrência (AAAA-MM-DD), para a periodicidade. Sem ela, o início. */
+  desde?: string;
 }
 
 export interface ResumoMes {

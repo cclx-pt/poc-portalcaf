@@ -2,11 +2,11 @@ import { useRef, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { CORES } from '../lib/cores';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
+import { CampoData, Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { apagar, auditar, gravar, listarCategorias, listarComunidades, listarCustosFixos, listarDimensoes } from '../lib/db';
 import { proporClassificacaoCusto, propostasCustos } from '../lib/custosPlano';
 import { eur, eurK, periodo, r2 } from '../lib/format';
-import { custoAtivo, custoNoAno, mesesDecorridos, valorImputado } from '../lib/resumos';
+import { custoAtivo, custoNoAno, descreverPeriodicidade, mesesDecorridos, valorImputado, valorImputadoNoMes } from '../lib/resumos';
 import { COMUNIDADE_GERAL, importarCustosFixos, type ResultadoImportacao } from '../lib/custosImport';
 import { anoDoCusto, copiarAno, totaisPorRubrica } from '../lib/custosAno';
 import { lerFicheiro } from '../lib/ficheiros';
@@ -52,8 +52,8 @@ export default function CustosFixos() {
   const linhas = (cf.dados ?? []).filter((c) => (comunidade === 'todas' || c.comunidadeId === comunidade) && custoNoAno(c, ano))
     .sort((a, b) => (nomes.get(a.comunidadeId) ?? '').localeCompare(nomes.get(b.comunidadeId) ?? '') || a.rubrica.localeCompare(b.rubrica) || a.inicio.localeCompare(b.inicio));
   const ate = mesesDecorridos(ano, hoje());
-  const noAno = (c: CustoFixo) => r2(Array.from({ length: 12 }, (_, i) => (custoAtivo(c, periodo(ano, i + 1)) ? valorImputado(c) : 0)).reduce((s, v) => s + v, 0));
-  const ateHoje = (c: CustoFixo) => r2(Array.from({ length: ate }, (_, i) => (custoAtivo(c, periodo(ano, i + 1)) ? valorImputado(c) : 0)).reduce((s, v) => s + v, 0));
+  const noAno = (c: CustoFixo) => r2(Array.from({ length: 12 }, (_, i) => (custoAtivo(c, periodo(ano, i + 1)) ? valorImputadoNoMes(c, periodo(ano, i + 1)) : 0)).reduce((s, v) => s + v, 0));
+  const ateHoje = (c: CustoFixo) => r2(Array.from({ length: ate }, (_, i) => (custoAtivo(c, periodo(ano, i + 1)) ? valorImputadoNoMes(c, periodo(ano, i + 1)) : 0)).reduce((s, v) => s + v, 0));
   const grafico = totaisPorRubrica(linhas, noAno, 12);
   const ficheiro = useRef<HTMLInputElement>(null);
   const [imp, setImp] = useState<(ResultadoImportacao & { nome: string; substituir: boolean }) | null>(null);
@@ -183,7 +183,7 @@ export default function CustosFixos() {
                 <div className="small muted">{c.categoria ? [c.categoria, c.fornecedor, nomeCentro(c.centroCusto), c.projeto].filter(Boolean).join(' · ') : 'Sem categoria do plano'}</div>
                 {c.notas && <div className="muted">{c.notas}</div>}</td>
               <td><span className={'etiqueta' + (c.nivel === 'confidencial' ? ' preta' : '')}>{NIVEL_LABEL[c.nivel]}</span></td>
-              <td className="num">{eur(c.valorMensal)}</td><td className="num">{pct(c.incidencia)}</td><td className="num">{eur(valorImputado(c))}</td>
+              <td className="num">{eur(c.valorMensal)}{c.periodicidade && <div className="small muted">{descreverPeriodicidade(c)}</div>}</td><td className="num">{pct(c.incidencia)}</td><td className="num">{eur(valorImputado(c))}</td>
               <td className="small">{c.ambito === 'geral' ? 'Geral' : 'Local'}</td><td>{mesPT(c.inicio)}</td><td>{c.fim ? mesPT(c.fim) : 'em vigor'}</td>
               <td className="num">{eur(ateHoje(c))}</td><td className="num">{eur(noAno(c))}</td>
               <td>{pode('custos') && <><button className="link" onClick={() => setEdit(c)}>Editar</button> · <button className="link" onClick={() => remover(c)}>Remover</button></>}</td>
@@ -321,7 +321,22 @@ export default function CustosFixos() {
                   {dimsDe('projeto').map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
                 </select>
               </label>
-              <label className="campo">Valor mensal (€)<input type="number" inputMode="decimal" step="0.01" value={edit.valorMensal} onChange={(e) => setEdit({ ...edit, valorMensal: Number(e.target.value) })} /></label>
+              <label className="campo">Periodicidade
+                <select value={edit.periodicidade ? edit.periodicidade.unidade : 'mensal'} onChange={(e) => {
+                  const u = e.target.value;
+                  setEdit({ ...edit, periodicidade: u === 'mensal' ? undefined : { cada: edit.periodicidade?.cada ?? (u === 'dias' ? 7 : 1), unidade: u as 'meses' | 'anos' | 'dias' }, desde: u === 'mensal' ? undefined : edit.desde ?? `${edit.inicio}-01` });
+                }}>
+                  <option value="mensal">Todos os meses</option>
+                  <option value="meses">A cada N meses</option>
+                  <option value="anos">A cada N anos</option>
+                  <option value="dias">A cada N dias</option>
+                </select>
+              </label>
+              {edit.periodicidade && <>
+                <label className="campo">{`A cada (${edit.periodicidade.unidade})`}<input type="number" inputMode="numeric" min={1} step={1} value={edit.periodicidade.cada} onChange={(e) => setEdit({ ...edit, periodicidade: { ...edit.periodicidade!, cada: Math.max(1, Math.round(Number(e.target.value) || 1)) } })} /></label>
+                <CampoData rotulo="Primeira ocorrência" valor={edit.desde ?? ''} onChange={(d) => setEdit({ ...edit, desde: d || undefined })} />
+              </>}
+              <label className="campo">{edit.periodicidade ? 'Valor de cada vez (€)' : 'Valor mensal (€)'}<input type="number" inputMode="decimal" step="0.01" value={edit.valorMensal} onChange={(e) => setEdit({ ...edit, valorMensal: Number(e.target.value) })} /></label>
               <label className="campo">Incidência (%)<input type="number" inputMode="decimal" min={0} max={100} step="0.01" value={edit.incidencia ?? 100} onChange={(e) => setEdit({ ...edit, incidencia: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
               <label className="campo">Âmbito
                 <select value={edit.comunidadeId === COMUNIDADE_GERAL ? 'geral' : edit.ambito ?? 'local'} disabled={edit.comunidadeId === COMUNIDADE_GERAL} onChange={(e) => setEdit({ ...edit, ambito: e.target.value as 'local' | 'geral' })}>
@@ -329,7 +344,7 @@ export default function CustosFixos() {
                   <option value="geral">Geral (repartido por média proporcional de assistência)</option>
                 </select>
               </label>
-              <p className="small muted" style={{ gridColumn: '1 / -1', margin: 0 }}>Imputado a esta comunidade: {eur(valorImputado({ valorMensal: Number(edit.valorMensal) || 0, incidencia: edit.incidencia }))} por mês.</p>
+              <p className="small muted" style={{ gridColumn: '1 / -1', margin: 0 }}>Imputado a esta comunidade: {eur(valorImputado({ valorMensal: Number(edit.valorMensal) || 0, incidencia: edit.incidencia }))} {edit.periodicidade ? `de cada vez (${descreverPeriodicidade(edit)}); no ano: ${eur(noAno({ ...edit, valorMensal: Number(edit.valorMensal) || 0 }))}` : 'por mês'}.</p>
               <label className="campo">Nível de privacidade
                 <select value={edit.nivel} onChange={(e) => setEdit({ ...edit, nivel: e.target.value as Nivel })}>{NIVEIS.map((n) => <option key={n} value={n}>{NIVEL_LABEL[n]}</option>)}</select>
               </label>
