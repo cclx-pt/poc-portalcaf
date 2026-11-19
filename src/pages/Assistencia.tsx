@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, GraficoBarras, Kpi, mensagemErro, useCarregar, useFiltros } from '../components/ui';
-import { Importar } from '../components/Importar';
 import { SyncEstado } from '../components/SyncEstado';
 import { lerConfigAssistencia, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
 import { sincronizarAgora } from '../lib/syncWeb';
 import { MESES, MESES_CURTOS, num } from '../lib/format';
 import { contaParaMedia, domingosEmFalta, eDomingo } from '../lib/domingos';
 import { CATEGORICAS } from '../lib/cores';
+import { ocorrenciasDeEvento } from '../lib/presencas';
 
 /** Grupos de idade do Registo de Presenças. Só pessoas: nunca símbolo de moeda. */
 const GRUPOS = [
@@ -38,7 +38,6 @@ export default function Assistencia() {
   const [eventoEscolhido, setEvento] = useState<string | null>(null);
   const config = useCarregar(lerConfigAssistencia, []);
   const tipoCelebracao = config.dados?.eventoCelebracao ?? null;
-  const [importar, setImportar] = useState(false);
   const lotes = useCarregar(() => listarLotes(acesso!, 'assistencia', ano, false), [ano, acesso?.email]);
   const coms = useCarregar(listarComunidades, []);
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
@@ -81,12 +80,16 @@ export default function Assistencia() {
   // Sem configuração, mantém-se a regra anterior: só os registos de domingo entram nos totais.
   const doMapa = tipoCelebracao ? linhas : linhas.filter((l) => eDomingo(l.data));
   const foraDoMapa = linhas.length - doMapa.length;
-  for (const l of doMapa) {
-    somar(porMes[l.mes - 1], l);
-    somar(ano_, l);
-    if (!porCom.has(l.comunidadeId)) porCom.set(l.comunidadeId, vazio());
-    somar(porCom.get(l.comunidadeId)!, l);
+  // As médias são por evento (ex.: por domingo): os registos da mesma data e evento juntam-se (todas as comunidades filtradas).
+  const CAMPOS = ['adultos', 'jump', 'criancas', 'connects', 'total'] as const;
+  const comoLinha = (o: { data: string; evento: string } & Record<(typeof CAMPOS)[number], number>, comunidadeId = ''): Linha => ({ ...o, mes: Number(o.data.slice(5, 7)), comunidadeId });
+  for (const o of ocorrenciasDeEvento(doMapa, [...CAMPOS])) { const l = comoLinha(o); somar(porMes[l.mes - 1], l); somar(ano_, l); }
+  for (const c of [...new Set(doMapa.map((l) => l.comunidadeId))]) {
+    const a = vazio();
+    for (const o of ocorrenciasDeEvento(doMapa.filter((l) => l.comunidadeId === c), [...CAMPOS])) somar(a, comoLinha(o, c));
+    porCom.set(c, a);
   }
+  const unidade = tipoCelebracao && evento !== 'todos' && evento === tipoCelebracao ? 'domingo' : 'evento';
   const mesesComDados = porMes.filter((m) => m.n).length;
   const mediaMensal = (k: Grupo | 'total') => (mesesComDados ? ano_.soma[k] / mesesComDados : null);
   const melhor = porMes.map((m, i) => ({ i, v: media(m, 'adultos') ?? -1 })).sort((a, b) => b.v - a.v)[0];
@@ -111,7 +114,6 @@ export default function Assistencia() {
         <div className="acoes">
           {pode('registar') && <a className="btn" href={`${import.meta.env.BASE_URL}#/registos/presencas/novo`}>Registar presenças</a>}
           <button onClick={() => void calcular()} disabled={aCalcular} title="Vai buscar os registos novos ao Jotform e atualiza o mapa e os domingos em falta">{aCalcular ? 'A calcular…' : 'Calcular'}</button>
-          {pode('importar') && <button className="sec" onClick={() => setImportar(true)}>Importação manual (recurso)</button>}
         </div>
       </div>
 
@@ -128,14 +130,14 @@ export default function Assistencia() {
       <Estado aCarregar={lotes.aCarregar} erro={lotes.erro} vazio={!linhas.length} />
       {!!linhas.length && <>
         <div className="cards">
-          <Kpi titulo="Registos (cultos e encontros)" valor={num(ano_.n)} sub={`${mesesComDados} ${mesesComDados === 1 ? 'mês' : 'meses'} com registos`} />
-          <Kpi titulo="Média de jovens e adultos" valor={m1(media(ano_, 'adultos'))} sub="por registo" />
-          <Kpi titulo="Média total de pessoas" valor={m1(media(ano_, 'total'))} sub="por registo, todas as idades" />
+          <Kpi titulo={unidade === 'domingo' ? 'Domingos com registo' : 'Eventos com registo'} valor={num(ano_.n)} sub={`${num(doMapa.length)} registos em ${mesesComDados} ${mesesComDados === 1 ? 'mês' : 'meses'}`} />
+          <Kpi titulo="Média de jovens e adultos" valor={m1(media(ano_, 'adultos'))} sub={`por ${unidade}`} />
+          <Kpi titulo="Média total de pessoas" valor={m1(media(ano_, 'total'))} sub={`por ${unidade}, todas as idades`} />
           <Kpi titulo="Mês com maior média" valor={melhor && melhor.v >= 0 ? MESES[melhor.i] : '—'} sub={melhor && melhor.v >= 0 ? `${m1(melhor.v)} jovens e adultos` : undefined} />
         </div>
 
         <div className="card sec">
-          <h2>Média de pessoas por registo, por mês</h2>
+          <h2>Média de pessoas por {unidade}, por mês</h2>
           <GraficoBarras dados={grafico} series={GRUPOS.map((g, i) => ({ key: g.key, nome: g.nome, cor: CATEGORICAS[i] }))} empilhado unidade="pessoas" altura={260} />
         </div>
 
@@ -145,11 +147,11 @@ export default function Assistencia() {
             {tipoCelebracao
               ? <>Mapa do evento escolhido no filtro. Para a bolsa geral, os gerais e os valores por pessoa conta só o tipo "{tipoCelebracao}" (escolhido na Configuração).</>
               : <>Sem tipo de celebração escolhido na Configuração: contam os registos feitos a um domingo{foraDoMapa ? `; ${foraDoMapa} registo(s) noutros dias aparecem na lista mas não entram nas contas` : ''}.</>}
-            {' '}Total = soma das presenças registadas no mês. Média = total a dividir pelo número de registos. Máx. = maior número de jovens e adultos num só registo.</p>
+            {' '}Total = soma das presenças registadas no mês. Média = total a dividir pelo número de {unidade === 'domingo' ? 'domingos' : 'eventos'} (cada data conta uma vez, somando as comunidades do filtro). Máx. = maior número de jovens e adultos num só {unidade}.</p>
           <div className="tabela"><table>
             <thead>
               <tr>
-                <th rowSpan={2}>Mês</th><th rowSpan={2} className="num">Registos</th>
+                <th rowSpan={2}>Mês</th><th rowSpan={2} className="num">{unidade === 'domingo' ? 'Domingos' : 'Eventos'}</th>
                 <th colSpan={3} className="num">Jovens e adultos</th>
                 <th colSpan={2} className="num">Jump (12-14)</th>
                 <th colSpan={2} className="num">Crianças (3-11)</th>
@@ -195,7 +197,7 @@ export default function Assistencia() {
           <div className="sec">
             <h2>Por comunidade</h2>
             <div className="tabela"><table>
-              <thead><tr><th>Comunidade</th><th className="num">Registos</th><th className="num">Média jovens e adultos</th><th className="num">Média total de pessoas</th><th className="num">Total jovens e adultos</th><th className="num">Total de pessoas</th></tr></thead>
+              <thead><tr><th>Comunidade</th><th className="num">{unidade === 'domingo' ? 'Domingos' : 'Eventos'}</th><th className="num">{`Média jovens e adultos por ${unidade}`}</th><th className="num">{`Média total de pessoas por ${unidade}`}</th><th className="num">Total jovens e adultos</th><th className="num">Total de pessoas</th></tr></thead>
               <tbody>{[...porCom.entries()].sort((a, b) => (media(b[1], 'adultos') ?? 0) - (media(a[1], 'adultos') ?? 0)).map(([c, a]) => (
                 <tr key={c}><td>{nomes.get(c) ?? c}</td><td className="num">{num(a.n)}</td><td className="num">{m1(media(a, 'adultos'))}</td><td className="num">{m1(media(a, 'total'))}</td><td className="num">{num(a.soma.adultos)}</td><td className="num">{num(a.soma.total)}</td></tr>
               ))}</tbody>
@@ -235,7 +237,6 @@ export default function Assistencia() {
 
       <p className="muted small">Os domingos sem assistência esperada (cultos conjuntos, retiros, encerramentos) registam-se na Configuração, no separador Assistência.</p>
 
-      {importar && <Importar origem="assistencia" onFechar={() => setImportar(false)} onFeito={() => void lotes.recarregar()} />}
     </>
   );
 }
