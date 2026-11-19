@@ -67,6 +67,7 @@ export const FONTES: Record<Origem, FonteDef> = {
       { key: 'evento', label: 'Evento', padroes: ['evento sempre que aplicavel', 'evento'] },
       { key: 'reembolso', label: 'Reembolso necessário?', padroes: ['reembolso do valor necessaro', 'reembolso do valor', 'reembolso'] },
       { key: 'codigo', label: 'Código do reembolso (R…)', padroes: ['unique id', 'codigo do reembolso', 'codigo'] },
+      { key: 'submetido', label: 'Data de submissão (para corrigir faturas com data errada)', padroes: DATA_SUB },
       { key: 'descricao', label: 'Descrição/Notas', padroes: ['descricao notas', 'descricao'], pessoal: true },
       { key: 'pessoa', label: 'Nome', padroes: ['nome'], pessoal: true },
       { key: 'email', label: 'E-mail', padroes: ['e mail', 'email'], pessoal: true },
@@ -146,8 +147,12 @@ export function mapearLinhas(origem: Origem, linhas: Linha[], mapa: Record<strin
     // Com a coluna Líquido, só entram as contribuições com o líquido preenchido (decisão do CAF, 18/11/2026).
     const liquido = origem === 'contribuir' && mapa.liquido ? parseNumero(get(l, 'liquido')) : NaN;
     if (origem === 'contribuir' && mapa.liquido && !Number.isFinite(liquido)) { naoPagas++; return; }
-    const data = parseData(get(l, 'data'));
+    let data = parseData(get(l, 'data'));
     if (!data) { rejeitadas.push({ linha: i + 2, motivo: 'data inválida' }); return; }
+    // Despesa com a data da fatura mais de 31 dias depois da submissão (engano no ano, ex.: 2028): conta na data de submissão.
+    let dataFaturaOriginal: string | undefined;
+    const submetido = origem === 'despesas' ? parseData(get(l, 'submetido')) : null;
+    if (submetido && (new Date(data).getTime() - new Date(submetido).getTime()) / 86400000 > 31) { dataFaturaOriginal = data; data = submetido; }
     const valorBruto = origem === 'assistencia' ? get(l, 'adultos') : get(l, 'valor');
     const valor = parseNumero(valorBruto);
     if (!Number.isFinite(valor)) { rejeitadas.push({ linha: i + 2, motivo: 'valor inválido' }); return; }
@@ -156,6 +161,7 @@ export function mapearLinhas(origem: Origem, linhas: Linha[], mapa: Record<strin
     if (com.original) extra.comunidadeOriginal = com.original;
     for (const k of ['conta', 'caixa', 'reembolso', 'codigo']) { const v = get(l, k); if (v != null && v !== '') extra[k] = String(v); }
     if (Number.isFinite(liquido)) extra.liquido = r2(liquido);
+    if (dataFaturaOriginal) extra.dataFaturaOriginal = dataFaturaOriginal;
     for (const k of ['jump', 'criancas', 'connects']) { const v = parseNumero(get(l, k)); if (Number.isFinite(v)) extra[k] = v; }
     const id = String(get(l, 'id') ?? '').trim() || `${origem}-${data}-${i}-${++seq}`;
     const r: Registo & { comunidadeId: string } = {
