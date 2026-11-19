@@ -74,6 +74,9 @@ const VENCIMENTO = /ordenado|salario|vencimento/;
 const SEG_SOCIAL = /\btsu\b|seg(uranca)?\.? ?social|^ss\b/;
 
 /** Propõe a classificação dos movimentos ainda por classificar. Não mexe nos validados nem nos que estão para rever. */
+/** Código do reembolso sem espaços nem hífenes, em maiúsculas (R20260031). */
+export const normCodigo = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
 export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[] {
   const cat = (codigo: string) => ctx.categorias.find((c) => c.codigo === codigo)?.nome;
   const existe = (nome: string) => ctx.categorias.some((c) => c.nome === nome && c.ativo !== false);
@@ -108,10 +111,11 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
 
     // 2. Reembolsos (código R + ano + contador) e depósitos.
     if (m.valor < 0) {
-      const codigo = m.descricao.toUpperCase().match(/R20\d{6}/)?.[0];
+      const bruto = m.descricao.toUpperCase().match(/R[\s-]*20\d{2}[\s-]*\d{4}/)?.[0];
+      const codigo = bruto ? normCodigo(bruto) : null;
       if (codigo) {
-        const reg = desp.find((x) => x.extra?.codigo === codigo || x.id === codigo);
-        if (!reg) return { ...m, estado: 'rever', nota: `REVER - Dados inconsistentes: código ${codigo} não existe no Jotform` };
+        const reg = desp.find((x) => normCodigo(String(x.extra?.codigo ?? '')) === codigo || normCodigo(x.id) === codigo);
+        if (!reg) return { ...m, estado: 'rever', nota: `REVER - Dados inconsistentes: código ${codigo} não existe no Jotform (Registo de Despesas, deste ano e do anterior)` };
         if (Math.abs(reg.valor - v) >= 0.005) return { ...m, estado: 'rever', nota: `REVER - Dados inconsistentes: ${codigo} tem ${reg.valor.toFixed(2)} € no Jotform e ${v.toFixed(2)} € no banco` };
         reg.usado = true;
         return proposto({ categoria: cat('F3.02'), conciliadoCom: `despesas:${reg.id}`, comunidadeId: reg.comunidadeId, nota: `Reembolso ${codigo} (contado pelo Jotform)` });

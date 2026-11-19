@@ -231,3 +231,13 @@ describe('sincronização incremental', () => {
     await expect(sincronizar(m.arm, CFG, 'teste')).rejects.toBeInstanceOf(SyncEmCurso);
   });
 });
+
+describe('Unique ID do Jotform', () => {
+  it('o campo de ID automático entra na linha como "Unique ID", mesmo sem rótulo', async () => {
+    const { achatar } = await import('../../src/lib/jotform');
+    const l = achatar({ id: '1', created_at: '2026-01-02 10:00:00', status: 'ACTIVE', answers: {
+      '30': { name: 'uniqueId', type: 'control_autoincrement', text: '', answer: 'R20260031' },
+    } });
+    expect(l['Unique ID']).toBe('R20260031');
+  });
+});
