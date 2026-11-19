@@ -25,6 +25,12 @@ describe('proposta de classificação dos extratos', () => {
     expect(mau.nota).toMatch(/Dados inconsistentes/);
     expect(mau.conciliadoCom ?? null).toBeNull();
   });
+  it('reembolso: o código cruza mesmo com espaços, hífen ou minúsculas e com despesas do ano anterior', () => {
+    const despesas = [lote('despesas', 'moita', [{ id: 's9', data: '2025-12-20', valor: 25.5, extra: { codigo: 'r2026-0031' } }])];
+    const [a, b] = proporClassificacao([mov('1', '2026-01-08', -25.5, 'TRF CCLX R 20260031'), mov('2', '2026-01-09', -25.5, 'REEMB R2026-0031')], ctx({ despesas }));
+    expect(a).toMatchObject({ estado: 'proposto', conciliadoCom: 'despesas:s9', comunidadeId: 'moita' });
+    expect(b.nota).toMatch(/R20260031/);
+  });
   it('IFTHENPAY (Contribuir) e estornos ficam como financeiros', () => {
     const [i, e] = proporClassificacao([mov('1', '2026-03-05', 300, 'TRF IFTHENPAY LDA'), mov('2', '2026-03-05', 10, 'ESTORNO', { estorno: true })], ctx());
     expect(i).toMatchObject({ categoria: 'F1.03 Regularização de tesouraria', conciliadoCom: 'contribuir:ifthenpay', estado: 'proposto' });

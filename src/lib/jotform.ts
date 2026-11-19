@@ -35,7 +35,8 @@ export function achatar(s: JotSubmission): Linha {
   for (const [, a] of ordem) {
     if (a.type && IGNORAR.has(a.type)) continue;
     // Campos sem rótulo (ex.: PAGO, campos escondidos) usam o nome interno do Jotform.
-    const rotulo = (a.text ?? '').replace(/<[^>]+>/g, '').trim() || (a.name ?? '').trim();
+    // O ID automático (ex.: R20260031, código do reembolso) entra sempre como "Unique ID".
+    const rotulo = a.type === 'control_autoincrement' ? 'Unique ID' : (a.text ?? '').replace(/<[^>]+>/g, '').trim() || (a.name ?? '').trim();
     if (!rotulo) continue;
     const v = valorResposta(a);
     if (v === undefined) continue;

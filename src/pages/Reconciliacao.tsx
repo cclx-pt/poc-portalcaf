@@ -63,9 +63,10 @@ export default function Reconciliacao() {
   async function propor() {
     setMsg('A preparar a proposta…');
     try {
-      const [deps, desp, contrib] = await Promise.all([listarLotes(acesso!, 'depositos', ano), listarLotes(acesso!, 'despesas', ano), listarLotes(acesso!, 'contribuir', ano)]);
+      // Reembolsos pagos em janeiro podem ter a fatura (e o registo) do ano anterior.
+      const [deps, desp, despAntes, contrib] = await Promise.all([listarLotes(acesso!, 'depositos', ano), listarLotes(acesso!, 'despesas', ano), listarLotes(acesso!, 'despesas', ano - 1), listarLotes(acesso!, 'contribuir', ano)]);
       const ctx = {
-        categorias: cats.dados ?? [], regras: regras.dados?.length ? regras.dados : REGRAS_INICIAIS, depositos: deps, despesas: desp, contribuir: contrib,
+        categorias: cats.dados ?? [], regras: regras.dados?.length ? regras.dados : REGRAS_INICIAIS, depositos: deps, despesas: [...despAntes, ...desp], contribuir: contrib,
         historico: (banco.dados ?? []).flatMap((l) => (alterados[l.id] ?? l).registos), custosFixos: cfixos.dados ?? [],
       };
       const novo = { ...alterados };
