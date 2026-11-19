@@ -175,3 +175,11 @@ describe('erro do formulário de presenças → campo a destacar', () => {
     expect(campoDoErroPresenca('Indique o número de Online (0 se não houve).', { online: 'Online' })).toBe('online');
   });
 });
+
+describe('peso da média de cada comunidade no total', () => {
+  it('a percentagem é a média da comunidade a dividir pela soma das médias', async () => {
+    const { pesoDasMedias } = await import('../../src/lib/presencas');
+    expect(pesoDasMedias({ sede: 268, almada: 100, moita: 32 })).toEqual({ sede: 0.67, almada: 0.25, moita: 0.08 });
+    expect(pesoDasMedias({})).toEqual({});
+  });
+});
