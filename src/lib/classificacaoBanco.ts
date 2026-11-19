@@ -70,6 +70,8 @@ export function repartirPorPrevisao(valor: number, custos: CustoFixo[], codigo: 
 }
 
 const TRANSFERENCIA = /transf|trf|mb ?way|sepa|oferta|dizimo|donativo/;
+/** Descritivos de transferências recebidas que contam sempre como oferta/dízimo da Geral. */
+const OFERTA_GERAL = /^\s*tfi\b|\btrf\.?\s*mb\s*way\b/;
 const VENCIMENTO = /ordenado|salario|vencimento/;
 const SEG_SOCIAL = /\btsu\b|seg(uranca)?\.? ?social|^ss\b/;
 
@@ -108,6 +110,9 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
       }
       return proposto({ categoria: cat('F1.03'), conciliadoCom: 'contribuir:ifthenpay', nota });
     }
+
+    // 1b. Transferências "TFI" e "Trf. MB WAY" recebidas: sempre oferta/dízimo da comunidade Geral (decisão do CAF, 19/11/2026).
+    if (m.valor > 0 && OFERTA_GERAL.test(d) && cat('R1.02')) return proposto({ categoria: cat('R1.02'), comunidadeId: 'bolsa-geral', nota: 'Transferência recebida (TFI ou MB WAY): oferta/dízimo, Geral' });
 
     // 2. Reembolsos (código R + ano + contador) e depósitos.
     if (m.valor < 0) {
