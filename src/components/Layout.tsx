@@ -74,7 +74,12 @@ export default function Layout() {
   const alternarGrupo = (id: string) => mudar({ ...pref, abertos: gruposAbertos.includes(id) ? gruposAbertos.filter((x) => x !== id) : [...gruposAbertos, id] });
   const perm: Perm = { pode, temNivel };
   const eAtivo = (to: string) => (to === '/' ? local.pathname === '/' : local.pathname === to || local.pathname.startsWith(`${to}/`));
-  const visiveis = (comunidades ?? []).filter((c) => c.ativo !== false && (acesso?.comunidades.includes('*') || acesso?.comunidades.includes(c.id)));
+  // A comunidade Geral (especial) é só financeira: não aparece no filtro das páginas de Registos (presenças, batismos…).
+  const emRegistos = local.pathname.startsWith('/registos');
+  const visiveis = (comunidades ?? []).filter((c) => c.ativo !== false && !(emRegistos && c.especial) && (acesso?.comunidades.includes('*') || acesso?.comunidades.includes(c.id)));
+  useEffect(() => {
+    if (emRegistos && comunidade !== 'todas' && (comunidades ?? []).some((c) => c.id === comunidade && c.especial)) setComunidade('todas');
+  }, [emRegistos, comunidade, comunidades]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={`app${recolhido ? ' app-recolhido' : ''}`}>
