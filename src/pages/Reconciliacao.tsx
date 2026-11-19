@@ -4,7 +4,7 @@ import { LogoBanco } from '../components/LogoBanco';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia } from '../lib/db';
-import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, sugerirPadrao, temPalavra, validar, type DimensaoRelatorio } from '../lib/classificacaoBanco';
+import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, sugerirPadrao, temPalavra, validar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
 import { bancoDaConta } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Categoria, Comunidade, Dimensao, EstadoMov, MovBanco, ParteMov } from '../lib/types';
@@ -35,6 +35,7 @@ export default function Reconciliacao() {
   const [detalhe, setDetalhe] = useState<MovVista | null>(null);
   const [relDim, setRelDim] = useState<DimensaoRelatorio>('rubrica');
   const [filtro, setFiltro] = useState<Filtro>('todos');
+  const [texto, setTexto] = useState('');
   const [alterados, setAlterados] = useState<Record<string, BancoLote>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [ocultas, setOcultas] = useState<string[]>([]);
@@ -51,11 +52,11 @@ export default function Reconciliacao() {
   const movs: MovVista[] = lotesMes.filter((l) => !ocultas.includes(l.contaId))
     .flatMap((l) => l.registos.map((m) => ({ ...m, loteId: l.id, contaId: l.contaId })))
     .sort((a, b) => a.data.localeCompare(b.data) || a.contaId.localeCompare(b.contaId) || (a.ordem ?? 0) - (b.ordem ?? 0));
-  const mostrar = movs.filter((m) =>
+  const mostrar = movs.filter((m) => (!texto.trim() || descricaoContem(`${m.descricao} ${(m.partes ?? []).map((p) => p.descricao ?? '').join(' ')}`, texto)) && (
     filtro === 'todos' ? true
       : filtro === 'bolsa' ? m.comunidadeId === 'bolsa-geral'
         : filtro === 'conciliados' ? !!m.conciliadoCom
-          : estadoDe(m) === filtro);
+          : estadoDe(m) === filtro));
   const contagem = (e: EstadoMov) => movs.filter((m) => estadoDe(m) === e).length;
 
   function alterar(loteId: string, id: string, patch: Partial<MovBanco>) {
@@ -199,6 +200,9 @@ export default function Reconciliacao() {
             <option value="conciliados">Conciliados com o Jotform</option>
             <option value="bolsa">Comunidade Geral</option>
           </select>
+        </label>
+        <label className="campo">Descrição contém
+          <input type="search" value={texto} placeholder="Ex.: EDP, MB WAY, R2026" onChange={(e) => setTexto(e.target.value)} />
         </label>
         <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={!movs.length || !(cats.dados ?? []).some((c) => c.codigo)} onClick={() => void propor()} title="Conciliação com o Jotform, vencimentos previstos, memória, regras e transferências para a Geral">Propor classificação</button>
         <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={!contagem('proposto')} onClick={aceitar} title="Valida as propostas completas (com categoria e comunidade)">Aceitar propostas</button>

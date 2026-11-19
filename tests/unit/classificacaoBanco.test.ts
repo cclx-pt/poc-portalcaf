@@ -219,3 +219,13 @@ describe('guardar regra a partir de um movimento', () => {
     expect(temPalavra('COMPRA 9876 GARAGEM ALMADA 04/04', 'GARAGEM ALMADA')).toBe(true);
   });
 });
+
+describe('filtro por descrição', () => {
+  it('ignora maiúsculas e acentos e exige todas as palavras', async () => {
+    const { descricaoContem } = await import('../../src/lib/classificacaoBanco');
+    expect(descricaoContem('TRF MB WAY DE JOÃO SILVA', 'joao')).toBe(true);
+    expect(descricaoContem('TRF MB WAY DE JOÃO SILVA', 'mb way silva')).toBe(true);
+    expect(descricaoContem('TRF MB WAY DE JOÃO SILVA', 'silva costa')).toBe(false);
+    expect(descricaoContem('QUALQUER', '  ')).toBe(true);
+  });
+});
