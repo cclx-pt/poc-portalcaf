@@ -6,7 +6,7 @@ import SaldosBancos from './SaldosBancos';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { apagarBancoLote, auditar, gravar, gravarBancoLote, listarBanco, listarComunidades, listarContas, listarFechos } from '../lib/db';
-import { CamposExtrato, limparMapa } from '../components/MapaExtratoEditor';
+import { AmostraExtrato, CamposExtrato, limparMapa } from '../components/MapaExtratoEditor';
 import { lerFicheiro } from '../lib/ficheiros';
 import { NOME_BANCO, bancoDaConta, maioresMovimentos, detetarBanco, dividirPorMes, escolherMapa, melhorColunaData, verificarExtratos, mesesParaLimpar, mapaCompleto, mapaDoBanco, mapasDasContas, mapearExtrato, resumoMes, sugerirMapaBanco, type Banco, type MapaBanco } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
@@ -270,6 +270,7 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
           </select>
         </label>
       )}
+      <AmostraExtrato colunas={colunas} linhas={linhas} mapa={mapa} />
       {!!colunas.length && !ajustar && <p className="small"><button className="link" onClick={() => setAjustar(true)}>Ajustar as colunas</button></p>}
       {!!colunas.length && ajustar && (
         <div style={{ marginTop: 12 }}>

@@ -373,3 +373,6 @@ tr.duplicado td { background: #f2f2f2; }
 .aviso { background: #fff3b0; border: 1px solid #e0b400; border-left: 4px solid #e0b400; color: var(--preto); }
 .com-erro input, .com-erro select, .com-erro textarea, input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] { background: #fff3b0; border-color: #e0b400; outline: 2px solid #e0b400; outline-offset: 0; }
 .com-erro > label, label.com-erro { font-weight: 700; }
+/* Amostra das primeiras linhas do extrato: as colunas escolhidas ficam destacadas. */
+.amostra-extrato table { font-size: 12px; }
+.amostra-extrato th.mapeada, .amostra-extrato td.mapeada { background: #f2f2f2; font-weight: 700; }
