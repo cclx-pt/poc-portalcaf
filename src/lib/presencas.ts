@@ -204,3 +204,9 @@ export function campoDoErroPresenca(texto: string, nomes: Record<string, string>
   for (const [id, re] of contagens) if (re.test(t)) return id;
   return null;
 }
+
+/** Peso da média de cada comunidade no total (soma das médias de todas as comunidades), de 0 a 1. */
+export function pesoDasMedias(medias: Record<string, number>): Record<string, number> {
+  const soma = Object.values(medias).reduce((s, v) => s + v, 0);
+  return soma ? Object.fromEntries(Object.entries(medias).map(([k, v]) => [k, Math.round((v / soma) * 10000) / 10000])) : {};
+}

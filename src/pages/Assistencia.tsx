@@ -8,7 +8,7 @@ import { MESES, MESES_CURTOS, num } from '../lib/format';
 import { contaParaMedia, eDomingo, registosEmFalta } from '../lib/domingos';
 import { eventosEfetivos } from '../lib/eventos';
 import { CATEGORICAS } from '../lib/cores';
-import { ocorrenciasDeEvento } from '../lib/presencas';
+import { ocorrenciasDeEvento, pesoDasMedias } from '../lib/presencas';
 
 /** Grupos de idade do Registo de Presenças. Só pessoas: nunca símbolo de moeda. */
 const GRUPOS = [
@@ -90,6 +90,10 @@ export default function Assistencia() {
     for (const o of ocorrenciasDeEvento(doMapa.filter((l) => l.comunidadeId === c), [...CAMPOS])) somar(a, comoLinha(o, c));
     porCom.set(c, a);
   }
+  const linhasCom = [...porCom.entries()].sort((a, b) => (media(b[1], 'adultos') ?? 0) - (media(a[1], 'adultos') ?? 0));
+  const pesos = pesoDasMedias(Object.fromEntries(linhasCom.map(([c, a]) => [c, media(a, 'adultos') ?? 0])));
+  const somaMedias = (k: Grupo | 'total') => linhasCom.reduce((s0, [, a]) => s0 + (media(a, k) ?? 0), 0);
+  const pct1 = (v?: number) => (v == null ? '—' : `${num(v * 100, 1)}%`);
   const unidade = tipoCelebracao && evento !== 'todos' && evento === tipoCelebracao ? 'domingo' : 'evento';
   const mesesComDados = porMes.filter((m) => m.n).length;
   const mediaMensal = (k: Grupo | 'total') => (mesesComDados ? ano_.soma[k] / mesesComDados : null);
@@ -202,11 +206,17 @@ export default function Assistencia() {
         {comunidade === 'todas' && porCom.size > 1 && (
           <div className="sec">
             <h2>Por comunidade</h2>
+            <p className="muted small">{`Médias por ${unidade}, arredondadas. "% do total" = média de jovens e adultos da comunidade a dividir pela soma das médias de todas as comunidades. Na linha do total, as médias são a soma das médias das comunidades e os ${unidade === 'domingo' ? 'domingos' : 'eventos'} são a soma dos de cada comunidade.`}</p>
             <div className="tabela"><table>
-              <thead><tr><th>Comunidade</th><th className="num">{unidade === 'domingo' ? 'Domingos' : 'Eventos'}</th><th className="num">{`Média jovens e adultos por ${unidade}`}</th><th className="num">{`Média total de pessoas por ${unidade}`}</th><th className="num">Total jovens e adultos</th><th className="num">Total de pessoas</th></tr></thead>
-              <tbody>{[...porCom.entries()].sort((a, b) => (media(b[1], 'adultos') ?? 0) - (media(a[1], 'adultos') ?? 0)).map(([c, a]) => (
-                <tr key={c}><td>{nomes.get(c) ?? c}</td><td className="num">{num(a.n)}</td><td className="num">{m1(media(a, 'adultos'))}</td><td className="num">{m1(media(a, 'total'))}</td><td className="num">{num(a.soma.adultos)}</td><td className="num">{num(a.soma.total)}</td></tr>
+              <thead><tr><th>Comunidade</th><th className="num">{unidade === 'domingo' ? 'Domingos' : 'Eventos'}</th><th className="num">{`Média jovens e adultos por ${unidade}`}</th><th className="num">% do total</th><th className="num">{`Média total de pessoas por ${unidade}`}</th><th className="num">Total jovens e adultos</th><th className="num">Total de pessoas</th></tr></thead>
+              <tbody>{linhasCom.map(([c, a]) => (
+                <tr key={c}><td>{nomes.get(c) ?? c}</td><td className="num">{num(a.n)}</td><td className="num">{num(media(a, 'adultos') ?? 0)}</td><td className="num">{pct1(pesos[c])}</td><td className="num">{num(media(a, 'total') ?? 0)}</td><td className="num">{num(a.soma.adultos)}</td><td className="num">{num(a.soma.total)}</td></tr>
               ))}</tbody>
+              <tfoot><tr className="total-geral">
+                <th>Total</th><th className="num">{num(linhasCom.reduce((s0, [, a]) => s0 + a.n, 0))}</th>
+                <th className="num">{num(somaMedias('adultos'))}</th><th className="num">100,0%</th><th className="num">{num(somaMedias('total'))}</th>
+                <th className="num">{num(linhasCom.reduce((s0, [, a]) => s0 + a.soma.adultos, 0))}</th><th className="num">{num(linhasCom.reduce((s0, [, a]) => s0 + a.soma.total, 0))}</th>
+              </tr></tfoot>
             </table></div>
           </div>
         )}
