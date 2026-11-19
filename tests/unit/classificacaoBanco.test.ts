@@ -140,3 +140,37 @@ describe('controlo do mês (cada euro conta uma vez)', () => {
     expect(c.contabilizado + c.conciliado + c.financeiro + c.rever + c.proposto + c.porClassificar).toBe(c.total);
   });
 });
+
+describe('itemização: um movimento dividido em várias linhas', () => {
+  const base = (): MovBanco => ({ id: 'i1', data: '2026-03-10', descricao: 'COMPRA CONTINENTE', valor: -100, saldo: null, estado: 'proposto',
+    categoria: '06.01 Material de consumo', partes: [
+      { comunidadeId: 'almada', valor: -60, categoria: '06.01 Material de consumo', descricao: 'Limpeza' },
+      { comunidadeId: 'moita', valor: -30, categoria: '04.02 Alimentação e catering', descricao: 'Lanche GC' },
+      { comunidadeId: 'moita', valor: -10, categoria: 'F2.01 Adiantamentos' },
+    ] } as unknown as MovBanco);
+  it('validar marca cada linha (financeiras não contam) e o movimento conta se alguma linha contar', async () => {
+    const { validar, pedacosDe } = await import('../../src/lib/classificacaoBanco');
+    const cs = [...cats, { id: 'f', nome: 'F2.01 Adiantamentos', codigo: 'F2.01', tipo: 'financeiro' }] as typeof cats;
+    const v = validar(base(), cs);
+    expect(v.contabilizar).toBe(true);
+    expect(v.partes!.map((p) => p.contabilizar)).toEqual([true, true, false]);
+    const ps = pedacosDe(v);
+    expect(ps.map((p) => [p.categoria, p.comunidadeId, p.valor, p.contabilizar])).toEqual([
+      ['06.01 Material de consumo', 'almada', -60, true], ['04.02 Alimentação e catering', 'moita', -30, true], ['F2.01 Adiantamentos', 'moita', -10, false],
+    ]);
+  });
+  it('linhas sem categoria herdam a do movimento; o controlo do mês separa contabilizado e financeiro', async () => {
+    const { validar, pedacosDe, controloMes } = await import('../../src/lib/classificacaoBanco');
+    const cs = [...cats, { id: 'f', nome: 'F2.01 Adiantamentos', codigo: 'F2.01', tipo: 'financeiro' }] as typeof cats;
+    const m = base(); m.partes![0].categoria = undefined;
+    const v = validar(m, cs);
+    expect(pedacosDe(v)[0].categoria).toBe('06.01 Material de consumo');
+    expect(controloMes([v])).toMatchObject({ total: 100, contabilizado: 90, financeiro: 10, fechado: true });
+  });
+  it('o relatório conta cada linha na sua categoria', async () => {
+    const { validar, relatorioExtratos } = await import('../../src/lib/classificacaoBanco');
+    const cs = [...cats, { id: 'f', nome: 'F2.01 Adiantamentos', codigo: 'F2.01', tipo: 'financeiro' }] as typeof cats;
+    const r = relatorioExtratos([validar(base(), cs)], cs, 'categoria', 1, 12);
+    expect(r.linhas.map((l) => [l.chave, l.despesas])).toEqual([['04.02 Alimentação e catering', 30], ['06.01 Material de consumo', 60]]);
+  });
+});
