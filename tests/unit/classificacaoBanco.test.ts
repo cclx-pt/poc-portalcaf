@@ -59,6 +59,12 @@ describe('proposta de classificação dos extratos', () => {
     const [saida] = proporClassificacao([mov('3', '2026-03-05', -15, 'Trf. MB WAY para Ana')], ctx());
     expect(saida.comunidadeId).not.toBe('bolsa-geral');
   });
+  it('transferência recebida com "dízimo" no descritivo vai para R1.01 Dízimos; sem indicação fica em R1.02 Ofertas gerais', () => {
+    const r = proporClassificacao([mov('1', '2026-03-05', 100, 'TFI JOAO SILVA DIZIMO MARCO'), mov('2', '2026-03-05', 50, 'Trf. MB WAY Dízimos'), mov('3', '2026-03-05', 20, 'TFI ANA OFERTA'), mov('4', '2026-03-05', 10, 'TRF SEPA PEDRO DIZIMO'), mov('5', '2026-03-05', 5, 'TFI RUI')], ctx());
+    expect(r.map((m) => [m.categoria, m.comunidadeId])).toEqual([
+      ['R1.01 Dízimos', 'bolsa-geral'], ['R1.01 Dízimos', 'bolsa-geral'], ['R1.02 Ofertas gerais', 'bolsa-geral'], ['R1.01 Dízimos', 'bolsa-geral'], ['R1.02 Ofertas gerais', 'bolsa-geral'],
+    ]);
+  });
   it('vencimento igual ao previsto nos custos fixos: comunidade do custo; repartido se partilhado', () => {
     const cf = (id: string, com: string, inc: number): CustoFixo => ({ id, comunidadeId: com, rubrica: 'Vencimento Pastoral', categoria: '01.01 Remunerações e subsídios', valorMensal: 1500, incidencia: inc, ano: 2026, inicio: '2026-01', fim: '2026-12', nivel: 'confidencial' });
     const [m] = proporClassificacao([mov('1', '2026-03-28', -1500, 'TRF ORDENADO MARCO')], ctx({ custosFixos: [cf('a', 'moita', 50), cf('b', 'sede', 50)] }));

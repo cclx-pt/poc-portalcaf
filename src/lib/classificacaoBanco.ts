@@ -72,6 +72,7 @@ export function repartirPorPrevisao(valor: number, custos: CustoFixo[], codigo: 
 const TRANSFERENCIA = /transf|trf|mb ?way|sepa|oferta|dizimo|donativo/;
 /** Descritivos de transferências recebidas que contam sempre como oferta/dízimo da Geral. */
 const OFERTA_GERAL = /^\s*tfi\b|\btrf\.?\s*mb\s*way\b|\btrf\.?\s*imed\b/;
+const DIZIMO = /dizimo/;
 const VENCIMENTO = /ordenado|salario|vencimento/;
 const SEG_SOCIAL = /\btsu\b|seg(uranca)?\.? ?social|^ss\b/;
 
@@ -95,6 +96,8 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
     const v = Math.abs(m.valor);
     const p = periodoDe(Number(m.data.slice(0, 4)), Number(m.data.slice(5, 7)));
     const proposto = (patch: Partial<MovBanco>): MovBanco => ({ ...m, ...patch, estado: 'proposto' });
+    // Dízimo só quando o descritivo o diz; sem indicação, oferta geral (o banco não distingue).
+    const ofertaOuDizimo = () => ({ categoria: DIZIMO.test(d) && cat('R1.01') ? cat('R1.01') : cat('R1.02'), comunidadeId: 'bolsa-geral' });
 
     // 1. Estornos e IFTHENPAY (lotes do Contribuir, já contados pelo Jotform).
     if (m.estorno || /estorno/.test(d)) return proposto({ categoria: cat('F3.02'), nota: 'Estorno' });
@@ -112,7 +115,7 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
     }
 
     // 1b. Transferências "TFI", "Trf. MB WAY" e "Trf.Imed" recebidas: sempre oferta/dízimo da comunidade Geral (decisão do CAF, 19/11/2026).
-    if (m.valor > 0 && OFERTA_GERAL.test(d) && cat('R1.02')) return proposto({ categoria: cat('R1.02'), comunidadeId: 'bolsa-geral', nota: 'Transferência recebida (TFI, Trf. MB WAY ou Trf.Imed): oferta/dízimo, Geral' });
+    if (m.valor > 0 && OFERTA_GERAL.test(d) && cat('R1.02')) return proposto({ ...ofertaOuDizimo(), nota: `Transferência recebida (TFI, Trf. MB WAY ou Trf.Imed): ${DIZIMO.test(d) && cat('R1.01') ? 'dízimo (indicado no descritivo)' : 'oferta (o banco não distingue; mude para Dízimos se for o caso)'}, Geral` });
 
     // 2. Reembolsos (código R + ano + contador) e depósitos.
     if (m.valor < 0) {
@@ -162,7 +165,7 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
     if (regra) return proposto({ categoria: regra.categoria, fornecedor: regra.fornecedor, centroCusto: regra.centroCusto, comunidadeId: regra.comunidadeId ?? m.comunidadeId, nota: `Regra "${regra.padrao}"` });
 
     // 6. Transferências e MB WAY diretos (entradas): ofertas da comunidade Geral (decisão do CAF).
-    if (m.valor > 0 && TRANSFERENCIA.test(d) && cat('R1.02')) return proposto({ categoria: cat('R1.02'), comunidadeId: 'bolsa-geral', nota: 'Transferência ou MB WAY direto: Geral' });
+    if (m.valor > 0 && TRANSFERENCIA.test(d) && cat('R1.02')) return proposto({ ...ofertaOuDizimo(), nota: 'Transferência ou MB WAY direto: Geral' });
 
     return { ...m, estado: 'por-classificar' };
   });
