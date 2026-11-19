@@ -224,6 +224,10 @@ export interface ResumoMes {
   cedidoGeral: { entradas: number; custosFixos: number; despesas: number };
   /** Mês aberto: só a previsão dos custos fixos (os valores reais contam quando o mês fechar). */
   previsao?: boolean;
+  /** Custos fixos previstos da comunidade no mês (tabela, mesmo com o mês fechado). */
+  cfPrevisto?: number;
+  /** Parte dos custos fixos gerais previstos no mês, repartida pela média proporcional de assistência. */
+  cfGeralPrevisto?: number;
 }
 
 export interface ParteRubrica { local: number; geral: number }

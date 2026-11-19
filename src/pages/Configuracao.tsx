@@ -251,9 +251,9 @@ export default function Configuracao() {
       if (recalcularDepois) {
         // Rubrica, âmbito ou nível mudam a repartição dos gerais: recalcula o ano atual e o anterior.
         const ano = new Date().getFullYear();
-        setMsg('Categoria guardada. A recalcular resumos (repartição dos gerais)…');
+        setMsg('Guardado. A recalcular resumos (repartição dos gerais)…');
         for (const a of [ano - 1, ano]) await recalcularAno(acesso!, a);
-        setMsg(`Categoria guardada. Resumos de ${ano - 1} e ${ano} recalculados.`);
+        setMsg(`Guardado. Resumos de ${ano - 1} e ${ano} recalculados.`);
       }
     } catch (e) { setMsg(mensagemErro(e)); }
   }
@@ -595,7 +595,7 @@ export default function Configuracao() {
               <label className="campo">Âmbito
                 <select value={edit.v.ambito ?? 'local'} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, ambito: e.target.value as 'local' | 'geral' } })}>
                   <option value="local">Local (fica na comunidade)</option>
-                  <option value="geral">Geral (reparte pela assistência dos últimos 12 meses)</option>
+                  <option value="geral">Geral (repartido por média proporcional de assistência dos últimos 12 meses)</option>
                 </select></label>
               <label className="campo" style={{ gridColumn: '1 / -1' }}>Sinónimos (separados por ponto e vírgula)<input value={(edit.v.sinonimos ?? []).join('; ')} placeholder="Dízimos; Dízimo" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, sinonimos: e.target.value.split(';') } })} /></label>
               <label className="campo">Conta SNC-ESNL<input value={edit.v.snc ?? ''} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, snc: e.target.value } })} /></label>

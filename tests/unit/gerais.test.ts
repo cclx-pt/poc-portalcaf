@@ -307,3 +307,19 @@ describe('comunidade que termina e passa para outra (fusão: Barreiro → Moita)
     expect(mes(rs, 'barreiro', 9).geralSaidas).toBe(0);
   });
 });
+
+describe('custos fixos previstos (anual e mensal) com a parte do geral', () => {
+  it('cada mês tem os custos fixos previstos da comunidade e a sua parte dos custos fixos gerais, mesmo nos meses fechados', () => {
+    const cfL: CustoFixo = { id: 'l', comunidadeId: 'almada', rubrica: 'Material', valorMensal: 500, inicio: '2026-01', fim: '2026-12', ano: 2026, nivel: 'privado' };
+    const cfG: CustoFixo = { id: 'g', comunidadeId: 'bolsa-geral', rubrica: 'Vencimento Multimédia', valorMensal: 300, inicio: '2026-01', fim: '2026-12', ano: 2026, nivel: 'confidencial' };
+    const rs = calcularResumos(base({
+      custosFixos: [cfL, cfG], regraFechados: true, mesesFechados: new Set(['2026-03']),
+      assistencia: [lote('assistencia', 'almada', 2026, 3, [{ valor: 100 }]), lote('assistencia', 'porto', 2026, 3, [{ valor: 50 }])],
+    }));
+    expect(mes(rs, 'almada', 3).cfPrevisto).toBe(500);
+    expect(mes(rs, 'almada', 3).cfGeralPrevisto).toBe(200);
+    expect(mes(rs, 'porto', 3).cfGeralPrevisto).toBe(100);
+    expect(mes(rs, 'almada', 3).custosFixos).toBe(0); // mês fechado: conta o real, não a previsão
+    expect(mes(rs, 'almada', 4).cfPrevisto).toBe(500);
+  });
+});

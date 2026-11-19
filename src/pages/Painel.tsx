@@ -4,7 +4,7 @@ import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros, mensagemErro, Fres
 import { listarComunidades, listarResumos } from '../lib/db';
 import { recalcularAno } from '../lib/recalcular';
 import { somarMeses, partesMes, GERAIS_POR_REPARTIR, mesesDecorridos, estadoMeses } from '../lib/resumos';
-import { dec, eur, MESES_CURTOS, pct, hoje } from '../lib/format';
+import { dec, eur, MESES_CURTOS, pct, hoje, r2 } from '../lib/format';
 import Publico from './Publico';
 
 export default function Painel() {
@@ -27,6 +27,10 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
   const porMes = Array.from({ length: 12 }, (_, i) => somarMeses(selecionados.map((s) => s.meses[i])));
   const tot = somarMeses(porMes);
   const abertos = new Set(estadoMeses(selecionados).abertos);
+  // Custos fixos previstos (tabela) do ano, com a parte dos custos fixos gerais repartida pela média proporcional de assistência.
+  const cfProprio = r2(selecionados.reduce((s0, x) => s0 + x.meses.reduce((t, mm) => t + (mm.cfPrevisto ?? 0), 0), 0));
+  const cfGeral = r2(selecionados.reduce((s0, x) => s0 + x.meses.reduce((t, mm) => t + (mm.cfGeralPrevisto ?? 0), 0), 0));
+  const cfAnual = r2(cfProprio + cfGeral);
   const p = partesMes(tot); // custos e despesas que ficaram + parte dos gerais (somam ao saldo)
   const bolsa = todos.find((x) => x.comunidadeId === 'bolsa-geral');
   const bolsaTot = bolsa ? somarMeses(bolsa.meses) : null;
@@ -46,7 +50,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
           <h1>{titulo}: custos x entradas {ano}</h1>
           <p className="muted">
             {calculado ? `Resumos calculados em ${new Date(calculado).toLocaleString('pt-PT')}.` : 'Ainda não há resumos calculados para este ano.'}{' '}
-            Entradas = Contribuir + coletas + transferências atribuídas + quota da bolsa geral. Saídas = custos fixos + despesas e reembolsos + parte dos custos gerais (repartidos pela assistência).
+            Entradas = Contribuir + coletas + transferências atribuídas + quota da bolsa geral. Saídas = custos fixos + despesas e reembolsos + parte dos custos gerais (repartidos por média proporcional de assistência).
           </p>
         </div>
         {podeRecalcular && <button disabled={ocupado} onClick={recalcular}>{ocupado ? 'A recalcular…' : 'Recalcular resumos'}</button>}
@@ -57,9 +61,10 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
       {!!todos.length && <>
         <div className="cards">
           <Kpi titulo="Entradas" valor={eur(tot.entradas)} sub={<>Contribuir {eur(tot.contribuir)} · coletas {eur(tot.coletas)}{tot.quotaBolsa ? ` · bolsa ${eur(tot.quotaBolsa)}` : ''}</>} />
-          <Kpi titulo="Custos fixos" valor={eur(p.custosFixos)} sub={abertos.size ? "Meses fechados: reais · meses abertos: previsão" : "Meses fechados"} />
+          <Kpi titulo="Custos fixos anuais" valor={eur(cfAnual)} sub={`Previsão do ano · inclui ${eur(cfGeral)} da parte do geral`} />
+          <Kpi titulo="Custos fixos mensais" valor={eur(r2(cfAnual / 12))} sub={`Média por mês · inclui ${eur(r2(cfGeral / 12))} da parte do geral`} />
           <Kpi titulo="Despesas e reembolsos" valor={eur(p.despesas)} />
-          {!!p.gerais && <Kpi titulo="Parte dos gerais" valor={eur(p.gerais)} sub="Custos gerais repartidos pela assistência" />}
+          {!!p.gerais && <Kpi titulo="Parte dos gerais" valor={eur(p.gerais)} sub="Custos gerais repartidos por média proporcional de assistência" />}
           <Kpi titulo="Saldo" valor={eur(tot.saldo)} negativo={tot.saldo < 0} sub={tot.saldo < 0 ? 'Défice coberto pelo orçamento geral' : undefined} />
           <Kpi titulo="Cobertura dos custos fixos" valor={p.custosFixos ? pct(tot.entradas / p.custosFixos) : '—'} sub="Entradas ÷ custos fixos" />
         </div>
