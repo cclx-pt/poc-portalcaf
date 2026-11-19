@@ -326,7 +326,7 @@ export default function CustosFixos() {
               <label className="campo">Âmbito
                 <select value={edit.comunidadeId === COMUNIDADE_GERAL ? 'geral' : edit.ambito ?? 'local'} disabled={edit.comunidadeId === COMUNIDADE_GERAL} onChange={(e) => setEdit({ ...edit, ambito: e.target.value as 'local' | 'geral' })}>
                   <option value="local">Local (só esta comunidade)</option>
-                  <option value="geral">Geral (repartido pela assistência)</option>
+                  <option value="geral">Geral (repartido por média proporcional de assistência)</option>
                 </select>
               </label>
               <p className="small muted" style={{ gridColumn: '1 / -1', margin: 0 }}>Imputado a esta comunidade: {eur(valorImputado({ valorMensal: Number(edit.valorMensal) || 0, incidencia: edit.incidencia }))} por mês.</p>

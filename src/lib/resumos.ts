@@ -253,9 +253,18 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
   for (const [k, a] of ass) { const [c, mes] = k.split('|'); m(c, Number(mes)).adultosMedia = r2(a.soma / a.n); }
 
   // Custos fixos dos meses decorridos.
+  const boloCfPrev = Array.from({ length: 12 }, () => 0);
   for (const cf of d.custosFixos) for (let mes = 1; mes <= ate; mes++) {
     const p = periodo(d.ano, mes);
     if (!custoAtivo(cf, p)) continue;
+    // Previsão (tabela) de todos os meses, para os KPI de custos fixos anuais e mensais: os gerais vão para o bolo.
+    {
+      const comP = destino(cf.comunidadeId, p);
+      const vP = valorImputado(cf);
+      const geralP = cf.ambito === 'geral' || comP === 'bolsa-geral' || classificar(cf.categoria || cf.rubrica, 'saida').ambito === 'geral';
+      if (geralP) boloCfPrev[mes - 1] = r2(boloCfPrev[mes - 1] + vP);
+      else { const xp = m(comP, mes); xp.cfPrevisto = r2((xp.cfPrevisto ?? 0) + vP); }
+    }
     // Mês fechado: conta o pagamento real (banco), não a previsão.
     if (regra && fechado(mes)) continue;
     const comCf = destino(cf.comunidadeId, p); // custo de uma comunidade já terminada: na sucessora
@@ -297,6 +306,7 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
     const pesos = elegiveis.map((c) => w12.get(c.id)!);
     const somaW = pesos.reduce((s0, w) => s0 + w, 0);
     elegiveis.forEach((c, i) => { m(c.id, mes).pesoGeral = pesos[i] / somaW; });
+    if (elegiveis.length && boloCfPrev[mes - 1]) repartir(boloCfPrev[mes - 1], pesos).forEach((q, i) => { const x = m(elegiveis[i].id, mes); x.cfGeralPrevisto = r2((x.cfGeralPrevisto ?? 0) + q); });
     for (const tipo of ['entrada', 'saida'] as const) {
       for (const [rub, v] of Object.entries(bolo[mes - 1][tipo])) {
         if (!elegiveis.length) {
