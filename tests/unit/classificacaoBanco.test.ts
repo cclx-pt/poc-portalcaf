@@ -180,3 +180,13 @@ describe('itemização: um movimento dividido em várias linhas', () => {
     expect(r.linhas.map((l) => [l.chave, l.despesas])).toEqual([['04.02 Alimentação e catering', 30], ['06.01 Material de consumo', 60]]);
   });
 });
+
+describe('guardar regra a partir de um movimento', () => {
+  it('sugere o texto da regra sem prefixos do banco, números nem datas', async () => {
+    const { sugerirPadrao, temPalavra } = await import('../../src/lib/classificacaoBanco');
+    expect(sugerirPadrao('COMPRA 1234 GARAGEM ALMADA 03/03')).toBe('GARAGEM ALMADA');
+    expect(sugerirPadrao('DD PT12345 EDP COMERCIAL')).toBe('EDP COMERCIAL');
+    expect(sugerirPadrao('PAG SERV 10297 HOSTINGER INTERNATIONAL LTD CYPRUS')).toBe('HOSTINGER INTERNATIONAL LTD');
+    expect(temPalavra('COMPRA 9876 GARAGEM ALMADA 04/04', 'GARAGEM ALMADA')).toBe(true);
+  });
+});

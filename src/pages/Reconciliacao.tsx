@@ -3,8 +3,8 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { LogoBanco } from '../components/LogoBanco';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
-import { auditar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco } from '../lib/db';
-import { REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, validar, type DimensaoRelatorio } from '../lib/classificacaoBanco';
+import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco } from '../lib/db';
+import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, sugerirPadrao, temPalavra, validar, type DimensaoRelatorio } from '../lib/classificacaoBanco';
 import { bancoDaConta } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Categoria, Comunidade, Dimensao, EstadoMov, MovBanco, ParteMov } from '../lib/types';
@@ -273,6 +273,7 @@ export default function Reconciliacao() {
         ))}
       </div>
       {detalhe && <DetalheMovimento m={detalhe} categorias={cats.dados ?? []} dimensoes={dims.dados ?? []} comunidades={coms.dados ?? []} custosFixos={cfixos.dados ?? []}
+        movsMes={movs} regras={regras.dados ?? []} email={acesso!.email} onRegra={() => void regras.recarregar()}
         onFechar={() => setDetalhe(null)} onAplicar={(patch) => { alterar(detalhe.loteId, detalhe.id, patch); setDetalhe(null); }} />}
     </>
   );
@@ -282,8 +283,9 @@ export default function Reconciliacao() {
 /** Movimento dividido em linhas com categorias diferentes. */
 const itemizado = (m: MovBanco) => !!m.partes?.length && new Set(m.partes.map((p) => p.categoria ?? m.categoria)).size > 1;
 
-function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, onFechar, onAplicar }: {
+function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, movsMes, regras, email, onRegra, onFechar, onAplicar }: {
   m: MovBanco; categorias: Categoria[]; dimensoes: Dimensao[]; comunidades: Comunidade[]; custosFixos: import('../lib/types').CustoFixo[];
+  movsMes: MovBanco[]; regras: RegraBanco[]; email: string; onRegra: () => void;
   onFechar: () => void; onAplicar: (patch: Partial<MovBanco>) => void;
 }) {
   const [v, setV] = useState<MovBanco>(m);
@@ -305,6 +307,25 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
   const opcoesCat = categorias.filter((c) => c.ativo !== false && (c.tipo === 'financeiro' || (m.valor > 0 ? c.tipo === 'entrada' : c.tipo === 'saida')));
   const falta = r2(m.valor - somaPartes);
   const mudar = (i: number, patch: Partial<ParteMov>) => setPartes(partes.map((x, k) => (k === i ? { ...x, ...patch } : x)));
+  // Guardar regra: o texto do banco passa a propor esta classificação nos próximos movimentos.
+  const [regraAberta, setRegraAberta] = useState(false);
+  const [padrao, setPadrao] = useState(() => sugerirPadrao(m.descricao));
+  const [comComunidade, setComComunidade] = useState(!!m.comunidadeId);
+  const [msgRegra, setMsgRegra] = useState<string | null>(null);
+  const existente = regras.find((x) => x.ativo !== false && padrao.trim() && temPalavra(m.descricao, x.padrao) && x.padrao.trim().toLowerCase() === padrao.trim().toLowerCase());
+  const comTexto = padrao.trim() ? movsMes.filter((x) => Math.sign(x.valor) === Math.sign(m.valor) && temPalavra(x.descricao, padrao.trim())).length : 0;
+  async function guardarRegra() {
+    if (!padrao.trim() || !v.categoria) return;
+    setMsgRegra(null);
+    try {
+      const id = existente?.id ?? (padrao.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `regra-${Date.now()}`);
+      const nova: RegraBanco = { id, padrao: padrao.trim(), categoria: v.categoria, fornecedor: v.fornecedor, centroCusto: v.centroCusto, comunidadeId: comComunidade && !repartir ? v.comunidadeId : undefined, ativo: true };
+      await gravar('regras_banco', nova);
+      await auditar(email, 'regra dos extratos', `${existente ? 'Atualizada' : 'Criada'} na reconciliação: ${nova.padrao} → ${nova.categoria}`);
+      onRegra();
+      setMsgRegra(`Regra "${nova.padrao}" ${existente ? 'atualizada' : 'guardada'}. Use Propor classificação para a aplicar aos outros movimentos por classificar.`);
+    } catch (e) { setMsgRegra(mensagemErro(e)); }
+  }
   return (
     <Modal titulo="Classificar movimento" onFechar={onFechar}>
       <p className="small">{`${m.data.split('-').reverse().join('/')} · ${m.descricao} · `}<b>{eur(m.valor)}</b>{m.conciliadoCom ? ` · Conciliado com ${m.conciliadoCom}` : ''}</p>
@@ -370,6 +391,23 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
         <p className="small">{`Soma das linhas: ${eur(somaPartes)} · movimento: ${eur(m.valor)}`}{Math.abs(falta) >= 0.005 && <b>{` · falta repartir ${eur(falta)}`}</b>}</p>
         <p className="small muted">Os valores têm o sinal do movimento (negativos nas saídas).</p>
       </div>}
+      {!m.conciliadoCom && <>
+        <label className="opcao" style={{ marginTop: 8 }}><input type="checkbox" checked={regraAberta} onChange={(e) => setRegraAberta(e.target.checked)} /> Guardar como regra para os próximos movimentos</label>
+        {regraAberta && <div className="card" style={{ marginTop: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, alignItems: 'end' }}>
+            <label className="campo">Texto no descritivo do banco<input value={padrao} onChange={(e) => setPadrao(e.target.value)} /></label>
+            {!repartir && v.comunidadeId && <label className="opcao"><input type="checkbox" checked={comComunidade} onChange={(e) => setComComunidade(e.target.checked)} /> Incluir a comunidade ({comunidades.find((c) => c.id === v.comunidadeId)?.nome})</label>}
+          </div>
+          <p className="small">{v.categoria
+            ? <>Quando o descritivo tiver "{padrao.trim() || '…'}", propõe <b>{v.categoria}</b>{v.fornecedor ? `, fornecedor ${v.fornecedor}` : ''}{v.centroCusto ? `, ${v.centroCusto}` : ''}{comComunidade && !repartir && v.comunidadeId ? `, comunidade ${comunidades.find((c) => c.id === v.comunidadeId)?.nome}` : ''}.
+              {padrao.trim() && !temPalavra(m.descricao, padrao.trim()) ? ' Atenção: este movimento não tem esse texto.' : ` Neste mês: ${comTexto} movimento${comTexto === 1 ? '' : 's'} com este texto.`}
+              {existente && ' Já existe uma regra com este texto: vai ser atualizada.'}</>
+            : 'Escolha primeiro a categoria.'}</p>
+          {msgRegra && <div className="nota">{msgRegra}</div>}
+          <button className="sec" type="button" disabled={!padrao.trim() || !v.categoria} onClick={() => void guardarRegra()}>{existente ? 'Atualizar regra' : 'Guardar regra'}</button>
+          <p className="small muted">As regras ficam em Configuração → Regras dos extratos. As transferências recebidas (TFI, MB WAY, Trf.Imed), os depósitos, os reembolsos e os vencimentos previstos vêm antes das regras.</p>
+        </div>}
+      </>}
       <div className="acoes" style={{ marginTop: 14 }}>
         <button disabled={!ok || (!repartir && (!v.categoria || (!v.comunidadeId && !v.conciliadoCom)))} onClick={() => onAplicar(validar({ ...m, ...final(), nota: v.estado === 'rever' ? undefined : v.nota } as MovBanco, categorias))}>Validar</button>
         <button className="sec" disabled={!ok} onClick={() => onAplicar({ ...final(), estado: 'proposto', contabilizar: false })}>Guardar como proposta</button>

@@ -39,9 +39,17 @@ export const REGRAS_INICIAIS: RegraBanco[] = [
 /** Descritivo sem números, datas e referências, para reconhecer o mesmo pagamento noutros meses. */
 export const chaveDescricao = (d: string) => norm(d).replace(/[0-9]+/g, ' ').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
+/** Palavras do banco que não identificam o fornecedor (prefixos de operação). */
+const PREFIXOS = new Set(['compra', 'compras', 'trf', 'tfi', 'transf', 'transferencia', 'dd', 'debito', 'direto', 'pag', 'pagamento', 'serv', 'servicos', 'mb', 'way', 'imed', 'sepa', 'cartao', 'ref', 'pt', 'de', 'para', 'a']);
+/** Texto sugerido para uma regra: as primeiras palavras do descritivo, sem prefixos do banco, números nem datas. */
+export function sugerirPadrao(descricao: string): string {
+  const palavras = descricao.toUpperCase().split(/[^A-ZÀ-Ý0-9]+/).filter((w) => w && !/\d/.test(w) && !PREFIXOS.has(norm(w)));
+  return palavras.slice(0, 3).join(' ');
+}
+
 const eurTxt = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
 const dias = (a: string, b: string) => (new Date(b).getTime() - new Date(a).getTime()) / 86400000;
-const temPalavra = (texto: string, padrao: string) => {
+export const temPalavra = (texto: string, padrao: string) => {
   const p = norm(padrao).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(^|[^a-z0-9])${p}([^a-z0-9]|$)`).test(norm(texto));
 };
