@@ -241,3 +241,16 @@ describe('Unique ID do Jotform', () => {
     expect(l['Unique ID']).toBe('R20260031');
   });
 });
+
+describe('reembolso com data da fatura errada no Jotform', () => {
+  it('data da fatura muito depois da submissão (ex.: 2028 em vez de 2026): usa a data de submissão e guarda a original', async () => {
+    const { FONTES, mapearLinhas, sugerirMapa } = await import('../../src/lib/fontes');
+    const l = { 'Submission ID': 's1', 'Submission Date': '2026-11-01 14:26:21', 'Data Fatura': '2028-10-29', 'Valor em Euros (€)': '124,00', Comunidade: 'CCLx Moita', Categoria: 'Obras', 'Unique ID': 'R20260437' };
+    const ok = { ...l, 'Submission ID': 's2', 'Data Fatura': '2026-10-29', 'Unique ID': 'R20260436' };
+    const mapa = sugerirMapa(FONTES.despesas, Object.keys(l));
+    const { registos } = mapearLinhas('despesas', [l, ok], mapa);
+    expect(registos[0]).toMatchObject({ id: 's1', data: '2026-11-01', valor: 124, extra: { codigo: 'R20260437', dataFaturaOriginal: '2028-10-29' } });
+    expect(registos[1].data).toBe('2026-10-29');
+    expect(registos[1].extra?.dataFaturaOriginal).toBeUndefined();
+  });
+});
