@@ -134,12 +134,12 @@ export default function Assistencia() {
       <Estado aCarregar={lotes.aCarregar} erro={lotes.erro} vazio={!linhas.length} />
       {!!linhas.length && <>
         <div className="cards">
-          <Kpi titulo={unidade === 'domingo' ? 'Domingos com registo' : 'Eventos com registo'} valor={num(ano_.n)} sub={`${num(doMapa.length)} registos em ${mesesComDados} ${mesesComDados === 1 ? 'mês' : 'meses'}`} />
           <Kpi titulo="Média de jovens e adultos" valor={m1(media(ano_, 'adultos'))} sub={`por ${unidade}`} />
           <Kpi titulo="Média total de pessoas" valor={m1(media(ano_, 'total'))} sub={`por ${unidade}, todas as idades`} />
+          <Kpi titulo="Mês com maior média" valor={melhor && melhor.v >= 0 ? MESES[melhor.i] : '—'} sub={melhor && melhor.v >= 0 ? `${m1(melhor.v)} jovens e adultos` : undefined} />
+          <Kpi titulo={unidade === 'domingo' ? 'Domingos com registo' : 'Eventos com registo'} valor={num(ano_.n)} sub={`${num(doMapa.length)} registos em ${mesesComDados} ${mesesComDados === 1 ? 'mês' : 'meses'}`} />
           <Kpi titulo="Registos em falta" valor={num(emFaltaTotal)} negativo={emFaltaTotal > 0}
             sub={esperadosTotal ? <a href="#registos-em-falta" onClick={(e) => { e.preventDefault(); document.getElementById('registos-em-falta')?.scrollIntoView({ behavior: 'smooth' }); }}>{`de ${num(esperadosTotal)} esperados · ${num((1 - emFaltaTotal / esperadosTotal) * 100, 1)}% registados`}</a> : 'Sem eventos obrigatórios'} />
-          <Kpi titulo="Mês com maior média" valor={melhor && melhor.v >= 0 ? MESES[melhor.i] : '—'} sub={melhor && melhor.v >= 0 ? `${m1(melhor.v)} jovens e adultos` : undefined} />
         </div>
 
         <div className="card sec">
