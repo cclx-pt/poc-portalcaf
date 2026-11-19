@@ -288,3 +288,16 @@ export function previsaoSaldos(s: SaldoMes[], k = 3) {
   for (let mes = ultimo.mes + 1; mes <= 12; mes++) { saldo = r2(saldo + liquido); out.push({ mes, saldo }); }
   return out;
 }
+
+/** Meses com extrato importado, para limpar: os fechados aparecem marcados e não se podem escolher. */
+export function mesesParaLimpar(lotes: BancoLote[], fechados: Set<string>) {
+  const porMes = new Map<number, { mes: number; periodo: string; fechado: boolean; movimentos: number; contas: string[] }>();
+  for (const l of lotes) {
+    if (!l.registos.length) continue;
+    const x = porMes.get(l.mes) ?? { mes: l.mes, periodo: l.periodo, fechado: fechados.has(l.periodo), movimentos: 0, contas: [] };
+    x.movimentos += l.registos.length;
+    if (!x.contas.includes(l.contaId)) x.contas.push(l.contaId);
+    porMes.set(l.mes, x);
+  }
+  return [...porMes.values()].sort((a, b) => a.mes - b.mes).map((x) => ({ ...x, contas: x.contas.sort() }));
+}

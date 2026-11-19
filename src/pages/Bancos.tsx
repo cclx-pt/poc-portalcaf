@@ -5,10 +5,10 @@ import { LogoBanco, LogoConta } from '../components/LogoBanco';
 import SaldosBancos from './SaldosBancos';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
-import { apagarBancoLote, auditar, gravar, gravarBancoLote, listarBanco, listarComunidades, listarContas } from '../lib/db';
+import { apagarBancoLote, auditar, gravar, gravarBancoLote, listarBanco, listarComunidades, listarContas, listarFechos } from '../lib/db';
 import { CamposExtrato, limparMapa } from '../components/MapaExtratoEditor';
 import { lerFicheiro } from '../lib/ficheiros';
-import { NOME_BANCO, bancoDaConta, maioresMovimentos, detetarBanco, dividirPorMes, escolherMapa, mapaCompleto, mapaDoBanco, mapasDasContas, mapearExtrato, resumoMes, sugerirMapaBanco, type Banco, type MapaBanco } from '../lib/banco';
+import { NOME_BANCO, bancoDaConta, maioresMovimentos, detetarBanco, dividirPorMes, escolherMapa, mesesParaLimpar, mapaCompleto, mapaDoBanco, mapasDasContas, mapearExtrato, resumoMes, sugerirMapaBanco, type Banco, type MapaBanco } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Conta, EstadoMov, MovBanco } from '../lib/types';
 import type { Linha } from '../lib/fontes';
@@ -63,7 +63,7 @@ export default function Bancos() {
         </div>
         <div className="acoes">
           <button onClick={() => setImportar(true)}>Importar extrato</button>
-          <button className="sec" onClick={() => setLimpar(true)} disabled={!lotesMes.length}>Limpar extrato</button>
+          <button className="sec" onClick={() => setLimpar(true)} disabled={!(banco.dados ?? []).some((l) => l.registos.length)}>Limpar extrato…</button>
         </div>
       </div>
 
@@ -167,7 +167,7 @@ export default function Bancos() {
       </>}
 
       {importar && <ImportarExtrato contas={ativas} onFechar={() => setImportar(false)} onFeito={() => void banco.recarregar()} />}
-      {limpar && <LimparExtrato contas={ativas} lotes={(banco.dados ?? []).filter((l) => l.mes === mes)} mes={mes} ano={ano} onFechar={() => setLimpar(false)} onFeito={() => void banco.recarregar()} />}
+      {limpar && <LimparExtrato contas={ativas} lotes={banco.dados ?? []} mes={mes} ano={ano} onFechar={() => setLimpar(false)} onFeito={() => void banco.recarregar()} />}
     </>
   );
 }
@@ -293,43 +293,71 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
   );
 }
 
-/** Limpa (apaga) o extrato de um mês de uma ou mais contas. Os meses fechados não se podem limpar. */
+/** Limpa (apaga) o extrato dos meses abertos escolhidos, de uma ou mais contas. Os meses fechados não se podem limpar. */
 function LimparExtrato({ contas, lotes, mes, ano, onFechar, onFeito }: { contas: Conta[]; lotes: BancoLote[]; mes: number; ano: number; onFechar: () => void; onFeito: () => void }) {
   const { acesso } = useAuth();
-  const comExtrato = contas.filter((c) => lotes.some((l) => l.contaId === c.id));
+  const fechos = useCarregar(listarFechos, []);
+  const fechados = new Set((fechos.dados ?? []).filter((f) => f.estado === 'fechado').map((f) => f.periodo));
+  const meses = mesesParaLimpar(lotes, fechados);
+  const abertos = meses.filter((m) => !m.fechado);
+  const comExtrato = contas.filter((c) => lotes.some((l) => l.contaId === c.id && l.registos.length));
+  const [escolhidos, setEscolhidos] = useState<number[] | null>(null);
   const [escolhidas, setEscolhidas] = useState<string[]>(comExtrato.map((c) => c.id));
   const [msg, setMsg] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  const alvo = lotes.filter((l) => escolhidas.includes(l.contaId));
+  // Por omissão: o mês que está a ver, se estiver aberto (só depois de saber que meses estão fechados).
+  const mesesSel = escolhidos ?? (fechos.dados ? abertos.filter((m) => m.mes === mes).map((m) => m.mes) : []);
+  const alvo = lotes.filter((l) => mesesSel.includes(l.mes) && !fechados.has(l.periodo) && escolhidas.includes(l.contaId) && l.registos.length);
+  const nMov = alvo.reduce((s0, l) => s0 + l.registos.length, 0);
   const classificados = alvo.flatMap((l) => l.registos).filter((m) => m.categoria || m.comunidadeId || m.contabilizar || m.conciliadoCom).length;
+  const nomesMeses = [...new Set(alvo.map((l) => l.mes))].sort((a, b) => a - b).map((m) => MESES[m - 1]).join(', ');
+  const alternar = <T,>(xs: T[], x: T) => (xs.includes(x) ? xs.filter((y) => y !== x) : [...xs, x]);
+
   async function apagar() {
-    if (!confirm(`Apagar ${alvo.reduce((s, l) => s + l.registos.length, 0)} movimentos de ${MESES[mes - 1]} ${ano}${classificados ? `, incluindo ${classificados} classificados` : ''}? Não se pode desfazer (pode voltar a importar o extrato).`)) return;
+    if (!confirm(`Apagar ${nMov} movimentos de ${nomesMeses} de ${ano}${classificados ? `, incluindo ${classificados} classificados` : ''}? Não se pode desfazer (pode voltar a importar o extrato).`)) return;
     setOcupado(true);
     const feitos: string[] = []; const falhas: string[] = [];
     for (const l of alvo) {
-      const nome = contas.find((c) => c.id === l.contaId)?.nome ?? l.contaId;
+      const nome = `${contas.find((c) => c.id === l.contaId)?.nome ?? l.contaId} (${MESES[l.mes - 1]})`;
       try { await apagarBancoLote(l.id); feitos.push(nome); } catch { falhas.push(nome); }
     }
-    if (feitos.length) await auditar(acesso!.email, 'limpar extrato', `${MESES[mes - 1]} ${ano}: ${feitos.join(', ')}`);
+    if (feitos.length) await auditar(acesso!.email, 'limpar extrato', `${ano}: ${feitos.join(', ')}`);
     setOcupado(false);
     if (falhas.length) setMsg(`Não foi possível limpar: ${falhas.join(', ')} (mês fechado ou sem permissão).`);
     onFeito();
     if (!falhas.length) onFechar();
   }
   return (
-    <Modal titulo={`Limpar extrato: ${MESES[mes - 1]} ${ano}`} onFechar={onFechar}>
-      <p className="small">Apaga os movimentos importados deste mês das contas escolhidas, para voltar a importar o extrato. As classificações desses movimentos perdem-se. Os meses fechados não se podem limpar.</p>
+    <Modal titulo={`Limpar extrato · ${ano}`} onFechar={onFechar}>
+      <p className="small">Apaga os movimentos importados dos meses e contas escolhidos, para voltar a importar o extrato. As classificações desses movimentos perdem-se. Só os meses abertos se podem limpar: para limpar um mês fechado, reabra-o primeiro no Fecho mensal.</p>
       {msg && <div className="aviso">{msg}</div>}
-      {comExtrato.map((c) => {
-        const l = lotes.find((x) => x.contaId === c.id)!;
-        return (
+      <Estado aCarregar={fechos.aCarregar} erro={fechos.erro} vazio={!meses.length} />
+      {!!meses.length && !fechos.aCarregar && <>
+        <div className="linha" style={{ justifyContent: 'space-between', marginTop: 8 }}>
+          <h3 style={{ margin: 0 }}>Meses</h3>
+          {abertos.length > 1 && <span className="small">
+            <button className="link" onClick={() => setEscolhidos(abertos.map((m) => m.mes))}>Todos os abertos</button> · <button className="link" onClick={() => setEscolhidos([])}>Nenhum</button>
+          </span>}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 4 }}>
+          {meses.map((m) => (
+            <label key={m.mes} className="opcao" style={{ display: 'flex', opacity: m.fechado ? 0.55 : 1 }} title={m.fechado ? 'Mês fechado: reabra-o no Fecho mensal para o poder limpar' : undefined}>
+              <input type="checkbox" disabled={m.fechado} checked={!m.fechado && mesesSel.includes(m.mes)} onChange={() => setEscolhidos(alternar(mesesSel, m.mes))} />
+              {MESES[m.mes - 1]} · {m.movimentos} mov.{m.fechado && <> <span className="etiqueta preta">Fechado</span></>}
+            </label>
+          ))}
+        </div>
+        {!abertos.length && <p className="small muted">Todos os meses com extrato estão fechados.</p>}
+        <h3 style={{ marginTop: 12 }}>Contas</h3>
+        {comExtrato.map((c) => (
           <label key={c.id} className="opcao" style={{ display: 'flex' }}>
-            <input type="checkbox" checked={escolhidas.includes(c.id)} onChange={() => setEscolhidas(escolhidas.includes(c.id) ? escolhidas.filter((x) => x !== c.id) : [...escolhidas, c.id])} />
-            <LogoConta conta={c} /> {c.nome} · {l.registos.length} movimentos
+            <input type="checkbox" checked={escolhidas.includes(c.id)} onChange={() => setEscolhidas(alternar(escolhidas, c.id))} />
+            <LogoConta conta={c} /> {c.nome}
           </label>
-        );
-      })}
-      <div className="acoes" style={{ marginTop: 12 }}>
+        ))}
+      </>}
+      <p className="small" style={{ marginTop: 10 }}>{alvo.length ? `Vai limpar ${nMov} movimentos (${nomesMeses}).` : 'Escolha pelo menos um mês aberto e uma conta.'}</p>
+      <div className="acoes" style={{ marginTop: 8 }}>
         <button disabled={!alvo.length || ocupado} onClick={() => void apagar()}>{ocupado ? 'A limpar…' : 'Limpar extrato'}</button>
         <button className="sec" onClick={onFechar}>Cancelar</button>
       </div>
