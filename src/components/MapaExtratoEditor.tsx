@@ -28,6 +28,25 @@ export function CamposExtrato({ colunas, mapa, onChange }: { colunas: string[]; 
   );
 }
 
+/** As primeiras linhas do ficheiro, para saber o que tem cada coluna; as colunas escolhidas mostram o campo. */
+export function AmostraExtrato({ colunas, linhas, mapa, n = 3 }: { colunas: string[]; linhas: Linha[]; mapa: MapaBanco; n?: number }) {
+  if (!colunas.length || !linhas.length) return null;
+  const campoDe = (c: string) => CAMPOS_EXTRATO.filter(([k]) => mapa[k] === c).map(([, l]) => l.replace(' *', '')).join(', ');
+  return (
+    <div className="amostra-extrato">
+      <p className="small muted" style={{ margin: '8px 0 4px' }}>{`Primeiras ${Math.min(n, linhas.length)} linhas do ficheiro:`}</p>
+      <div className="tabela" style={{ maxHeight: 'none' }}><table>
+        <thead>
+          <tr>{colunas.map((c) => <th key={c} className={campoDe(c) ? 'mapeada' : ''}>{c}{campoDe(c) && <div className="small">{`→ ${campoDe(c)}`}</div>}</th>)}</tr>
+        </thead>
+        <tbody>{linhas.slice(0, n).map((l, i) => (
+          <tr key={i}>{colunas.map((c) => <td key={c} className={campoDe(c) ? 'mapeada small' : 'small'}>{String(l[c] ?? '')}</td>)}</tr>
+        ))}</tbody>
+      </table></div>
+    </div>
+  );
+}
+
 export const limparMapa = (m: MapaBanco) => Object.fromEntries(Object.entries(m).filter(([, v]) => v)) as MapaBanco;
 
 /** Resumo do mapeamento de uma conta, para a tabela das contas. */
@@ -87,7 +106,9 @@ export function EditorConta({ conta, email, onFechar, onGuardado }: { conta: Con
       <p className="small">Carregue um extrato desta conta, tal como sai do homebanking, e indique as colunas. Ao importar, o portal reconhece o ficheiro, escolhe esta conta e aplica estas colunas.</p>
       <button className="sec" onClick={() => document.getElementById('exemplo-extrato')?.click()}>Carregar extrato de exemplo</button>
       <input id="exemplo-extrato" type="file" accept=".csv,.xlsx,.xls,.txt" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void lerExemplo(f); }} />
+      <AmostraExtrato colunas={colunas} linhas={linhas} mapa={mapa} />
       {!!colunas.length && <div style={{ marginTop: 10 }}><CamposExtrato colunas={colunas} mapa={mapa} onChange={setMapa} /></div>}
+      {!!colunas.length && !linhas.length && <p className="small muted">Carregue um extrato de exemplo para ver as primeiras linhas de cada coluna.</p>}
       {!!colunas.length && !mapaCompleto(mapa) && <p className="small muted">Indique a data e o montante (ou o débito e o crédito).</p>}
       {teste && <p className="small">Teste: {teste.movimentos.length} movimentos válidos{teste.rejeitadas.length ? `, ${teste.rejeitadas.length} linhas ignoradas` : ''}.</p>}
       {!!conta.mapa && <p className="small"><button className="link" onClick={() => { setMapa({}); setColunas([]); setLinhas([]); }}>Apagar o mapeamento</button></p>}

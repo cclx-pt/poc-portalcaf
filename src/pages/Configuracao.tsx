@@ -369,11 +369,11 @@ export default function Configuracao() {
         <p className="muted">Os <b>sinónimos</b> ligam os nomes usados no Jotform (ex.: Dízimos, Coletas em dinheiro, Limpeza) às categorias do plano. Movimentos <b>financeiros</b> (depósitos, transferências internas, empréstimos, adiantamentos) não entram nos resultados.</p>
         <Estado aCarregar={cats.aCarregar} erro={cats.erro} vazio={!catsVis.length} />
         {!!catsVis.length && <div className="tabela"><table>
-          <thead><tr><th>Categoria</th><th>Tipo</th><th>Rubrica</th><th>Âmbito</th><th>Nível</th><th>Sinónimos</th><th>Estado</th><th /></tr></thead>
+          <thead><tr><th>Rubrica</th><th>Categoria</th><th>Tipo</th><th>Âmbito</th><th>Nível</th><th>Sinónimos</th><th>Estado</th><th /></tr></thead>
           <tbody>{catsVis.map((c) => (
             <tr key={c.id}>
-              <td>{c.nome}</td><td>{TIPO_CAT[c.tipo]}</td>
               <td>{c.rubrica || <span className="muted">{rubricaInicial(c.nome, c.tipo)} (proposta)</span>}</td>
+              <td>{c.nome}</td><td>{TIPO_CAT[c.tipo]}</td>
               <td>{c.ambito === 'geral' ? <span className="etiqueta preta">Geral</span> : 'Local'}</td>
               <td><span className={'etiqueta' + (c.nivel === 'confidencial' ? ' preta' : '')}>{NIVEL_LABEL[c.nivel]}</span></td>
               <td className="small">{(c.sinonimos ?? []).join(', ') || <span className="muted">—</span>}</td>
@@ -417,9 +417,9 @@ export default function Configuracao() {
         <p className="muted">Quando o descritivo do banco contém o texto, a classificação proposta usa esta categoria, fornecedor e centro de custo. A conciliação com o Jotform, os vencimentos previstos e a memória dos movimentos já classificados vêm antes das regras.</p>
         <Estado aCarregar={regras.aCarregar} erro={regras.erro} vazio={!regras.dados?.length} />
         {!!regras.dados?.length && <div className="tabela"><table>
-          <thead><tr><th>Texto no banco</th><th>Categoria</th><th>Fornecedor</th><th>Centro de custo</th><th>Estado</th><th /></tr></thead>
+          <thead><tr><th>Texto no banco</th><th>Categoria</th><th>Comunidade</th><th>Centro de custo</th><th>Fornecedor</th><th>Estado</th><th /></tr></thead>
           <tbody>{(regras.dados ?? []).map((x) => (
-            <tr key={x.id}><td>{x.padrao}</td><td>{x.categoria}</td><td>{x.fornecedor ?? '—'}</td><td>{x.centroCusto ?? '—'}</td><td>{ativoTxt(x.ativo) ?? 'Ativa'}</td>
+            <tr key={x.id}><td>{x.padrao}</td><td>{x.categoria}</td><td>{x.comunidadeId ? (coms.dados ?? []).find((c) => c.id === x.comunidadeId)?.nome ?? x.comunidadeId : '—'}</td><td>{x.centroCusto ?? '—'}</td><td>{x.fornecedor ?? '—'}</td><td>{ativoTxt(x.ativo) ?? 'Ativa'}</td>
               <td><button className="link" onClick={() => setRegra(x)}>Editar</button> · <button className="link" onClick={() => void apagarRegra(x)}>Apagar</button></td></tr>
           ))}</tbody>
         </table></div>}
@@ -433,16 +433,16 @@ export default function Configuracao() {
               <select value={regra.categoria} onChange={(e) => setRegra({ ...regra, categoria: e.target.value })}>
                 <option value="">—</option>{(cats.dados ?? []).filter((c) => c.codigo && c.ativo !== false).map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
               </select></label>
-            <label className="campo">Fornecedor<input value={regra.fornecedor ?? ''} list="forn-regras" onChange={(e) => setRegra({ ...regra, fornecedor: e.target.value || undefined })} />
-              <datalist id="forn-regras">{(dims.dados ?? []).filter((d) => d.tipo === 'fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist></label>
-            <label className="campo">Centro de custo
-              <select value={regra.centroCusto ?? ''} onChange={(e) => setRegra({ ...regra, centroCusto: e.target.value || undefined })}>
-                <option value="">—</option>{(dims.dados ?? []).filter((d) => d.tipo === 'centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
-              </select></label>
             <label className="campo">Comunidade (opcional)
               <select value={regra.comunidadeId ?? ''} onChange={(e) => setRegra({ ...regra, comunidadeId: e.target.value || undefined })}>
                 <option value="">—</option>{(coms.dados ?? []).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select></label>
+            <label className="campo">Centro de custo
+              <select value={regra.centroCusto ?? ''} onChange={(e) => setRegra({ ...regra, centroCusto: e.target.value || undefined })}>
+                <option value="">—</option>{(dims.dados ?? []).filter((d) => d.tipo === 'centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
+              </select></label>
+            <label className="campo">Fornecedor<input value={regra.fornecedor ?? ''} list="forn-regras" onChange={(e) => setRegra({ ...regra, fornecedor: e.target.value || undefined })} />
+              <datalist id="forn-regras">{(dims.dados ?? []).filter((d) => d.tipo === 'fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist></label>
             <label className="opcao"><input type="checkbox" checked={regra.ativo !== false} onChange={(e) => setRegra({ ...regra, ativo: e.target.checked })} /> Ativa</label>
           </div>
           <div className="acoes" style={{ marginTop: 14 }}>

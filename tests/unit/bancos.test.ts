@@ -153,3 +153,17 @@ describe('extratos sem linha de cabeçalho e verificação dos saldos', () => {
     expect(melhorColunaData(linhas, { data: 'A', descricao: 'C', valor: 'D', saldo: 'E' }, ['A', 'B', 'C', 'D', 'E'])).toBeNull();
   });
 });
+
+describe('amostra do extrato', () => {
+  it('mostra as 3 primeiras linhas e o campo de cada coluna escolhida', async () => {
+    const { renderToString } = await import('react-dom/server');
+    const { createElement } = await import('react');
+    const { AmostraExtrato } = await import('../../src/components/MapaExtratoEditor');
+    const linhas = [1, 2, 3, 4].map((i) => ({ 'Coluna 1': `0${i}/11/2026`, 'Coluna 2': `Mov ${i}`, 'Coluna 3': `-${i},00` }));
+    const html = renderToString(createElement(AmostraExtrato, { colunas: ['Coluna 1', 'Coluna 2', 'Coluna 3'], linhas, mapa: { data: 'Coluna 1', valor: 'Coluna 3' } }));
+    expect(html).toContain('Mov 3');
+    expect(html).not.toContain('Mov 4');
+    expect(html).toContain('→ Data');
+    expect(html).toContain('→ Montante (com sinal)');
+  });
+});
