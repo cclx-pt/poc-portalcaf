@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Building2, CalendarCheck, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, ListChecks, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Building2, CalendarCheck, CalendarX, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, ListChecks, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { useCarregar, useFiltros, Rodape } from './ui';
 import { listarComunidades } from '../lib/db';
@@ -23,6 +23,7 @@ const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
   { id: 'registos', titulo: 'Registos', itens: [
     { to: '/registos/presencas', nome: 'Presenças por evento', Icone: CalendarCheck, ver: privado, end: true },
     { to: '/registos/presencas/novo', nome: 'Registar presenças', Icone: ClipboardList, ver: (p) => privado(p) && p.pode('registar') },
+    { to: '/registos/presencas/em-falta', nome: 'Registos em falta', Icone: CalendarX, ver: (p) => privado(p) && p.pode('registar') },
     { to: '/registos/batismos', nome: 'Batismos', Icone: Droplets, ver: privado, etiqueta: 'em desenvolvimento' },
     { to: '/registos/conversoes', nome: 'Conversões', Icone: HeartHandshake, ver: privado, etiqueta: 'em desenvolvimento' },
   ] },
