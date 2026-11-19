@@ -197,6 +197,11 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
     return () => { vivo = false; };
   }, [anos]);
   const previa = res && contaId && existentes ? dividirPorMes(contaId, res.movimentos, existentes, acesso!.email) : null;
+  // Meses a importar: por omissão todos os abertos; os fechados não se podem escolher.
+  const fechosImp = useCarregar(listarFechos, []);
+  const fechadosImp = new Set((fechosImp.dados ?? []).filter((f) => f.estado === 'fechado').map((f) => f.periodo));
+  const [mesesSel, setMesesSel] = useState<string[] | null>(null);
+  const escolhidosImp = previa ? previa.lotes.filter((l) => !fechadosImp.has(l.periodo) && (mesesSel ?? previa.lotes.map((x) => x.id)).includes(l.id)) : [];
   // Verificação antes de gravar: os saldos encadeiam (no ficheiro e com os meses já importados desta conta)?
   const sugestaoData = useMemo(() => (linhas.length && mapaCompleto(mapa) ? melhorColunaData(linhas, mapa, colunas) : null), [linhas, mapa, colunas]);
   const avisosPrevia = previa ? verificarExtratos([...(existentes ?? []).filter((e) => e.contaId === contaId && !previa.lotes.some((l) => l.id === e.id)), ...previa.lotes], [contaId]) : [];
@@ -210,7 +215,7 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
       const g = escolherMapa(t.colunas, mapasDasContas(contas));
       const contaG = g ? contas.find((c) => c.id === g.contaId) : undefined;
       const b = contaG ? bancoDaConta(contaG) : detetarBanco(t.colunas);
-      setNome(f.name); setColunas(t.colunas); setLinhas(t.linhas); setBancoFicheiro(contaG ? null : b); setDaConta(!!g);
+      setNome(f.name); setColunas(t.colunas); setLinhas(t.linhas); setBancoFicheiro(contaG ? null : b); setDaConta(!!g); setMesesSel(null);
       setMapa(g ? g.campos : b ? mapaDoBanco(b, t.colunas) : sugerirMapaBanco(t.colunas));
       setAjustar(!g && !b);
       const sug = b ? contas.filter((c) => bancoDaConta(c) === b) : [];
@@ -238,16 +243,17 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
     } catch (e) { setMsg(mensagemErro(e)); }
   }
   async function gravarMeses() {
-    if (!previa || !res) return;
+    if (!previa || !res || !escolhidosImp.length) return;
     setOcupado(true);
     try {
       const falhas: string[] = [];
-      for (const l of previa.lotes) {
+      for (const l of escolhidosImp) {
         try { await gravarBancoLote(l); } catch { falhas.push(periodoPt(l.periodo)); }
       }
       const conta = contas.find((c) => c.id === contaId)!;
-      await auditar(acesso!.email, 'importar extrato', `${conta.nome} (${nome}): ${res.movimentos.length} movimentos em ${previa.lotes.length} meses${falhas.length ? `; não gravados (mês fechado?): ${falhas.join(', ')}` : ''}`);
-      setMsg(`Gravados ${previa.lotes.length - falhas.length} meses de ${conta.nome}. Use Propor classificação em cada mês para conciliar com o Jotform e classificar.${falhas.length ? ` Não gravados (mês fechado ou sem permissão): ${falhas.join(', ')}.` : ''}`);
+      const nMov = escolhidosImp.reduce((s0, l) => s0 + l.registos.length, 0);
+      await auditar(acesso!.email, 'importar extrato', `${conta.nome} (${nome}): ${nMov} movimentos em ${escolhidosImp.length} meses (${escolhidosImp.map((l) => periodoPt(l.periodo)).join(', ')})${falhas.length ? `; não gravados (mês fechado?): ${falhas.join(', ')}` : ''}`);
+      setMsg(`Gravados ${escolhidosImp.length - falhas.length} meses de ${conta.nome}. Use Propor classificação em cada mês para conciliar com o Jotform e classificar.${falhas.length ? ` Não gravados (mês fechado ou sem permissão): ${falhas.join(', ')}.` : ''}`);
       onFeito();
     } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
@@ -290,15 +296,20 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
       {previa && (
         <>
           <div className="tabela" style={{ maxHeight: 300, marginTop: 8 }}><table>
-            <thead><tr><th>Mês</th><th className="num">Movimentos</th><th className="num">Já gravados</th><th className="num">Classificações mantidas</th><th className="num">Saldo final</th></tr></thead>
+            <thead><tr><th><input type="checkbox" aria-label="Todos os meses abertos" checked={escolhidosImp.length === previa.lotes.filter((l) => !fechadosImp.has(l.periodo)).length && escolhidosImp.length > 0}
+              onChange={(e) => setMesesSel(e.target.checked ? previa.lotes.map((l) => l.id) : [])} /></th><th>Mês</th><th className="num">Movimentos</th><th className="num">Já gravados</th><th className="num">Classificações mantidas</th><th className="num">Saldo final</th></tr></thead>
             <tbody>{previa.lotes.map((l, i) => (
-              <tr key={l.id}><td>{periodoPt(l.periodo)}</td><td className="num">{previa.meses[i].movimentos}</td>
+              <tr key={l.id} className={fechadosImp.has(l.periodo) ? 'muted' : ''}>
+                <td><input type="checkbox" disabled={fechadosImp.has(l.periodo)} aria-label={`Importar ${periodoPt(l.periodo)}`} checked={escolhidosImp.some((x) => x.id === l.id)}
+                  onChange={() => { const atual = mesesSel ?? previa.lotes.map((x) => x.id); setMesesSel(atual.includes(l.id) ? atual.filter((x) => x !== l.id) : [...atual, l.id]); }} /></td>
+                <td>{periodoPt(l.periodo)}{fechadosImp.has(l.periodo) && <> <span className="etiqueta preta">Fechado</span></>}</td><td className="num">{previa.meses[i].movimentos}</td>
                 <td className="num">{previa.meses[i].antes ? `${previa.meses[i].antes} (substituídos)` : '—'}</td>
                 <td className="num">{previa.meses[i].classificadosMantidos || '—'}</td><td className="num">{eur(resumoMes(l.registos).saldoFinal)}</td></tr>
             ))}</tbody>
           </table></div>
           <div className="acoes" style={{ marginTop: 10 }}>
-            <button disabled={ocupado} onClick={() => void gravarMeses()}>{ocupado ? 'A gravar…' : `Gravar ${previa.lotes.length} meses`}</button>
+            <button disabled={ocupado || !escolhidosImp.length} onClick={() => void gravarMeses()}>{ocupado ? 'A gravar…' : `Importar ${escolhidosImp.length} ${escolhidosImp.length === 1 ? 'mês' : 'meses'}`}</button>
+            <span className="small muted" style={{ alignSelf: 'center' }}>Escolha os meses a importar; os outros meses da conta não mudam. Os meses fechados não se podem importar.</span>
             <button className="sec" onClick={onFechar}>Fechar</button>
           </div>
         </>

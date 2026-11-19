@@ -229,3 +229,25 @@ describe('filtro por descrição', () => {
     expect(descricaoContem('QUALQUER', '  ')).toBe(true);
   });
 });
+
+describe('cruzar à mão com o Jotform e ver os registos conciliados', () => {
+  const desp = [lote('despesas', 'moita', [
+    { id: 's1', data: '2026-03-02', valor: 40, extra: { codigo: 'R20260100' } },
+    { id: 's2', data: '2026-03-04', valor: 41.5, extra: { codigo: 'R20260101' } },
+    { id: 's3', data: '2026-02-10', valor: 40, extra: { codigo: 'R20260050' } },
+    { id: 's4', data: '2026-03-05', valor: 90 },
+  ]), lote('despesas', 'almada', [{ id: 's5', data: '2026-03-06', valor: 39 }])];
+  it('lista reembolsos da mesma semana (±7 dias) com valor aproximado, os mais parecidos primeiro', async () => {
+    const { candidatosReembolso } = await import('../../src/lib/classificacaoBanco');
+    const c = candidatosReembolso(mov('1', '2026-03-05', -40, 'TRF P/ JOAO'), desp);
+    expect(c.map((x) => x.id)).toEqual(['s1', 's5', 's2']);
+    expect(c[0]).toMatchObject({ comunidadeId: 'moita', codigo: 'R20260100', diferenca: 0 });
+  });
+  it('mostra os registos do Jotform de um movimento conciliado (reembolso, depósito, várias despesas)', async () => {
+    const { registosConciliados } = await import('../../src/lib/classificacaoBanco');
+    const deps = [lote('depositos', 'sede', [{ id: 'd1', data: '2026-03-03', valor: 135 }])];
+    expect(registosConciliados({ ...mov('1', '2026-03-05', -40, 'X'), conciliadoCom: 'despesas:s1' }, { despesas: desp, depositos: deps, contribuir: [] }).map((x) => x.id)).toEqual(['s1']);
+    expect(registosConciliados({ ...mov('2', '2026-03-05', -81.5, 'X'), conciliadoCom: 'despesas:s1,s2' }, { despesas: desp, depositos: deps, contribuir: [] }).map((x) => x.id)).toEqual(['s1', 's2']);
+    expect(registosConciliados({ ...mov('3', '2026-03-05', 135, 'X'), conciliadoCom: 'depositos:d1' }, { despesas: desp, depositos: deps, contribuir: [] })[0]).toMatchObject({ id: 'd1', comunidadeId: 'sede', origem: 'depositos' });
+  });
+});

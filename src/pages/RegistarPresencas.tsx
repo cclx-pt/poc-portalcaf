@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, gravarLote, lerConfigAssistencia, lerLote, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
-import { domingosEmFalta } from '../lib/domingos';
+import { registosEmFalta } from '../lib/domingos';
 import { dataPT, hoje, norm, num } from '../lib/format';
 import { acrescentarRegisto, comunidadesDoUtilizador, filtrarLotesPresenca, type FiltroPresencas, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
 import { recalcularAno } from '../lib/recalcular';
@@ -101,7 +101,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
       await gravarLote(lote);
       await auditar(acesso!.email, 'registar presenças', `${dataPt(e.data)} · ${e.evento}${e.descricao ? ` (${e.descricao})` : ''} · ${nomes.get(e.comunidadeId) ?? e.comunidadeId} · ${e.adultos} jovens e adultos`);
       if (podeRecalcular) await recalcularAno(acesso!, Number(e.data.slice(0, 4)));
-      setSucesso({ contagens: recolhe, entrada: e, comunidade: nomes.get(e.comunidadeId) ?? e.comunidadeId, nota: podeRecalcular ? 'Resumos recalculados.' : 'Já aparece no mapa de presenças e nos domingos em falta; as médias atualizam no próximo cálculo.' });
+      setSucesso({ contagens: recolhe, entrada: e, comunidade: nomes.get(e.comunidadeId) ?? e.comunidadeId, nota: podeRecalcular ? 'Resumos recalculados.' : 'Já aparece no mapa de presenças e nos registos em falta; as médias atualizam no próximo cálculo.' });
       apagarRascunho(armazemLocal(), acesso!.email, idRascunho(e));
       setRascunhos(lerRascunhos(armazemLocal(), acesso!.email));
       setE({ ...vazio(e.comunidadeId), data: e.data });
@@ -219,41 +219,43 @@ export function ResumoRegistoGuardado({ entrada: e, comunidade, nota, aoFechar, 
   );
 }
 
-/** Domingos sem registo de celebração, por comunidade do utilizador. Tocar num domingo abre o registo desse dia. */
-export function DomingosEmFaltaLista({ ano, hoje: hojeIso, comunidades, lotes, aoEscolher, compacto }: {
-  ano: number; hoje: string; comunidades: Comunidade[]; lotes: Lote[]; aoEscolher: (data: string, comunidadeId: string) => void;
-  /** Painel lateral: título mais pequeno e só as comunidades com domingos em falta. */
+/** Registos em falta (eventos com contagem obrigatória), por comunidade do utilizador. Tocar num abre o registo desse dia e evento. */
+export function RegistosEmFaltaLista({ ano, hoje: hojeIso, comunidades, lotes, aoEscolher, compacto }: {
+  ano: number; hoje: string; comunidades: Comunidade[]; lotes: Lote[]; aoEscolher: (data: string, comunidadeId: string, evento: string) => void;
+  /** Painel lateral: título mais pequeno e só as comunidades com registos em falta. */
   compacto?: boolean;
 }) {
   const config = useCarregar(lerConfigAssistencia, []);
   const excecoes = useCarregar(listarExcecoes, []);
   if (config.aCarregar || excecoes.aCarregar) return null;
-  const evento = config.dados?.eventoCelebracao ?? null;
-  const falta = domingosEmFalta({ ano, hoje: hojeIso, comunidades, assistencia: lotes, excecoes: excecoes.dados ?? [], evento });
+  const falta = registosEmFalta({ ano, hoje: hojeIso, comunidades, assistencia: lotes, excecoes: excecoes.dados ?? [], eventos: eventosEfetivos(config.dados), eventoCelebracao: config.dados?.eventoCelebracao ?? null });
   const nomes = new Map(comunidades.map((c) => [c.id, c.nome]));
   const mostrar = compacto ? falta.filter((f) => f.emFalta.length) : falta;
   const totalFalta = falta.reduce((s0, f) => s0 + f.emFalta.length, 0);
+  const eventosObrig = [...new Set(falta.flatMap((f) => f.emFalta.map((x) => x.evento)))];
   return (
     <div className={compacto ? 'domingos-falta compacto' : 'sec domingos-falta'}>
-      {compacto ? <h2 style={{ marginTop: 0 }}>Domingos em falta <span className={totalFalta ? 'neg' : 'muted'}>({num(totalFalta)})</span></h2> : <h2>Domingos em falta</h2>}
-      <p className="muted small">Domingos até hoje sem registo {evento ? `de "${evento}"` : 'de presenças'}. Não contam as exceções (cultos conjuntos, retiros). Toque num domingo para o registar.</p>
-      {compacto && !totalFalta && falta.length > 0 && <p className="ok-box small">Todos os domingos estão registados.</p>}
+      {compacto ? <h2 style={{ marginTop: 0 }}>Registos em falta <span className={totalFalta ? 'neg' : 'muted'}>({num(totalFalta)})</span></h2> : <h2>Registos em falta</h2>}
+      <p className="muted small">Dias até ontem sem registo dos eventos com contagem obrigatória{eventosObrig.length ? ` (${eventosObrig.join(', ')})` : ''}. Não contam as datas sem assistência esperada (exceções). Toque num registo em falta para o registar.</p>
+      {compacto && !totalFalta && falta.length > 0 && <p className="ok-box small">Está tudo registado.</p>}
       {mostrar.map((f) => (
         <div key={f.comunidadeId} className="card df-comunidade">
           <div className="df-cabeca"><b>{nomes.get(f.comunidadeId) ?? f.comunidadeId}</b>
             <span className={f.emFalta.length ? 'neg' : 'muted'}>{f.emFalta.length ? `${num(f.emFalta.length)} em falta` : 'Tudo registado'}</span>
-            <span className="muted small">{num(f.comRegisto)} de {num(f.esperados)} domingos</span>
+            <span className="muted small">{num(f.comRegisto)} de {num(f.esperados)} registos</span>
           </div>
           {f.emFalta.length > 0 && (
             <div className="df-datas">
-              {[...f.emFalta].reverse().map((d) => (
-                <button key={d} className="df-data" onClick={() => aoEscolher(d, f.comunidadeId)} aria-label={`Registar ${dataPt(d)} em ${nomes.get(f.comunidadeId) ?? f.comunidadeId}`}>{dataPt(d)} <span className="small">Registar</span></button>
+              {[...f.emFalta].reverse().map((x) => (
+                <button key={`${x.data}|${x.evento}`} className="df-data" onClick={() => aoEscolher(x.data, f.comunidadeId, x.evento)} aria-label={`Registar ${x.evento} de ${dataPt(x.data)} em ${nomes.get(f.comunidadeId) ?? f.comunidadeId}`}>
+                  <span>{dataPt(x.data)}</span> <span className="df-evento">{x.evento}</span> <span className="small">Registar</span>
+                </button>
               ))}
             </div>
           )}
         </div>
       ))}
-      {!falta.length && <p className="muted">Sem domingos esperados neste período.</p>}
+      {!falta.length && <p className="muted">Sem registos obrigatórios neste período. Marque a contagem como obrigatória no evento (Configuração → Assistência).</p>}
     </div>
   );
 }
@@ -344,7 +346,7 @@ export function FiltrosListaPresencas({ comunidades, lotes, filtro, aoMudar }: {
   );
 }
 
-/** Página "Registar presenças" dentro do portal: formulário, domingos em falta (à direita) e registos com filtros. */
+/** Página "Registar presenças" dentro do portal: formulário, registos em falta (à direita) e registos com filtros. */
 export default function RegistarPresencas() {
   const coms = useComunidadesDoUtilizador();
   const { ano, comunidade, setComunidade } = useFiltros();
@@ -358,7 +360,7 @@ export default function RegistarPresencas() {
   return (
     <>
       <h1>Registar presenças</h1>
-      <p className="muted">Equivalente ao formulário CCLX : Registo de Presenças. Grava só no portal (o Jotform não é alterado) e entra de imediato no mapa de presenças e nos domingos em falta. Link direto para telemóvel: <a href="#/registar">portalcaf.cclx.pt/#/registar</a>.</p>
+      <p className="muted">Equivalente ao formulário CCLX : Registo de Presenças. Grava só no portal (o Jotform não é alterado) e entra de imediato no mapa de presenças e nos registos em falta. Link direto para telemóvel: <a href="#/registar">portalcaf.cclx.pt/#/registar</a>.</p>
       <Estado aCarregar={coms.aCarregar} erro={coms.erro} />
       {!coms.aCarregar && (
         <div className="presencas-layout">
@@ -368,8 +370,8 @@ export default function RegistarPresencas() {
           <aside className="card presencas-lado">
             <Estado aCarregar={lotes.aCarregar} erro={lotes.erro} />
             {!lotes.aCarregar && (
-              <DomingosEmFaltaLista compacto ano={ano} hoje={hoje()} comunidades={doFiltro} lotes={lotes.dados ?? []}
-                aoEscolher={(data, comunidadeId) => { setInicial({ chave: Date.now(), v: { data, comunidadeId } }); document.getElementById('form-presencas')?.scrollIntoView?.({ behavior: 'smooth' }); }} />
+              <RegistosEmFaltaLista compacto ano={ano} hoje={hoje()} comunidades={doFiltro} lotes={lotes.dados ?? []}
+                aoEscolher={(data, comunidadeId, evento) => { setInicial({ chave: Date.now(), v: { data, comunidadeId, evento } }); document.getElementById('form-presencas')?.scrollIntoView?.({ behavior: 'smooth' }); }} />
             )}
           </aside>
         </div>
