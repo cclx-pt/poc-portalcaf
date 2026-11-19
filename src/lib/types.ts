@@ -27,6 +27,8 @@ export interface Comunidade {
   ordem: number;
   especial?: boolean; // bolsa geral
   ativo?: boolean; // false = desativada (mantém o histórico)
+  /** Comunidade que fica com esta depois do fim (fusão): custos, registos e assistência passam para ela. */
+  sucessora?: string;
 }
 
 /** Dimensões do plano financeiro usadas na classificação dos extratos e dos custos fixos. */

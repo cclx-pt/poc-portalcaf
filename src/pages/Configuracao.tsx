@@ -217,8 +217,11 @@ export default function Configuracao() {
     let recalcularDepois = false;
     try {
       if (edit.tipo === 'comunidade') {
-        const v = { ...edit.v, id: edit.novo ? slug(edit.v.nome) : edit.v.id, inicio: edit.v.inicio || null, fim: edit.v.fim || null };
+        const v = { ...edit.v, id: edit.novo ? slug(edit.v.nome) : edit.v.id, inicio: edit.v.inicio || null, fim: edit.v.fim || null, sucessora: edit.v.fim ? edit.v.sucessora || undefined : undefined };
         if (!v.nome.trim()) throw new Error('Indique o nome.');
+        if (v.sucessora === v.id) throw new Error('A comunidade sucessora tem de ser outra.');
+        const antes = (coms.dados ?? []).find((c) => c.id === v.id);
+        if (!edit.novo && (antes?.sucessora !== v.sucessora || antes?.fim !== v.fim)) recalcularDepois = true;
         if (edit.novo && (coms.dados ?? []).some((c) => c.id === v.id)) throw new Error('Já existe uma comunidade com este nome.');
         await gravar('comunidades', v);
       } else if (edit.tipo === 'conta') {
@@ -323,7 +326,7 @@ export default function Configuracao() {
           <tbody>{(coms.dados ?? []).map((c) => (
             <tr key={c.id}>
               <td>{c.ordem}</td><td>{c.nome}{c.especial && <span className="muted"> (especial)</span>}</td>
-              <td>{c.inicio ? c.inicio.split('-').reverse().join('/') : '—'}</td><td>{c.fim ? c.fim.split('-').reverse().join('/') : '—'}</td>
+              <td>{c.inicio ? c.inicio.split('-').reverse().join('/') : '—'}</td><td>{c.fim ? c.fim.split('-').reverse().join('/') : '—'}{c.sucessora && <div className="small muted">{`passa para ${(coms.dados ?? []).find((x) => x.id === c.sucessora)?.nome ?? c.sucessora}`}</div>}</td>
               <td>{ativoTxt(c.ativo) ?? 'Ativa'}</td><td>{acoes('comunidade', c, c.especial)}</td>
             </tr>
           ))}</tbody>
@@ -557,6 +560,13 @@ export default function Configuracao() {
               <label className="campo">Ordem<input type="number" value={edit.v.ordem} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, ordem: Number(e.target.value) } })} /></label>
               <CampoData rotulo="Início (opcional)" valor={edit.v.inicio ?? ''} onChange={(d) => setEdit({ ...edit, v: { ...edit.v, inicio: d } })} />
               <CampoData rotulo="Fim (opcional)" valor={edit.v.fim ?? ''} onChange={(d) => setEdit({ ...edit, v: { ...edit.v, fim: d } })} />
+              {edit.v.fim && <label className="campo">Passa para (fusão)
+                <select value={edit.v.sucessora ?? ''} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, sucessora: e.target.value || undefined } })}>
+                  <option value="">— (nenhuma)</option>
+                  {(coms.dados ?? []).filter((c) => !c.especial && c.id !== edit.v.id).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+                <span className="small muted">Depois do fim, os custos fixos, os registos do Jotform, os movimentos do banco e a assistência desta comunidade contam na escolhida; a assistência anterior soma-se à dela no peso dos últimos 12 meses.</span>
+              </label>}
               {edit.novo && <p className="muted" style={{ gridColumn: '1 / -1' }}>Identificador: {slug(edit.v.nome) || '—'} (não muda depois de criado).</p>}
             </>}
             {edit.tipo === 'conta' && <>

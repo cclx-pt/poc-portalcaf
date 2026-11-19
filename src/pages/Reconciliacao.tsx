@@ -8,7 +8,7 @@ import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, propor
 import { bancoDaConta } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Categoria, Comunidade, Dimensao, EstadoMov, MovBanco, ParteMov } from '../lib/types';
-import { comunidadeAtiva, pesos12m } from '../lib/resumos';
+import { comunidadeAtiva, destinoFusao, pesos12m } from '../lib/resumos';
 
 type Filtro = 'todos' | EstadoMov | 'bolsa' | 'conciliados';
 const ESTADO: Record<EstadoMov, string> = { 'por-classificar': 'Por classificar', proposto: 'Proposto', validado: 'Validado', rever: 'Rever' };
@@ -108,7 +108,8 @@ export default function Reconciliacao() {
   const distribuicao = bolsaPorMes.map((total, i) => {
     if (!total) return null;
     const p = `${ano}-${String(i + 1).padStart(2, '0')}`;
-    const w12 = pesos12m(assist.dados?.atual ?? [], assist.dados?.antes ?? [], ano, i + 1, assist.dados?.evento);
+    const destino = destinoFusao(coms.dados ?? []);
+    const w12 = pesos12m(assist.dados?.atual ?? [], assist.dados?.antes ?? [], ano, i + 1, assist.dados?.evento, (c) => destino(c, p));
     const pesos = (coms.dados ?? []).filter((c) => !c.especial && comunidadeAtiva(c, p)).map((c) => ({ c, media: w12.get(c.id) ?? 0 }));
     const soma = pesos.reduce((s, x) => s + x.media, 0);
     return { mes: i, total, linhas: pesos.filter((x) => x.media > 0).map((x) => ({ nome: x.c.nome, media: r2(x.media), pct: soma ? x.media / soma : 0, valor: soma ? r2((total * x.media) / soma) : 0 })), semAssistencia: !soma };

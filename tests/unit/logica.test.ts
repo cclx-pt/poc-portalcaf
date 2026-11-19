@@ -37,9 +37,9 @@ describe('comunidades', () => {
     expect(resolverComunidade('CCLX Almada', '2026-01-01').id).toBe('almada');
     expect(resolverComunidade('', '2026-01-01').id).toBe('bolsa-geral');
   });
-  it('Barreiro passa a Moita a partir de 01/11/2026', () => {
-    expect(resolverComunidade('Barreiro', '2026-10-31').id).toBe('barreiro');
-    expect(resolverComunidade('Barreiro', '2026-11-01').id).toBe('moita');
+  it('Barreiro passa a Moita depois do fim (18/07/2026)', () => {
+    expect(resolverComunidade('Barreiro', '2026-07-18').id).toBe('barreiro');
+    expect(resolverComunidade('Barreiro', '2026-07-19').id).toBe('moita');
   });
 });
 
