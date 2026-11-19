@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { CampoData, Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
+import { CampoData, Estado, Modal, mensagemErro, useCarregar, useFiltros, useFocarErro } from '../components/ui';
 import { auditar, gravarLote, lerConfigAssistencia, lerLote, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
 import { registosEmFalta } from '../lib/domingos';
 import { dataPT, hoje, norm, num } from '../lib/format';
-import { acrescentarRegisto, comunidadesDoUtilizador, duplicadosPresenca, filtrarLotesPresenca, type FiltroPresencas, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
+import { acrescentarRegisto, campoDoErroPresenca, comunidadesDoUtilizador, duplicadosPresenca, filtrarLotesPresenca, type FiltroPresencas, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
 import { recalcularAno } from '../lib/recalcular';
 import { apagarRascunho, armazemLocal, deveGuardarRascunho, guardarRascunho, idRascunho, lerRascunhos } from '../lib/rascunhos';
 import { Contador } from './Contador';
@@ -68,6 +68,11 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   const nomes = new Map(comunidades.map((c) => [c.id, c.nome]));
   const eOutra = evSel ? !!evSel.pedeDescricao : norm(e.evento) === 'outra';
   const podeRecalcular = acesso?.papel === 'master' || acesso?.papel === 'caf';
+  // Erro de validação: campo destacado a amarelo e cursor nesse campo.
+  const raiz = useRef<HTMLDivElement>(null);
+  const campoErro = msg?.tipo === 'erro' ? campoDoErroPresenca(msg.texto, nomesContagens) : null;
+  useFocarErro(msg?.tipo === 'erro' ? msg : null, raiz);
+  const erroEm = (c: string) => (campoErro === c ? 'com-erro' : undefined);
   const n = (k: keyof EntradaPresenca) => (v: string) => setE((p) => ({ ...p, [k]: v === '' ? NaN : Number(v) }));
 
   async function guardarCorrecao() {
@@ -122,7 +127,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
     return { ...p, outras: { ...(p.outras ?? {}), [id]: Math.max(0, atual(p.outras?.[id]) + d) } };
   });
   const campoNum = (c: Contagem) => (
-    <label key={c.id} className="campo">{`${c.nome} *`}<input type="number" inputMode="numeric" min={0} step={1} value={Number.isNaN(valorDe(c.id)) ? '' : valorDe(c.id)} onChange={(ev) => mudar(c.id, ev.target.value)} /></label>
+    <label key={c.id} className={['campo', erroEm(c.id)].filter(Boolean).join(' ')}>{`${c.nome} *`}<input aria-invalid={campoErro === c.id || undefined} type="number" inputMode="numeric" min={0} step={1} value={Number.isNaN(valorDe(c.id)) ? '' : valorDe(c.id)} onChange={(ev) => mudar(c.id, ev.target.value)} /></label>
   );
   const valoresContador = Object.fromEntries(recolhe.map((c) => [c.id, valorDe(c.id)]));
   const descartar = (id: string) => { apagarRascunho(armazemLocal(), acesso!.email, id); setRascunhos(lerRascunhos(armazemLocal(), acesso!.email)); };
@@ -131,7 +136,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   if (config.aCarregar) return <Estado aCarregar erro={null} />;
   if (!comunidades.length && !edicao) return <div className="aviso">Não tem comunidades atribuídas. Peça ao administrador do portal que lhe dê acesso a uma comunidade.</div>;
   return (
-    <div className={edicao ? 'form-presencas' : 'card sec form-presencas'}>
+    <div ref={raiz} className={edicao ? 'form-presencas' : 'card sec form-presencas'}>
       {sucesso && <ResumoRegistoGuardado contagens={sucesso.contagens} entrada={sucesso.entrada} comunidade={sucesso.comunidade} nota={sucesso.nota} aoFechar={() => setSucesso(null)} />}
       {original?.extra?.alteradoEm && <p className="muted small">Última alteração: {dataHora(String(original.extra.alteradoEm))} · {String(original.extra.alteradoPor ?? '')}</p>}
       {msg && <div className={msg.tipo === 'ok' ? 'ok-box' : 'aviso'} role="status">{msg.texto}</div>}
@@ -154,18 +159,18 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
       )}
       {comRascunho && <p className="small muted">Rascunho guardado neste dispositivo. Só fica registado ao carregar em Guardar registo.</p>}
       <div className="grelha-form">
-        <CampoData rotulo={edicao ? 'Data do evento (no mesmo mês)' : 'Data do evento'} obrigatorio valor={e.data} max={hoje()} onChange={(d) => setE({ ...e, data: d })} />
-        <label className="campo">Evento *
-          <select value={e.evento} onChange={(ev) => setE({ ...e, evento: ev.target.value })}>
+        <div className={erroEm('data')}><CampoData rotulo={edicao ? 'Data do evento (no mesmo mês)' : 'Data do evento'} obrigatorio valor={e.data} max={hoje()} onChange={(d) => setE({ ...e, data: d })} /></div>
+        <label className={['campo', erroEm('evento')].filter(Boolean).join(' ')}>Evento *
+          <select value={e.evento} aria-invalid={campoErro === 'evento' || undefined} onChange={(ev) => setE({ ...e, evento: ev.target.value })}>
             <option value="">Escolha…</option>
             {opcoesNomes.map((x) => <option key={x} value={x}>{x}</option>)}
           </select>
           {evSel && <span className="small muted">{evSel.descricao ? `${evSel.descricao} · ` : ''}{descreverQuando(evSel)}</span>}
           {!opcoes.length && <span className="small muted">Nenhum evento ocorre neste dia da semana.</span>}
         </label>
-        {eOutra && <label className="campo">Descrição *<input value={e.descricao ?? ''} onChange={(ev) => setE({ ...e, descricao: ev.target.value })} /></label>}
-        <label className="campo">Comunidade *
-          <select value={e.comunidadeId} disabled={!!edicao} onChange={(ev) => setE({ ...e, comunidadeId: ev.target.value })}>
+        {eOutra && <label className={['campo', erroEm('descricao')].filter(Boolean).join(' ')}>Descrição *<input aria-invalid={campoErro === 'descricao' || undefined} value={e.descricao ?? ''} onChange={(ev) => setE({ ...e, descricao: ev.target.value })} /></label>}
+        <label className={['campo', erroEm('comunidade')].filter(Boolean).join(' ')}>Comunidade *
+          <select value={e.comunidadeId} aria-invalid={campoErro === 'comunidade' || undefined} disabled={!!edicao} onChange={(ev) => setE({ ...e, comunidadeId: ev.target.value })}>
             {!unica && !edicao && <option value="">Escolha…</option>}
             {edicao && !nomes.has(e.comunidadeId) && <option value={e.comunidadeId}>{e.comunidadeId}</option>}
             {comunidades.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}

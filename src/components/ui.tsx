@@ -105,10 +105,41 @@ export function GraficoBarras({ dados, series, altura = 280, empilhado, unidade 
   );
 }
 
+/**
+ * Destaca um erro: põe o cursor no primeiro campo com erro (`.com-erro` ou aria-invalid) e mostra-o;
+ * sem campo identificado, mostra a mensagem de erro (`.aviso`).
+ */
+export function focarErro(raiz: ParentNode | null | undefined) {
+  if (!raiz) return;
+  const campo = raiz.querySelector<HTMLElement>('.com-erro input:not([type=hidden]):not([tabindex="-1"]), .com-erro select, .com-erro textarea, input[aria-invalid="true"], select[aria-invalid="true"]');
+  if (campo) { campo.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); campo.focus({ preventScroll: true }); return; }
+  raiz.querySelector<HTMLElement>('.aviso')?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+}
+
+/** Quando `erro` aparece (ou muda), destaca-o dentro de `raiz` (ver focarErro). */
+export function useFocarErro(erro: unknown, raiz: { current: HTMLElement | null }) {
+  useEffect(() => {
+    if (!erro) return;
+    const t = setTimeout(() => focarErro(raiz.current), 0);
+    return () => clearTimeout(t);
+  }, [erro]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 export function Modal({ titulo, onFechar, children }: { titulo: string; onFechar: () => void; children: ReactNode }) {
+  // Num formulário em janela, uma mensagem de erro que aparece leva o cursor ao campo com erro (ou mostra a mensagem).
+  const caixa = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = caixa.current;
+    if (!el || typeof MutationObserver === 'undefined') return;
+    const obs = new MutationObserver((ms) => {
+      if (ms.some((m) => [...m.addedNodes].some((n) => n instanceof HTMLElement && (n.matches('.aviso') || !!n.querySelector('.aviso'))))) focarErro(el);
+    });
+    obs.observe(el, { childList: true, subtree: true });
+    return () => obs.disconnect();
+  }, []);
   return (
     <div className="modal-fundo" onClick={onFechar}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={titulo}>
+      <div className="modal" ref={caixa} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={titulo}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ margin: 0 }}>{titulo}</h2>
           <button className="sec" onClick={onFechar} aria-label="Fechar">Fechar</button>
