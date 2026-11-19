@@ -18,10 +18,22 @@ function encontrarCabecalho(rows: unknown[][]): number {
   return 0;
 }
 
-function paraTabela(rows: unknown[][]): Tabela {
+/** A linha parece um movimento (tem uma data e um número), não um cabeçalho. */
+const pareceDados = (r: unknown[]) => {
+  const cs = r.map((c) => String(c ?? '').trim()).filter(Boolean);
+  return cs.some((c) => /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$|^\d{4}-\d{2}-\d{2}/.test(c)) && cs.some((c) => /^-?[\d.\s]*\d,\d{1,2}$|^-?\d+(\.\d+)?$/.test(c.replace(/€/g, '').trim()));
+};
+
+export function paraTabela(rows: unknown[][]): Tabela {
   const limpas = rows.filter((r) => r.some((c) => c != null && String(c).trim() !== ''));
   if (!limpas.length) return { colunas: [], linhas: [] };
   const h = encontrarCabecalho(limpas);
+  // Ficheiro sem linha de cabeçalho (ex.: extrato preparado à mão): colunas "Coluna 1…" e nenhuma linha se perde.
+  if (h === 0 && pareceDados(limpas[0])) {
+    const n = Math.max(...limpas.map((r) => r.length));
+    const colunas = Array.from({ length: n }, (_, i) => `Coluna ${i + 1}`);
+    return { colunas, linhas: limpas.map((r) => Object.fromEntries(colunas.map((c, i) => [c, r[i] ?? ''])) as Linha) };
+  }
   const vistos = new Map<string, number>();
   const colunas = limpas[h].map((c, i) => {
     let nome = String(c ?? '').trim() || `Coluna ${i + 1}`;
