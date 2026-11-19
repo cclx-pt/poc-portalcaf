@@ -50,6 +50,15 @@ describe('proposta de classificação dos extratos', () => {
     const [m] = proporClassificacao([mov('1', '2026-03-05', 50, 'TRF MB WAY DE JOAO')], ctx());
     expect(m).toMatchObject({ estado: 'proposto', categoria: 'R1.02 Ofertas gerais', comunidadeId: 'bolsa-geral' });
   });
+  it('"TFI", "Trf. MB WAY" e "Trf.Imed" de entrada: sempre oferta/dízimo na comunidade Geral, antes de regras, memória e depósitos', () => {
+    const regras = [{ id: 'x', padrao: 'JOAO', categoria: '02.01 Rendas e condomínios', ativo: true }];
+    const historico = [{ ...mov('h', '2026-02-05', 20, 'TFI JOAO SILVA'), estado: 'validado' as const, categoria: 'R2.01 Eventos e inscrições', comunidadeId: 'almada' }];
+    const depositos = [lote('depositos', 'moita', [{ id: 'd1', data: '2026-03-04', valor: 20 }])];
+    const r = proporClassificacao([mov('1', '2026-03-05', 20, 'TFI JOAO SILVA'), mov('2', '2026-03-05', 15, 'Trf. MB WAY de Joao'), mov('4', '2026-03-05', 30, 'Trf.Imed Maria Santos')], ctx({ regras, historico, depositos }));
+    for (const m of r) expect(m).toMatchObject({ estado: 'proposto', categoria: 'R1.02 Ofertas gerais', comunidadeId: 'bolsa-geral' });
+    const [saida] = proporClassificacao([mov('3', '2026-03-05', -15, 'Trf. MB WAY para Ana')], ctx());
+    expect(saida.comunidadeId).not.toBe('bolsa-geral');
+  });
   it('vencimento igual ao previsto nos custos fixos: comunidade do custo; repartido se partilhado', () => {
     const cf = (id: string, com: string, inc: number): CustoFixo => ({ id, comunidadeId: com, rubrica: 'Vencimento Pastoral', categoria: '01.01 Remunerações e subsídios', valorMensal: 1500, incidencia: inc, ano: 2026, inicio: '2026-01', fim: '2026-12', nivel: 'confidencial' });
     const [m] = proporClassificacao([mov('1', '2026-03-28', -1500, 'TRF ORDENADO MARCO')], ctx({ custosFixos: [cf('a', 'moita', 50), cf('b', 'sede', 50)] }));
