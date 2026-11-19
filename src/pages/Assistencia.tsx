@@ -105,7 +105,7 @@ export default function Assistencia() {
       <div className="linha" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <h1>Presenças por evento {ano}</h1>
-          <p className="muted">Registo de presenças nos cultos e restantes atividades da comunidade (formulário CCLX : Registo de Presenças). Valores em número de pessoas. A média de jovens e adultos de cada mês serve para distribuir a bolsa geral.</p>
+          <p className="muted">Registo de presenças nos cultos e restantes atividades da comunidade (formulário CCLX : Registo de Presenças). Valores em número de pessoas. A média de jovens e adultos dos últimos 12 meses serve para distribuir, cada mês, a bolsa geral e os gerais.</p>
           <SyncEstado />
         </div>
         <div className="acoes">

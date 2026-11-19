@@ -146,17 +146,29 @@ describe('resumos (caso real de Caldas da Rainha, 2026 até 13/11)', () => {
     expect(t.custosRubricas.Renda).toBe(1500);
   });
 
-  it('distribui a bolsa geral pela média de adultos do mesmo mês', () => {
+  it('distribui a bolsa geral pela média de adultos dos últimos 12 meses (não só do mês)', () => {
     const resumos = calcularResumos({
       ano: 2026, comunidades: COMUNIDADES,
-      contribuir: [lote('contribuir', 'bolsa-geral', 3, [300])],
+      contribuir: [lote('contribuir', 'bolsa-geral', 3, [275])],
       depositos: [], despesas: [], banco: [], custosFixos: [], mesesFechados: new Set(), regraFechados: false, hoje: '2026-11-13',
-      assistencia: [lote('assistencia', 'almada', 3, [100, 100]), lote('assistencia', 'porto', 3, [50])],
+      // 12 meses até março: Almada 100 (só março), Porto (300 + 50) / 2 = 175. Só março daria 100:50.
+      assistencia: [lote('assistencia', 'almada', 3, [100, 100]), lote('assistencia', 'porto', 1, [300]), lote('assistencia', 'porto', 3, [50])],
     });
     const mar = (c: string) => resumos.find((r) => r.comunidadeId === c)!.meses[2];
-    expect(mar('almada').quotaBolsa).toBe(200);
-    expect(mar('porto').quotaBolsa).toBe(100);
+    expect(mar('almada').quotaBolsa).toBe(100);
+    expect(mar('porto').quotaBolsa).toBe(175);
     expect(mar('bolsa-geral').entradas).toBe(0);
+  });
+  it('a bolsa geral de um mês sem assistência usa os 12 meses anteriores', () => {
+    const resumos = calcularResumos({
+      ano: 2026, comunidades: COMUNIDADES,
+      contribuir: [lote('contribuir', 'bolsa-geral', 4, [90])],
+      depositos: [], despesas: [], banco: [], custosFixos: [], mesesFechados: new Set(), regraFechados: false, hoje: '2026-11-13',
+      assistencia: [lote('assistencia', 'almada', 2, [20]), lote('assistencia', 'porto', 3, [10])],
+    });
+    const abr = (c: string) => resumos.find((r) => r.comunidadeId === c)!.meses[3];
+    expect(abr('almada').quotaBolsa).toBe(60);
+    expect(abr('porto').quotaBolsa).toBe(30);
   });
 
   it('página pública: só meses fechados e esconde grupos com menos de 3 registos', () => {

@@ -3,12 +3,12 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { LogoBanco } from '../components/LogoBanco';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
-import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco } from '../lib/db';
+import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia } from '../lib/db';
 import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, sugerirPadrao, temPalavra, validar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
 import { bancoDaConta } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Categoria, Comunidade, Dimensao, EstadoMov, MovBanco, ParteMov } from '../lib/types';
-import { comunidadeAtiva } from '../lib/resumos';
+import { comunidadeAtiva, pesos12m } from '../lib/resumos';
 
 type Filtro = 'todos' | EstadoMov | 'bolsa' | 'conciliados';
 const ESTADO: Record<EstadoMov, string> = { 'por-classificar': 'Por classificar', proposto: 'Proposto', validado: 'Validado', rever: 'Rever' };
@@ -25,7 +25,10 @@ export default function Reconciliacao() {
   const coms = useCarregar(listarComunidades, []);
   const cats = useCarregar(listarCategorias, []);
   const banco = useCarregar(() => listarBanco(ano), [ano]);
-  const assist = useCarregar(() => listarLotes(acesso!, 'assistencia', ano), [ano]);
+  const assist = useCarregar(async () => {
+    const [atual, antes, cfg] = await Promise.all([listarLotes(acesso!, 'assistencia', ano), listarLotes(acesso!, 'assistencia', ano - 1), lerConfigAssistencia()]);
+    return { atual, antes, evento: cfg.eventoCelebracao };
+  }, [ano]);
   const dims = useCarregar(listarDimensoes, []);
   const regras = useCarregar(listarRegrasBanco, []);
   const cfixos = useCarregar(() => listarCustosFixos(acesso!), [acesso?.email]);
@@ -93,17 +96,15 @@ export default function Reconciliacao() {
   }
   const mudarMes = (m: number) => { if (Object.keys(alterados).length && !confirm('Há classificações por guardar. Mudar de mês e perdê-las?')) return; setAlterados({}); setMes(m); };
 
-  // Pré-visualização da distribuição da bolsa geral pela assistência de adultos do mesmo mês.
+  // Pré-visualização da distribuição da bolsa geral pela média de adultos dos últimos 12 meses (a mesma regra dos resumos).
   const bolsaPorMes = Array.from({ length: 12 }, (_, i) => r2((banco.dados ?? []).flatMap((l) => l.registos)
     .filter((m) => m.contabilizar && m.comunidadeId === 'bolsa-geral' && m.valor > 0 && Number(m.data.slice(5, 7)) === i + 1 && m.data.startsWith(String(ano)))
     .reduce((s, m) => s + m.valor, 0)));
   const distribuicao = bolsaPorMes.map((total, i) => {
     if (!total) return null;
     const p = `${ano}-${String(i + 1).padStart(2, '0')}`;
-    const pesos = (coms.dados ?? []).filter((c) => !c.especial && comunidadeAtiva(c, p)).map((c) => {
-      const regs = (assist.dados ?? []).filter((l) => l.comunidadeId === c.id && l.mes === i + 1).flatMap((l) => l.registos);
-      return { c, media: regs.length ? regs.reduce((s, r) => s + r.valor, 0) / regs.length : 0 };
-    });
+    const w12 = pesos12m(assist.dados?.atual ?? [], assist.dados?.antes ?? [], ano, i + 1, assist.dados?.evento);
+    const pesos = (coms.dados ?? []).filter((c) => !c.especial && comunidadeAtiva(c, p)).map((c) => ({ c, media: w12.get(c.id) ?? 0 }));
     const soma = pesos.reduce((s, x) => s + x.media, 0);
     return { mes: i, total, linhas: pesos.filter((x) => x.media > 0).map((x) => ({ nome: x.c.nome, media: r2(x.media), pct: soma ? x.media / soma : 0, valor: soma ? r2((total * x.media) / soma) : 0 })), semAssistencia: !soma };
   }).filter(Boolean) as { mes: number; total: number; linhas: { nome: string; media: number; pct: number; valor: number }[]; semAssistencia: boolean }[];
@@ -264,13 +265,13 @@ export default function Reconciliacao() {
 
       <div className="sec">
         <h2>Distribuição da bolsa geral (pré-visualização)</h2>
-        <p className="muted">Regra: cada mês, a bolsa geral é distribuída pela percentagem da média de assistência de adultos de cada comunidade nesse mesmo mês.</p>
+        <p className="muted">Regra: cada mês, a bolsa geral é distribuída pela percentagem da média de assistência de adultos de cada comunidade nos últimos 12 meses.</p>
         {!distribuicao.length && <p className="muted">Sem ofertas na bolsa geral neste ano.</p>}
         {distribuicao.filter((d) => vista !== 'mes' || d.mes === mes - 1).map((d) => (
           <div key={d.mes} className="card" style={{ marginBottom: 10 }}>
             <b>{MESES[d.mes]}: {eur(d.total)}</b>
-            {d.semAssistencia ? <p className="muted">Sem registos de assistência neste mês: fica por distribuir.</p> : (
-              <table style={{ marginTop: 6 }}><thead><tr><th>Comunidade</th><th className="num">Média de adultos</th><th className="num">%</th><th className="num">Quota</th></tr></thead>
+            {d.semAssistencia ? <p className="muted">Sem registos de assistência nos últimos 12 meses: fica por distribuir.</p> : (
+              <table style={{ marginTop: 6 }}><thead><tr><th>Comunidade</th><th className="num">Média de adultos (12 meses)</th><th className="num">%</th><th className="num">Quota</th></tr></thead>
                 <tbody>{d.linhas.map((x) => <tr key={x.nome}><td>{x.nome}</td><td className="num">{x.media}</td><td className="num">{(x.pct * 100).toFixed(1).replace('.', ',')}%</td><td className="num">{eur(x.valor)}</td></tr>)}</tbody></table>
             )}
           </div>

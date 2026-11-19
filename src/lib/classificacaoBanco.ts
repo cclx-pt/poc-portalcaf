@@ -163,7 +163,11 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
         // Mesmo valor em mais de um sítio: a memória do mesmo descritivo decide a comunidade.
         const mem = memoria.get(`-${chaveDescricao(m.descricao)}`);
         const porMem = mem?.comunidadeId ? iguais.filter((g) => g.some((c) => c.comunidadeId === mem.comunidadeId)) : [];
+        // Senão, uma regra do texto do banco com comunidade (ex.: guardada no detalhe do movimento).
+        const regraCom = ctx.regras.find((x) => x.ativo !== false && x.comunidadeId && temPalavra(m.descricao, x.padrao) && iguais.some((g) => g.some((c) => c.comunidadeId === x.comunidadeId)));
+        const porRegra = regraCom ? iguais.filter((g) => g.some((c) => c.comunidadeId === regraCom.comunidadeId)) : [];
         if (porMem.length === 1) iguais = porMem;
+        else if (porRegra.length === 1) iguais = porRegra;
       }
       if (iguais.length === 1) {
         const g = iguais[0];
@@ -172,7 +176,7 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
       }
       if (VENCIMENTO.test(d) && iguais.length > 1) {
         const opcoes = iguais.map((g) => g.map((c) => c.comunidadeId).join(' + ')).join(', ');
-        return { ...m, categoria: cat('01.01'), centroCusto: 'CC03', estado: 'rever', nota: `REVER - ${v.toFixed(2)} € corresponde a mais de um vencimento previsto (${opcoes}): escolha a comunidade` };
+        return { ...m, categoria: cat('01.01'), centroCusto: 'CC03', estado: 'rever', nota: `REVER - ${v.toFixed(2)} € corresponde a mais de um vencimento previsto (${opcoes}): escolha a comunidade e guarde uma regra com ela (detalhe do movimento), para os próximos meses` };
       }
       if (VENCIMENTO.test(d) && ativos.length) return { ...m, categoria: cat('01.01'), centroCusto: 'CC03', estado: 'rever', nota: `REVER - Dados inconsistentes: ${v.toFixed(2)} € não corresponde a nenhum vencimento previsto` };
     }

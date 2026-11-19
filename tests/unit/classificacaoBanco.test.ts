@@ -94,6 +94,12 @@ describe('proposta de classificação dos extratos', () => {
     const [semPalavra] = proporClassificacao([mov('3', '2026-03-28', -750, 'COMPRA LOJA')], ctx({ custosFixos }));
     expect(semPalavra.categoria).not.toBe('01.01 Remunerações e subsídios');
   });
+  it('vencimento com o mesmo valor em duas comunidades: uma regra com comunidade desempata', () => {
+    const cf = (id: string, com: string): CustoFixo => ({ id, comunidadeId: com, rubrica: 'Vencimento Pastoral', categoria: '01.01 Remunerações e subsídios', valorMensal: 750, ano: 2026, inicio: '2026-01', fim: '2026-12', nivel: 'confidencial' });
+    const regras = [{ id: 'v', padrao: 'XPTO', categoria: '01.01 Remunerações e subsídios', comunidadeId: 'coruche', ativo: true }];
+    const [m] = proporClassificacao([mov('1', '2026-03-28', -750, 'TRF ORDENADO XPTO')], ctx({ custosFixos: [cf('ca', 'caldas'), cf('co', 'coruche')], regras }));
+    expect(m).toMatchObject({ estado: 'proposto', comunidadeId: 'coruche', categoria: '01.01 Remunerações e subsídios' });
+  });
   it('Segurança Social paga junta: repartida pela previsão do mês', () => {
     const cf = (id: string, com: string, v: number): CustoFixo => ({ id, comunidadeId: com, rubrica: 'Segurança Social · X', categoria: '01.02 Segurança Social e retenções', valorMensal: v, ano: 2026, inicio: '2026-01', fim: '2026-12', nivel: 'confidencial' });
     const partes = repartirPorPrevisao(-300, [cf('a', 'moita', 100), cf('b', 'sede', 200)], '01.02', '2026-03');

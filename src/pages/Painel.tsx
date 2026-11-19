@@ -101,7 +101,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
             {bolsaTot && (bolsaTot.contribuir + bolsaTot.coletas + bolsaTot.transferencias) > 0 && (
               <p className="muted" style={{ marginTop: 8 }}>
                 Bolsa geral (ofertas sem comunidade): {eur(bolsaTot.contribuir + bolsaTot.coletas + bolsaTot.transferencias)} recebidos,
-                {' '}{eur(-bolsaTot.quotaBolsa)} distribuídos pela assistência média de adultos do mesmo mês. O restante fica por distribuir (meses sem registos de assistência).
+                {' '}{eur(-bolsaTot.quotaBolsa)} distribuídos, cada mês, pela percentagem da média de assistência de adultos de cada comunidade nos últimos 12 meses. O restante fica por distribuir (sem registos de assistência nesses 12 meses).
               </p>
             )}
           </div>

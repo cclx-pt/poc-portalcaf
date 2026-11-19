@@ -12,7 +12,7 @@ const TEXTOS: Record<Origem, { titulo: string; intro: string; unidade: 'eur' | '
   contribuir: { titulo: 'Contribuições', intro: 'Contribuições registadas no formulário CCLX - CONTRIBUIR (só as com PAGO = "PAGO"). Para ver em conjunto com os depósitos de coletas, use Entradas: contribuições e depósitos.', unidade: 'eur' },
   depositos: { titulo: 'Depósitos de coletas', intro: 'Coletas em dinheiro depositadas, registadas no formulário CCLX - REGISTO DE DEPÓSITOS.', unidade: 'eur' },
   despesas: { titulo: 'Reembolsos e despesas', intro: 'Despesas e reembolsos registados no formulário CCLX - REGISTO DE DESPESAS (categorias mantidas do Jotform).', unidade: 'eur' },
-  assistencia: { titulo: 'Assistência', intro: 'Presenças registadas no formulário CCLX : Registo de Presenças. A média de adultos de cada mês serve para distribuir a bolsa geral.', unidade: 'pessoas' },
+  assistencia: { titulo: 'Assistência', intro: 'Presenças registadas no formulário CCLX : Registo de Presenças. A média de adultos dos últimos 12 meses serve para distribuir, cada mês, a bolsa geral e os gerais.', unidade: 'pessoas' },
 };
 
 export default function Fonte({ origem }: { origem: Origem }) {
