@@ -123,7 +123,7 @@ describe('resumos (caso real de Caldas da Rainha, 2026 até 13/11)', () => {
       depositos: [lote('depositos', 'caldas-da-rainha', 6, [2217.59])],
       despesas: [lote('despesas', 'caldas-da-rainha', 6, [749.88])],
       assistencia: [], banco: [],
-      custosFixos: CUSTOS_FIXOS_CDR, mesesFechados: new Set(), hoje: '2026-11-13',
+      custosFixos: CUSTOS_FIXOS_CDR, mesesFechados: new Set(), regraFechados: false, hoje: '2026-11-13',
     });
     const t = somarMeses(resumos.find((r) => r.comunidadeId === 'caldas-da-rainha')!.meses);
     expect(t.entradas).toBe(10481.77);
@@ -139,7 +139,7 @@ describe('resumos (caso real de Caldas da Rainha, 2026 até 13/11)', () => {
     expect(valorImputado({ ...renda, valorMensal: 626.69, incidencia: 33.33 })).toBe(208.88);
     const resumos = calcularResumos({
       ano: 2026, comunidades: COMUNIDADES, contribuir: [], depositos: [], despesas: [], assistencia: [], banco: [],
-      custosFixos: [renda], mesesFechados: new Set(), hoje: '2026-03-15',
+      custosFixos: [renda], mesesFechados: new Set(), regraFechados: false, hoje: '2026-03-15',
     });
     const t = somarMeses(resumos.find((r) => r.comunidadeId === 'caldas-da-rainha')!.meses);
     expect(t.custosFixos).toBe(1500); // jan, fev e mar a 500
@@ -150,7 +150,7 @@ describe('resumos (caso real de Caldas da Rainha, 2026 até 13/11)', () => {
     const resumos = calcularResumos({
       ano: 2026, comunidades: COMUNIDADES,
       contribuir: [lote('contribuir', 'bolsa-geral', 3, [300])],
-      depositos: [], despesas: [], banco: [], custosFixos: [], mesesFechados: new Set(), hoje: '2026-11-13',
+      depositos: [], despesas: [], banco: [], custosFixos: [], mesesFechados: new Set(), regraFechados: false, hoje: '2026-11-13',
       assistencia: [lote('assistencia', 'almada', 3, [100, 100]), lote('assistencia', 'porto', 3, [50])],
     });
     const mar = (c: string) => resumos.find((r) => r.comunidadeId === c)!.meses[2];
@@ -163,7 +163,7 @@ describe('resumos (caso real de Caldas da Rainha, 2026 até 13/11)', () => {
     const resumos = calcularResumos({
       ano: 2026, comunidades: COMUNIDADES,
       contribuir: [lote('contribuir', 'porto', 1, [10, 20]), lote('contribuir', 'porto', 2, [10, 20, 30])],
-      depositos: [], despesas: [], assistencia: [], banco: [], custosFixos: [], mesesFechados: new Set(), hoje: '2026-11-13',
+      depositos: [], despesas: [], assistencia: [], banco: [], custosFixos: [], mesesFechados: new Set(), regraFechados: false, hoje: '2026-11-13',
     });
     const pub = calcularPublico(2026, resumos, COMUNIDADES, new Set(['2026-01', '2026-02']));
     const porto = pub.comunidades.find((c) => c.id === 'porto')!;
@@ -178,7 +178,7 @@ describe('resumos (caso real de Caldas da Rainha, 2026 até 13/11)', () => {
       ano: 2026, comunidades: COMUNIDADES,
       // Porto e Almada têm 2 registos cada em janeiro (escondidos por comunidade), 4 no total (mostrado no consolidado).
       contribuir: [lote('contribuir', 'porto', 1, [10, 20]), lote('contribuir', 'almada', 1, [5, 5]), lote('contribuir', 'porto', 2, [1])],
-      depositos: [], despesas: [], assistencia: [], banco: [], custosFixos: [], mesesFechados: new Set(), hoje: '2026-11-13',
+      depositos: [], despesas: [], assistencia: [], banco: [], custosFixos: [], mesesFechados: new Set(), regraFechados: false, hoje: '2026-11-13',
     });
     const fechados = new Set(['2026-01', '2026-02']);
     const site = calcularPublicoSite(2026, resumos, fechados);

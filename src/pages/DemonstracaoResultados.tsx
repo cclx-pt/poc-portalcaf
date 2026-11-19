@@ -115,7 +115,7 @@ export default function DemonstracaoResultados() {
   return (
     <>
       <h1>Demonstração de resultados {ano}</h1>
-      <Frescura ano={ano} ate={mesesDecorridos(ano, hoje())} calculadoEm={todos[0]?.calculadoEm} />
+      <Frescura ano={ano} ate={mesesDecorridos(ano, hoje())} calculadoEm={todos[0]?.calculadoEm} resumos={sel} />
       <p className="muted">Rendimentos e gastos por rubrica. Os custos e proveitos <b>gerais</b> são repartidos pelas comunidades conforme a média de jovens e adultos dos últimos 12 meses. Vencimentos e Segurança Social aparecem agregados em "{OUTROS_FUNCIONAMENTO}".</p>
 
       <div className="card sec">

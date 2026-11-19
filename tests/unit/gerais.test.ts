@@ -23,7 +23,7 @@ const lote = (origem: Lote['origem'], comunidadeId: string, ano: number, mes: nu
 });
 const base = (x: Partial<DadosCalculo>): DadosCalculo => ({
   ano: 2026, comunidades: COMS, contribuir: [], depositos: [], despesas: [], assistencia: [], banco: [], custosFixos: [],
-  mesesFechados: new Set(), hoje: '2026-11-13', categorias: CATS, assistenciaAnterior: [], ...x,
+  mesesFechados: new Set(), regraFechados: false, hoje: '2026-11-13', categorias: CATS, assistenciaAnterior: [], ...x,
 });
 const mes = (rs: Resumo[], c: string, m: number) => rs.find((r) => r.comunidadeId === c)!.meses[m - 1];
 const somaSaldos = (rs: Resumo[]) => Math.round(rs.reduce((s, r) => s + r.meses.reduce((t, x) => t + x.saldo, 0), 0) * 100) / 100;
@@ -241,5 +241,32 @@ describe('comissão IFTHENPAY (Contribuir com líquido)', () => {
     expect(m.despesas).toBe(1.1);
     expect(m.despesasPorCategoria['03.07 Taxas']).toBe(1.1);
     expect(m.rubricas.saida['03 Administração e Tecnologia'].local).toBe(1.1);
+  });
+});
+
+describe('meses fechados e previsão dos custos fixos', () => {
+  it('mês fechado: valores reais sem custos fixos; mês aberto: só a previsão dos custos fixos, marcada', () => {
+    const cf: CustoFixo = { id: 'r', comunidadeId: 'almada', rubrica: 'Renda', valorMensal: 500, ano: 2026, inicio: '2026-01', fim: '2026-12', nivel: 'privado' };
+    const rs = calcularResumos(base({
+      regraFechados: true, mesesFechados: new Set(['2026-01']), custosFixos: [cf],
+      contribuir: [lote('contribuir', 'almada', 2026, 1, [{ valor: 100 }]), lote('contribuir', 'almada', 2026, 2, [{ valor: 70 }])],
+      despesas: [lote('despesas', 'almada', 2026, 2, [{ valor: 30, categoria: 'Material' }])],
+    }));
+    const jan = mes(rs, 'almada', 1); const fev = mes(rs, 'almada', 2); const dez = mes(rs, 'almada', 12);
+    expect([jan.previsao, jan.contribuir, jan.custosFixos]).toEqual([false, 100, 0]);
+    expect([fev.previsao, fev.contribuir, fev.despesas, fev.custosFixos]).toEqual([true, 0, 0, 500]);
+    expect([dez.previsao, dez.custosFixos]).toEqual([true, 500]); // a previsão cobre o ano todo
+  });
+});
+
+describe('texto dos meses fechados e da previsão', () => {
+  it('diz até quando há valores reais e que o resto é previsão dos custos fixos', async () => {
+    const { estadoMeses, textoMeses } = await import('../../src/lib/resumos');
+    const r = (fechados: number[]) => [{ id: 'x', ano: 2026, comunidadeId: 'a', calculadoEm: '', calculadoPor: '', meses: Array.from({ length: 12 }, (_, i) => ({ mes: i + 1, previsao: !fechados.includes(i + 1) })) }] as unknown as Resumo[];
+    expect(estadoMeses(r([1, 2, 3]))).toEqual({ regra: true, fechados: [1, 2, 3], abertos: [4, 5, 6, 7, 8, 9, 10, 11, 12] });
+    expect(textoMeses(2026, estadoMeses(r([1, 2, 3])))).toBe('Valores reais: meses fechados (janeiro a março de 2026). Abril a dezembro (meses abertos): só a previsão dos custos fixos.');
+    expect(textoMeses(2026, estadoMeses(r([])))).toBe('Ainda não há meses fechados em 2026: os valores são só a previsão dos custos fixos.');
+    expect(textoMeses(2026, estadoMeses(r([1, 3])))).toBe('Valores reais: meses fechados (janeiro e março de 2026). Fevereiro e abril a dezembro (meses abertos): só a previsão dos custos fixos.');
+    expect(estadoMeses([{ meses: [{ mes: 1 }] }] as unknown as Resumo[]).regra).toBe(false);
   });
 });
