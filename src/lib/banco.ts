@@ -5,6 +5,39 @@ import type { BancoLote, Lote, MovBanco } from './types';
 export interface MapaBanco { data?: string; descricao?: string; valor?: string; debito?: string; credito?: string; saldo?: string; estorno?: string }
 
 export type Banco = 'cgd' | 'santander';
+
+/** Mapeamento de colunas do extrato de uma conta (guardado na própria conta, em Configuração). */
+export interface MapaExtrato {
+  id: string;
+  nome: string;
+  contaId: string;
+  /** Assinatura das colunas do ficheiro de exemplo (normalizadas e ordenadas). */
+  colunas: string[];
+  campos: MapaBanco;
+}
+
+/** Os mapeamentos das contas que os têm definidos. */
+export const mapasDasContas = (contas: { id: string; nome: string; mapa?: MapaBanco; mapaColunas?: string[]; ativo?: boolean }[]): MapaExtrato[] =>
+  contas.filter((c) => c.ativo !== false && c.mapa && mapaCompleto(c.mapa))
+    .map((c) => ({ id: c.id, nome: c.nome, contaId: c.id, colunas: assinaturaColunas(c.mapaColunas ?? []), campos: c.mapa! }));
+
+export const assinaturaColunas = (colunas: string[]) => [...new Set(colunas.map((c) => norm(c)).filter(Boolean))].sort();
+
+export const mapaCompleto = (m: MapaBanco) => !!m.data && !!(m.valor || m.debito || m.credito);
+
+/** Mapeamento guardado que serve a este ficheiro (mesmas colunas; senão, todas as colunas usadas existem), já com os nomes do ficheiro. */
+export function escolherMapa(colunas: string[], mapas: MapaExtrato[]): MapaExtrato | null {
+  const porNorm = new Map(colunas.map((c) => [norm(c), c]));
+  const ass = assinaturaColunas(colunas).join('|');
+  const usadas = (x: MapaExtrato) => Object.values(x.campos).filter((v): v is string => !!v);
+  const serve = (x: MapaExtrato) => mapaCompleto(x.campos) && usadas(x).every((v) => porNorm.has(norm(v)));
+  const m = mapas.find((x) => x.colunas.join('|') === ass && serve(x))
+    ?? mapas.filter(serve).sort((a, b) => usadas(b).length - usadas(a).length)[0];
+  if (!m) return null;
+  const campos: MapaBanco = {};
+  for (const [k, v] of Object.entries(m.campos)) if (v) campos[k as keyof MapaBanco] = porNorm.get(norm(v));
+  return { ...m, campos };
+}
 export const NOME_BANCO: Record<Banco, string> = { cgd: 'Caixa Geral de Depósitos', santander: 'Santander' };
 
 /** Reconhece o banco pelos cabeçalhos do extrato exportado do homebanking. */

@@ -51,6 +51,11 @@ export interface Conta {
   iban?: string;
   etiqueta?: string;
   ativo?: boolean;
+  /** Logótipo (imagem pequena, data URL) mostrado nos extratos e filtros. */
+  logo?: string;
+  /** Colunas do extrato desta conta (aplicadas sozinhas ao importar). */
+  mapa?: { data?: string; descricao?: string; valor?: string; debito?: string; credito?: string; saldo?: string; estorno?: string };
+  mapaColunas?: string[];
 }
 
 export interface Categoria {

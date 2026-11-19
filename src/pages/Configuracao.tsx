@@ -18,6 +18,9 @@ import { testarChave, type ResultadoTeste } from '../lib/jotform';
 import { sincronizarAgora } from '../lib/syncWeb';
 import { categoriasEmFalta, rubricaInicial } from '../lib/rubricas';
 import { recalcularAno } from '../lib/recalcular';
+import { EditorConta, resumoMapa } from '../components/MapaExtratoEditor';
+import { LogoConta } from '../components/LogoBanco';
+import { NOME_BANCO, bancoDaConta } from '../lib/banco';
 
 type Edicao =
   | { tipo: 'comunidade'; novo: boolean; v: Comunidade }
@@ -39,6 +42,7 @@ export default function Configuracao() {
   const dims = useCarregar(listarDimensoes, []);
   const regras = useCarregar(listarRegrasBanco, []);
   const [regra, setRegra] = useState<RegraBanco | null>(null);
+  const [contaExt, setContaExt] = useState<Conta | null>(null);
   const [tipoDim, setTipoDim] = useState<Dimensao['tipo']>('centro');
   const [msg, setMsg] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -333,17 +337,22 @@ export default function Configuracao() {
           <h2>Contas bancárias</h2>
           <button onClick={() => setEdit({ tipo: 'conta', novo: true, v: { id: '', nome: '', banco: '', tipo: 'corrente', iban: '', ativo: true } })}>Nova conta</button>
         </div>
+        <p className="muted">Em <b>Extrato e logótipo</b> indica as colunas do extrato de cada conta (a partir de um ficheiro de exemplo) e carrega o logótipo. Ao importar, o portal reconhece o ficheiro, escolhe a conta e aplica as colunas sozinho. Os extratos da CGD e do Santander são reconhecidos mesmo sem mapeamento.</p>
         <div className="tabela"><table>
-          <thead><tr><th>Conta</th><th>Banco</th><th>Tipo</th><th>IBAN</th><th>Nota</th><th>Estado</th><th /></tr></thead>
+          <thead><tr><th /><th>Conta</th><th>Banco</th><th>Tipo</th><th>IBAN</th><th>Colunas do extrato</th><th>Nota</th><th>Estado</th><th /></tr></thead>
           <tbody>{(contas.dados ?? []).map((c) => (
             <tr key={c.id}>
-              <td>{c.nome}</td><td>{c.banco}</td><td>{c.tipo === 'investimentos' ? 'Investimentos' : c.tipo === 'principal' ? 'Principal' : 'Corrente'}</td>
+              <td><LogoConta conta={c} tamanho={22} /></td><td>{c.nome}</td><td>{c.banco}</td><td>{c.tipo === 'investimentos' ? 'Investimentos' : c.tipo === 'principal' ? 'Principal' : 'Corrente'}</td>
               <td className="small" style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{formatarIban(c.iban) || <span className="muted">por preencher</span>}</td>
-              <td className="small">{c.etiqueta}</td><td>{ativoTxt(c.ativo) ?? 'Ativa'}</td><td>{acoes('conta', c)}</td>
+              <td className="small">{resumoMapa(c) ?? (bancoDaConta(c) ? <span className="muted">Automático ({NOME_BANCO[bancoDaConta(c)!]})</span> : <span className="muted">por definir</span>)}</td>
+              <td className="small">{c.etiqueta}</td><td>{ativoTxt(c.ativo) ?? 'Ativa'}</td>
+              <td style={{ whiteSpace: 'nowrap' }}><button className="link" onClick={() => setContaExt(c)}>Extrato e logótipo</button> · {acoes('conta', c)}</td>
             </tr>
           ))}</tbody>
         </table></div>
       </div>
+
+      {contaExt && <EditorConta conta={contaExt} email={acesso!.email} onFechar={() => setContaExt(null)} onGuardado={() => { setContaExt(null); void contas.recarregar(); }} />}
 
       <div className="sec">
         <div className="linha" style={{ justifyContent: 'space-between' }}>
