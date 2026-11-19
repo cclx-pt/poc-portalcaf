@@ -13,7 +13,7 @@
 import { FONTES, construirLotes, mapearLinhas, sugerirMapa } from './fontes';
 import { lerSubmissoes, type JotConfig } from './jotform';
 import { JOTFORM_FORMS } from './seed';
-import { r2 } from './format';
+import { norm, r2 } from './format';
 import { eCorrigido, eRegistoDoPortal } from './presencas';
 import type { Lote, Origem } from './types';
 
@@ -100,6 +100,32 @@ export function fundirLote(existente: Lote | undefined, novo: Lote): { lote: Lot
   };
 }
 
+/**
+ * Assistência: depois de importados, os registos passam a ser do portal (podem ser corrigidos ou apagados).
+ * A sincronização só acrescenta submissões novas: não volta a importar as já importadas, as apagadas no portal,
+ * nem uma submissão para um dia e evento que já têm registo nessa comunidade.
+ */
+export function fundirAssistencia(existente: Lote | undefined, novo: Lote): { lote: Lote; acrescentados: number; ignorados: number } {
+  if (!existente) {
+    // Lote novo: mesmo assim, só um registo por dia e evento.
+    const vistos = new Set<string>(); const registos: Lote['registos'] = []; let ignorados = 0;
+    for (const r of novo.registos) { const k = `${r.data}|${norm(r.evento ?? '')}`; if (vistos.has(k)) { ignorados++; continue; } vistos.add(k); registos.push(r); }
+    return { lote: { ...novo, registos, total: r2(registos.reduce((s, r) => s + r.valor, 0)), n: registos.length }, acrescentados: registos.length, ignorados };
+  }
+  const ids = new Set([...existente.registos.map((r) => r.id), ...(existente.apagados ?? [])]);
+  const dias = new Set(existente.registos.map((r) => `${r.data}|${norm(r.evento ?? '')}`));
+  const extra: Lote['registos'] = []; let ignorados = 0;
+  for (const r of novo.registos) {
+    if (existente.registos.some((x) => x.id === r.id)) continue;
+    const k = `${r.data}|${norm(r.evento ?? '')}`;
+    if (ids.has(r.id) || dias.has(k)) { ignorados++; continue; }
+    dias.add(k); extra.push(r);
+  }
+  if (!extra.length) return { lote: existente, acrescentados: 0, ignorados };
+  const registos = [...existente.registos, ...extra].sort((a, b) => a.data.localeCompare(b.data));
+  return { lote: { ...existente, registos, total: r2(registos.reduce((s, r) => s + r.valor, 0)), n: registos.length, atualizadoEm: novo.atualizadoEm, atualizadoPor: novo.atualizadoPor }, acrescentados: extra.length, ignorados };
+}
+
 /** Data de criação mais recente entre as linhas lidas (formato do Jotform: AAAA-MM-DD hh:mm:ss). */
 export function marcadorMaisRecente(linhas: Record<string, unknown>[], atual?: string): string | undefined {
   let m = atual;
@@ -146,7 +172,19 @@ async function sincronizarOrigem(
   let novos = 0;
   let removidos = 0;
 
-  if (modo === 'incremental') {
+  let ignoradosAss = 0;
+  if (origem === 'assistencia') {
+    // Presenças: em qualquer modo, só se acrescentam submissões novas; nada é substituído nem apagado.
+    const privEx = await arm.lerLotes('lotes', abertos.map(({ p }) => p.id));
+    for (const { p } of abertos) {
+      const f = fundirAssistencia(privEx.get(p.id), p);
+      ignoradosAss += f.ignorados;
+      if (!f.acrescentados) continue;
+      novos += f.acrescentados;
+      anosTocados.add(p.ano);
+      ops.push({ col: 'lotes', id: p.id, lote: f.lote });
+    }
+  } else if (modo === 'incremental') {
     const ids = abertos.map(({ p }) => p.id);
     const [privEx, confEx] = await Promise.all([arm.lerLotes('lotes', ids), temConf ? arm.lerLotes('lotes_conf', ids) : Promise.resolve(new Map<string, Lote>())]);
     for (const { p, c } of abertos) {
@@ -195,7 +233,7 @@ async function sincronizarOrigem(
   }
   if (ops.length) await arm.gravarLotes(ops);
   return {
-    resultado: { submissoes: linhas.length, registos: validos.length, novos, rejeitadas: rejeitadas.length, naoPagas, ignoradas, lotes: ops.filter((o) => o.col === 'lotes' && !o.apagar).length, mesesFechadosIgnorados, removidos },
+    resultado: { submissoes: linhas.length, registos: validos.length, novos, rejeitadas: rejeitadas.length, naoPagas, ignoradas: ignoradas + ignoradosAss, lotes: ops.filter((o) => o.col === 'lotes' && !o.apagar).length, mesesFechadosIgnorados, removidos },
     marcador: novoMarcador,
   };
 }

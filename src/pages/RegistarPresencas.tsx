@@ -4,7 +4,7 @@ import { CampoData, Estado, Modal, mensagemErro, useCarregar, useFiltros } from 
 import { auditar, gravarLote, lerConfigAssistencia, lerLote, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
 import { registosEmFalta } from '../lib/domingos';
 import { dataPT, hoje, norm, num } from '../lib/format';
-import { acrescentarRegisto, comunidadesDoUtilizador, filtrarLotesPresenca, type FiltroPresencas, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
+import { acrescentarRegisto, comunidadesDoUtilizador, duplicadosPresenca, filtrarLotesPresenca, type FiltroPresencas, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, validarPresenca, type EntradaPresenca } from '../lib/presencas';
 import { recalcularAno } from '../lib/recalcular';
 import { apagarRascunho, armazemLocal, deveGuardarRascunho, guardarRascunho, idRascunho, lerRascunhos } from '../lib/rascunhos';
 import { Contador } from './Contador';
@@ -269,11 +269,13 @@ export function ListaPresencas({ lotes, comunidades, soPortal, aposApagar }: { l
   const extras = catalogoContagens(config.dados).filter((c) => !IDS_BASE.includes(c.id));
   const nomes = new Map(comunidades.map((c) => [c.id, c.nome]));
   const podeRecalcular = acesso?.papel === 'master' || acesso?.papel === 'caf';
-  const podeApagar = (r: Lote['registos'][number]) => eRegistoDoPortal(r) && (podeRecalcular || r.extra?.registadoPor === acesso?.email);
+  // Registos importados do Jotform também se apagam no portal (a sincronização não os volta a importar).
+  const podeApagar = (r: Lote['registos'][number]) => podeRecalcular || (eRegistoDoPortal(r) ? r.extra?.registadoPor === acesso?.email : pode('registar'));
+  const duplicados = duplicadosPresenca(lotes);
 
   async function apagar(l: Lote, rid: string) {
     const r = l.registos.find((x) => x.id === rid)!;
-    if (!confirm(`Apagar o registo de ${r.evento} em ${dataPt(r.data)} (${nomes.get(l.comunidadeId) ?? l.comunidadeId})?`)) return;
+    if (!confirm(`Apagar o registo de ${r.evento} em ${dataPt(r.data)} (${nomes.get(l.comunidadeId) ?? l.comunidadeId})?${eRegistoDoPortal(r) ? '' : ' Veio do Jotform: não volta a ser importado (o Jotform não é alterado).'}`)) return;
     try {
       await gravarLote(removerRegisto(l, rid));
       await auditar(acesso!.email, 'apagar registo de presenças', `${dataPt(r.data)} · ${r.evento} · ${l.comunidadeId}`);
@@ -292,8 +294,8 @@ export function ListaPresencas({ lotes, comunidades, soPortal, aposApagar }: { l
       <div className="tabela"><table className="tabela-presencas">
         <thead><tr><th>Data</th><th>Evento</th><th>Comunidade</th><th className="num">Jovens e adultos</th><th className="num">Jump</th><th className="num">Crianças</th><th className="num">Connect's</th>{extras.map((c) => <th key={c.id} className="num">{c.nome}</th>)}<th>Origem</th><th>Última alteração</th><th /></tr></thead>
         <tbody>{linhas.map(({ l, r }) => (
-          <tr key={r.id}>
-            <td data-rotulo="Data">{dataPt(r.data)}</td><td data-rotulo="Evento">{r.evento}{r.descricao ? ` · ${r.descricao}` : ''}</td><td data-rotulo="Comunidade">{nomes.get(l.comunidadeId) ?? l.comunidadeId}</td>
+          <tr key={r.id} className={duplicados.has(r.id) ? 'duplicado' : ''}>
+            <td data-rotulo="Data">{dataPt(r.data)}{duplicados.has(r.id) && <> <span className="etiqueta neg" title="Há mais do que um registo deste evento nesta comunidade neste dia">Duplicado</span></>}</td><td data-rotulo="Evento">{r.evento}{r.descricao ? ` · ${r.descricao}` : ''}</td><td data-rotulo="Comunidade">{nomes.get(l.comunidadeId) ?? l.comunidadeId}</td>
             <td className="num" data-rotulo="Jovens e adultos">{num(r.valor)}</td><td className="num" data-rotulo="Jump">{num(Number(r.extra?.jump ?? 0))}</td><td className="num" data-rotulo="Crianças">{num(Number(r.extra?.criancas ?? 0))}</td><td className="num" data-rotulo="Connect's">{num(Number(r.extra?.connects ?? 0))}</td>
             {extras.map((c) => <td key={c.id} className="num" data-rotulo={c.nome}>{r.extra?.[c.id] != null ? num(Number(r.extra[c.id])) : '—'}</td>)}
             <td className="small muted" data-rotulo="Origem">{eRegistoDoPortal(r) ? `Portal · ${String(r.extra?.registadoPor ?? '')}` : 'Jotform'}</td>
@@ -322,7 +324,8 @@ export function FiltrosListaPresencas({ comunidades, lotes, filtro, aoMudar }: {
   // Tipos de culto: os configurados e os que existem nos registos (ex.: vindos do Jotform).
   const tipos = [...new Map([...eventosEfetivos(config.dados).map((e) => e.nome), ...lotes.flatMap((l) => l.registos.map((r) => r.evento ?? ''))]
     .filter((x) => x.trim()).map((x) => [norm(x), x] as [string, string])).values()].sort((a, b) => a.localeCompare(b, 'pt'));
-  const ativo = !!(filtro.de || filtro.ate || filtro.evento || (filtro.comunidadeId && filtro.comunidadeId !== 'todas'));
+  const ativo = !!(filtro.de || filtro.ate || filtro.evento || filtro.soDuplicados || (filtro.comunidadeId && filtro.comunidadeId !== 'todas'));
+  const nDup = duplicadosPresenca(filtrarLotesPresenca(lotes, { comunidadeId: filtro.comunidadeId })).size;
   return (
     <div className="filtros linha" style={{ alignItems: 'flex-end', marginBottom: 10 }}>
       {comunidades.length > 1 && (
@@ -341,6 +344,7 @@ export function FiltrosListaPresencas({ comunidades, lotes, filtro, aoMudar }: {
           {tipos.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
       </label>
+      <label className="opcao" style={{ alignSelf: 'center' }}><input type="checkbox" checked={!!filtro.soDuplicados} onChange={(e) => aoMudar({ ...filtro, soDuplicados: e.target.checked || undefined })} /> Só duplicados{nDup ? ` (${nDup})` : ''}</label>
       {ativo && <button className="sec" onClick={() => aoMudar({ comunidadeId: filtro.comunidadeId && comunidades.length > 1 ? 'todas' : undefined })}>Limpar filtros</button>}
     </div>
   );
@@ -378,7 +382,8 @@ export default function RegistarPresencas() {
       )}
       <div className="sec">
         <h2>Registos de presenças em {ano}</h2>
-        <p className="muted small">Do Jotform e do portal, das suas comunidades (ano e comunidade do filtro do topo). Corrigir guarda quem alterou e quando, e fica na auditoria; só se apagam registos feitos no portal.</p>
+        <p className="muted small">Do Jotform e do portal, das suas comunidades (ano e comunidade do filtro do topo). Depois de importados, os registos do Jotform passam a ser do portal: corrigir ou apagar não mexe no Jotform, e a sincronização só traz submissões novas (não repete as apagadas nem um dia e evento já registados). Corrigir e apagar ficam na auditoria.</p>
+        {(() => { const n = duplicadosPresenca(filtrarLotesPresenca(lotes.dados ?? [], { comunidadeId: comunidade })).size; return n ? <div className="aviso">{`Há ${n} registos duplicados (mesma comunidade, dia e evento). Use "Só duplicados" para os ver e apague ou corrija os que estão a mais.`}</div> : null; })()}
         <FiltrosListaPresencas comunidades={comunidades} lotes={lotes.dados ?? []} filtro={{ ...filtro, comunidadeId: comunidade }}
           aoMudar={({ comunidadeId, ...f }) => { setFiltro(f); if (comunidadeId) setComunidade(comunidadeId); }} />
         <ListaPresencas lotes={filtrados} comunidades={comunidades} soPortal={false} aposApagar={lotes.recarregar} />

@@ -367,3 +367,5 @@ label.campo, div.campo { font-size: 12px; font-weight: 600; }
 .domingos-falta.compacto .df-data { flex: 1 1 calc(50% - 8px); min-height: 36px; font-size: 13px; }
 @media (max-width: 900px) { .presencas-layout { grid-template-columns: 1fr; } .presencas-lado { position: static; max-height: none; order: -1; } }
 .df-data .df-evento { font-weight: 700; }
+.etiqueta.neg { color: var(--branco); background: var(--preto); border-color: var(--preto); }
+tr.duplicado td { background: #f2f2f2; }
