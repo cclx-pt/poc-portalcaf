@@ -245,12 +245,31 @@ describe('Unique ID do Jotform', () => {
 describe('reembolso com data da fatura errada no Jotform', () => {
   it('data da fatura muito depois da submissão (ex.: 2028 em vez de 2026): usa a data de submissão e guarda a original', async () => {
     const { FONTES, mapearLinhas, sugerirMapa } = await import('../../src/lib/fontes');
-    const l = { 'Submission ID': 's1', 'Submission Date': '2026-11-01 14:26:21', 'Data Fatura': '2028-10-29', 'Valor em Euros (€)': '124,00', Comunidade: 'CCLx Moita', Categoria: 'Obras', 'Unique ID': 'R20260437' };
+    const l = { 'Submission ID': 's1', 'Submission Date': '2026-11-01 14:26:21', 'Data Fatura': '2028-10-29', 'Valor em Euros (€)': '124,00', Comunidade: 'CCLx Moita', Categoria: 'Obras', 'Unique ID': 'R20260437', 'Reembolso do Valor necessáro?': 'Sim' };
     const ok = { ...l, 'Submission ID': 's2', 'Data Fatura': '2026-10-29', 'Unique ID': 'R20260436' };
     const mapa = sugerirMapa(FONTES.despesas, Object.keys(l));
     const { registos } = mapearLinhas('despesas', [l, ok], mapa);
     expect(registos[0]).toMatchObject({ id: 's1', data: '2026-11-01', valor: 124, extra: { codigo: 'R20260437', dataFaturaOriginal: '2028-10-29' } });
     expect(registos[1].data).toBe('2026-10-29');
     expect(registos[1].extra?.dataFaturaOriginal).toBeUndefined();
+  });
+});
+
+describe('filtros do Jotform: reembolsos e depósitos', () => {
+  it('reembolsos: só entram os registos com "Reembolso do Valor necessário?" = Sim', async () => {
+    const { FONTES, mapearLinhas, sugerirMapa } = await import('../../src/lib/fontes');
+    const base = { 'Submission Date': '2026-11-01 10:00:00', 'Data Fatura': '2026-10-29', 'Valor em Euros (€)': '10', Comunidade: 'Moita', Categoria: 'Obras' };
+    const ls = [{ ...base, 'Submission ID': 'a', 'Reembolso do Valor necessáro?': 'Sim' }, { ...base, 'Submission ID': 'b', 'Reembolso do Valor necessáro?': 'Não' }, { ...base, 'Submission ID': 'c', 'Reembolso do Valor necessáro?': '' }];
+    const r = mapearLinhas('despesas', ls, sugerirMapa(FONTES.despesas, Object.keys(ls[0])));
+    expect(r.registos.map((x) => x.id)).toEqual(['a']);
+    expect(r.ignoradas).toBe(2);
+  });
+  it('depósitos: os registos com "Registo Inválido" preenchido são ignorados', async () => {
+    const { FONTES, mapearLinhas, sugerirMapa } = await import('../../src/lib/fontes');
+    const base = { 'Data presente no talão de depósito': '2026-11-02', 'Valor Depositado  €': '50', Comunidade: 'Almada' };
+    const ls = [{ ...base, 'Submission ID': 'a', 'Registo Inválido': '' }, { ...base, 'Submission ID': 'b', 'Registo Inválido': 'Sim' }, { ...base, 'Submission ID': 'c', 'Registo Inválido': 'Não' }];
+    const r = mapearLinhas('depositos', ls, sugerirMapa(FONTES.depositos, Object.keys(ls[0])));
+    expect(r.registos.map((x) => x.id)).toEqual(['a', 'c']);
+    expect(r.ignoradas).toBe(1);
   });
 });

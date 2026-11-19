@@ -48,6 +48,7 @@ export const FONTES: Record<Origem, FonteDef> = {
       { key: 'data', label: 'Data do talão', padroes: ['data presente no talao de deposito', 'data presente no talao', ...DATA_SUB, 'data'], obrigatorio: true },
       { key: 'valor', label: 'Valor depositado (€)', padroes: ['valor depositado', 'valor'], obrigatorio: true },
       { key: 'comunidade', label: 'Comunidade (Ministério/Área)', padroes: ['ministerio area', 'ministerio', 'area', 'comunidade'] },
+      { key: 'invalido', label: 'Registo Inválido (os preenchidos são ignorados)', padroes: ['registo invalido', 'invalido'] },
       { key: 'conta', label: 'Conta do depósito', padroes: ['deposito em que conta', 'conta'] },
       { key: 'caixa', label: 'Mês/Ano da folha de caixa', padroes: ['mes ano relativo a folha de caixa', 'mes ano'] },
       { key: 'descricao', label: 'Descrição', padroes: ['descricao'] },
@@ -131,10 +132,16 @@ export interface ResultadoMapa {
   rejeitadas: { linha: number; motivo: string }[];
   /** Entradas (CONTRIBUIR) ignoradas por não terem PAGO = "PAGO". */
   naoPagas: number;
+  /** Registos ignorados por regra: reembolsos sem "Reembolso do Valor necessário?" = Sim, depósitos com "Registo Inválido". */
+  ignoradas: number;
 }
 
 /** Entradas: só conta a contribuição se o campo PAGO tiver o valor "PAGO". */
 export const estaPago = (v: unknown) => norm(v) === 'pago';
+/** "Sim" (ou equivalente) num campo de escolha. */
+export const eSim = (v: unknown) => ['sim', 'yes', 's', 'true', '1', 'x'].includes(norm(v).trim());
+/** Campo de marcação preenchido (qualquer valor que não seja "não"). */
+const marcado = (v: unknown) => { const n = norm(v).trim(); return !!n && !['nao', 'no', 'false', '0'].includes(n); };
 
 let seq = 0;
 export function mapearLinhas(origem: Origem, linhas: Linha[], mapa: Record<string, string>): ResultadoMapa {
@@ -142,8 +149,13 @@ export function mapearLinhas(origem: Origem, linhas: Linha[], mapa: Record<strin
   const rejeitadas: ResultadoMapa['rejeitadas'] = [];
   const get = (l: Linha, k: string) => (mapa[k] ? l[mapa[k]] : undefined);
   let naoPagas = 0;
+  let ignoradas = 0;
   linhas.forEach((l, i) => {
     if (origem === 'contribuir' && !estaPago(get(l, 'pago'))) { naoPagas++; return; }
+    // Reembolsos: só os registos com "Reembolso do Valor necessário?" = Sim (decisão do CAF, 19/11/2026). Sem o campo, não entra.
+    if (origem === 'despesas' && !eSim(get(l, 'reembolso'))) { ignoradas++; return; }
+    // Depósitos: os registos marcados como "Registo Inválido" não contam.
+    if (origem === 'depositos' && mapa.invalido && marcado(get(l, 'invalido'))) { ignoradas++; return; }
     // Com a coluna Líquido, só entram as contribuições com o líquido preenchido (decisão do CAF, 18/11/2026).
     const liquido = origem === 'contribuir' && mapa.liquido ? parseNumero(get(l, 'liquido')) : NaN;
     if (origem === 'contribuir' && mapa.liquido && !Number.isFinite(liquido)) { naoPagas++; return; }
@@ -177,7 +189,7 @@ export function mapearLinhas(origem: Origem, linhas: Linha[], mapa: Record<strin
     if (Object.keys(extra).length) r.extra = extra;
     registos.push(r);
   });
-  return { registos, rejeitadas, naoPagas };
+  return { registos, rejeitadas, naoPagas, ignoradas };
 }
 
 const SAL = 'cclx-caf-portal';

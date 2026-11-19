@@ -43,6 +43,8 @@ export interface ResultadoOrigem {
   rejeitadas: number;
   /** Entradas ignoradas por não terem PAGO = "PAGO". */
   naoPagas?: number;
+  /** Ignorados por regra (reembolsos sem "Sim", depósitos com "Registo Inválido"). */
+  ignoradas?: number;
   lotes: number;
   mesesFechadosIgnorados: number;
   removidos: number;
@@ -133,7 +135,7 @@ async function sincronizarOrigem(
   const mapa = sugerirMapa(FONTES[origem], colunas);
   const falta = FONTES[origem].campos.filter((c) => c.obrigatorio && !mapa[c.key]).map((c) => c.label);
   if (linhas.length && falta.length) throw new Error(`colunas obrigatórias não encontradas (${falta.join(', ')})`);
-  const { registos, rejeitadas, naoPagas } = linhas.length ? mapearLinhas(origem, linhas, mapa) : { registos: [], rejeitadas: [], naoPagas: 0 };
+  const { registos, rejeitadas, naoPagas, ignoradas } = linhas.length ? mapearLinhas(origem, linhas, mapa) : { registos: [], rejeitadas: [], naoPagas: 0, ignoradas: 0 };
   const validos = registos.filter((r) => r.data >= desdeBase);
   const { conf, priv } = await construirLotes(origem, validos, quem);
   const temConf = origem !== 'assistencia';
@@ -193,7 +195,7 @@ async function sincronizarOrigem(
   }
   if (ops.length) await arm.gravarLotes(ops);
   return {
-    resultado: { submissoes: linhas.length, registos: validos.length, novos, rejeitadas: rejeitadas.length, naoPagas, lotes: ops.filter((o) => o.col === 'lotes' && !o.apagar).length, mesesFechadosIgnorados, removidos },
+    resultado: { submissoes: linhas.length, registos: validos.length, novos, rejeitadas: rejeitadas.length, naoPagas, ignoradas, lotes: ops.filter((o) => o.col === 'lotes' && !o.apagar).length, mesesFechadosIgnorados, removidos },
     marcador: novoMarcador,
   };
 }
