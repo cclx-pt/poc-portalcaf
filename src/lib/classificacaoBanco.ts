@@ -272,3 +272,9 @@ export function controloMes(movs: MovBanco[]) {
   }
   return { ...c, fechado: movs.length > 0 && !c.rever && !c.proposto && !c.porClassificar };
 }
+
+/** Filtro por descrição: todas as palavras escritas aparecem no descritivo (sem distinguir maiúsculas nem acentos). */
+export function descricaoContem(descricao: string, filtro: string): boolean {
+  const d = norm(descricao);
+  return norm(filtro).split(/\s+/).filter(Boolean).every((p) => d.includes(p));
+}
