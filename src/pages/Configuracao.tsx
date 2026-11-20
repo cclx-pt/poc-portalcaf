@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { SyncEstado } from '../components/SyncEstado';
 import { useAuth } from '../auth/AuthProvider';
-import { CampoData, Estado, Modal, mensagemErro, useCarregar } from '../components/ui';
+import { CampoData, Estado, Modal, mensagemErro, useCarregar, useMarcarAba } from '../components/ui';
 import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarDimensoes, listarRegrasBanco, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
 import { COMUNIDADES, CONTAS, JOTFORM_FORMS } from '../lib/seed';
 import { categoriasDoPlano, dimensoesDoPlano } from '../lib/plano';
@@ -105,6 +105,7 @@ export default function Configuracao() {
   }
   // Separadores por área, para a página não ficar toda junta.
   const [area, setArea] = useState<'estrutura' | 'assistencia' | 'jotform'>('estrutura');
+  useMarcarAba(['estrutura', 'assistencia', 'jotform'].indexOf(area) + 1);
   // Exceções de assistência (domingos sem culto esperado).
   const excecoes = useCarregar(listarExcecoes, []);
   const [nova, setNova] = useState({ data: '', ambito: 'cclx', motivo: '' });

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado } from '../components/ui';
+import { Estado, Rodape, useMarcarAba } from '../components/ui';
 import { PAPEL_LABEL } from '../lib/types';
 import { hoje } from '../lib/format';
 import { filtrarLotesPresenca, type EntradaPresenca, type FiltroPresencas } from '../lib/presencas';
@@ -16,6 +16,7 @@ const BASE = import.meta.env.BASE_URL;
 export default function RegistoRapido() {
   const { acesso, sair } = useAuth();
   const [aba, setAba] = useState<'novo' | 'domingos' | 'consultar'>('novo');
+  useMarcarAba(['novo', 'domingos', 'consultar'].indexOf(aba) + 1);
   const [filtro, setFiltro] = useState<FiltroPresencas>({});
   const anoAtual = new Date().getFullYear();
   const [ano, setAno] = useState(anoAtual);
@@ -84,6 +85,7 @@ export default function RegistoRapido() {
           <p className="muted small" style={{ marginTop: 8 }}>Inclui os registos importados do Jotform e os feitos no portal. Corrigir ou apagar no portal não mexe no Jotform; os apagados não voltam a ser importados.</p>
         </>
       )}
+      <Rodape semValores />
     </div>
   );
 }
