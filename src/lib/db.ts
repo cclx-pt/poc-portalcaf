@@ -45,8 +45,15 @@ export async function lerPerfil(email: string): Promise<Perfil | null> {
   return s.exists() ? ({ email: s.id, ...s.data() } as Perfil) : null;
 }
 export const listarPerfis = () => lista<Perfil & { id: string }>('users');
-export const gravarPerfil = (p: Perfil) => setDoc(doc(db, 'users', p.email.toLowerCase()), { ...p, email: p.email.toLowerCase() });
-export const apagarPerfil = (email: string) => deleteDoc(doc(db, 'users', email.toLowerCase()));
+/** Grava o perfil e o índice de acessos usado pelo login (só Master). */
+export async function gravarPerfil(p: Perfil) {
+  await setDoc(doc(db, 'users', p.email.toLowerCase()), { ...p, email: p.email.toLowerCase() });
+  await (await import('./acessos')).atualizarAcesso(p.email, !!p.ativo);
+}
+export async function apagarPerfil(email: string) {
+  await deleteDoc(doc(db, 'users', email.toLowerCase()));
+  await (await import('./acessos')).atualizarAcesso(email, false);
+}
 
 // ---------- configuração ----------
 export const listarComunidades = async () => (await lista<Comunidade>('comunidades')).sort((a, b) => a.ordem - b.ordem);
