@@ -48,6 +48,14 @@ service cloud.firestore {
         || get(/databases/$(database)/documents/fechos/$(p)).data.estado != 'fechado';
     }
 
+    // ---------- índice de acessos (login) ----------
+    // Por email cifrado (SHA-256): diz só se o acesso está ativo. Lê-se um a um sem login (o ecrã de login
+    // confirma o email antes de enviar o link), mas não se lista. Só o Master escreve.
+    match /acessos/{id} {
+      allow get: if true;
+      allow list, write: if isMaster();
+    }
+
     // ---------- utilizadores ----------
     match /users/{email} {
       allow read: if isMaster() || hasRole(['caf']) || (signedIn() && myEmail() == email);

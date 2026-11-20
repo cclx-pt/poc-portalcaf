@@ -275,3 +275,18 @@ describe('automação dos bugs e melhorias', () => {
     await assertSucceeds(setDoc(doc(as(MASTER), 'config', 'pedidos'), { analisarAgoraEm: '2026-11-21T10:00:00Z' }, { merge: true }));
   });
 });
+
+describe('índice de acessos do login', () => {
+  it('sem login lê uma entrada mas não lista; só o Master escreve', async () => {
+    const { collection, getDocs } = await import('firebase/firestore');
+    await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), 'acessos', 'abc'), { ativo: true }); });
+    const anon = env.unauthenticatedContext().firestore();
+    await assertSucceeds(getDoc(doc(anon, 'acessos', 'abc')));
+    await assertSucceeds(getDoc(doc(anon, 'acessos', 'nao-existe')));
+    await assertFails(getDocs(collection(anon, 'acessos')));
+    await assertFails(setDoc(doc(anon, 'acessos', 'x'), { ativo: true }));
+    await assertFails(setDoc(doc(as(CAF), 'acessos', 'x'), { ativo: true }));
+    await assertSucceeds(setDoc(doc(as(MASTER), 'acessos', 'x'), { ativo: true }));
+    await assertSucceeds(getDocs(collection(as(MASTER), 'acessos')));
+  });
+});

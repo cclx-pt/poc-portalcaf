@@ -83,6 +83,19 @@ export default function Layout() {
     if (emRegistos && comunidade !== 'todas' && (comunidades ?? []).some((c) => c.id === comunidade && c.especial)) setComunidade('todas');
   }, [emRegistos, comunidade, comunidades]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Master: mantém o índice de acessos do login em dia (uma vez por sessão do browser).
+  useEffect(() => {
+    if (acesso?.papel !== 'master') return;
+    try { if (sessionStorage.getItem('caf-portal:acessos-sincronizados')) return; } catch { /* sem armazenamento */ }
+    void (async () => {
+      try {
+        const [{ listarPerfis }, { sincronizarAcessos }] = await Promise.all([import('../lib/db'), import('../lib/acessos')]);
+        await sincronizarAcessos(await listarPerfis());
+        try { sessionStorage.setItem('caf-portal:acessos-sincronizados', '1'); } catch { /* sem armazenamento */ }
+      } catch (e) { console.warn('índice de acessos', e); }
+    })();
+  }, [acesso?.papel]);
+
   return (
     <div className={`app${recolhido ? ' app-recolhido' : ''}`}>
       <nav className={`side${recolhido ? ' recolhido' : ''}`} aria-label="Navegação principal">
