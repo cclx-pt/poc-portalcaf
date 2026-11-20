@@ -135,6 +135,39 @@ export function mesesDecorridos(ano: number, hoje: string): number {
 /** Valor mensal imputado à comunidade: valor total × incidência (por omissão 100%). */
 export const valorImputado = (c: Pick<CustoFixo, 'valorMensal' | 'incidencia'>) => r2(c.valorMensal * (c.incidencia ?? 100) / 100);
 
+/** Quantas vezes o custo ocorre no mês (AAAA-MM), conforme a periodicidade. Sem periodicidade: 1. */
+export function ocorrenciasNoMes(c: Pick<CustoFixo, 'periodicidade' | 'desde' | 'inicio'>, p: string): number {
+  const per = c.periodicidade;
+  if (!per || (per.unidade === 'meses' && per.cada <= 1)) return 1;
+  const cada = Math.max(1, Math.round(per.cada));
+  const primeira = c.desde && /^\d{4}-\d{2}-\d{2}$/.test(c.desde) ? c.desde : `${c.inicio}-01`;
+  const [a0, m0] = primeira.slice(0, 7).split('-').map(Number);
+  const [a, m] = p.split('-').map(Number);
+  const dif = (a * 12 + m) - (a0 * 12 + m0);
+  if (per.unidade === 'meses') return dif >= 0 && dif % cada === 0 ? 1 : 0;
+  if (per.unidade === 'anos') return dif >= 0 && dif % (12 * cada) === 0 ? 1 : 0;
+  // A cada X dias: conta as datas da série que caem no mês.
+  const ini = Date.UTC(a, m - 1, 1), fim = Date.UTC(a, m, 1);
+  const t0 = Date.parse(`${primeira}T00:00:00Z`);
+  const passo = cada * 86400000;
+  if (fim <= t0) return 0;
+  const k0 = Math.max(0, Math.ceil((ini - t0) / passo));
+  let n = 0;
+  for (let t = t0 + k0 * passo; t < fim; t += passo) n++;
+  return n;
+}
+
+/** Valor imputado à comunidade num mês, já com a periodicidade (0 nos meses sem ocorrência). */
+export const valorImputadoNoMes = (c: Pick<CustoFixo, 'valorMensal' | 'incidencia' | 'periodicidade' | 'desde' | 'inicio'>, p: string) => r2(valorImputado(c) * ocorrenciasNoMes(c, p));
+
+/** Texto da periodicidade: "mensal", "a cada 3 meses", "anual", "a cada 14 dias". */
+export function descreverPeriodicidade(c: Pick<CustoFixo, 'periodicidade'>): string {
+  const per = c.periodicidade;
+  if (!per || (per.unidade === 'meses' && per.cada <= 1)) return 'mensal';
+  if (per.unidade === 'anos' && per.cada === 1) return 'anual';
+  return `a cada ${per.cada} ${per.unidade === 'meses' ? 'meses' : per.unidade === 'anos' ? 'anos' : 'dias'}`;
+}
+
 export function custoAtivo(c: CustoFixo, p: string) {
   if (c.ano != null && p.slice(0, 4) !== String(c.ano)) return false;
   return c.inicio <= p && (!c.fim || c.fim >= p);
@@ -256,11 +289,11 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
   const boloCfPrev = Array.from({ length: 12 }, () => 0);
   for (const cf of d.custosFixos) for (let mes = 1; mes <= ate; mes++) {
     const p = periodo(d.ano, mes);
-    if (!custoAtivo(cf, p)) continue;
+    if (!custoAtivo(cf, p) || !ocorrenciasNoMes(cf, p)) continue; // periodicidade: só nos meses em que ocorre
     // Previsão (tabela) de todos os meses, para os KPI de custos fixos anuais e mensais: os gerais vão para o bolo.
     {
       const comP = destino(cf.comunidadeId, p);
-      const vP = valorImputado(cf);
+      const vP = valorImputadoNoMes(cf, p);
       const geralP = cf.ambito === 'geral' || comP === 'bolsa-geral' || classificar(cf.categoria || cf.rubrica, 'saida').ambito === 'geral';
       if (geralP) boloCfPrev[mes - 1] = r2(boloCfPrev[mes - 1] + vP);
       else { const xp = m(comP, mes); xp.cfPrevisto = r2((xp.cfPrevisto ?? 0) + vP); }
@@ -269,7 +302,7 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
     if (regra && fechado(mes)) continue;
     const comCf = destino(cf.comunidadeId, p); // custo de uma comunidade já terminada: na sucessora
     const x = m(comCf, mes);
-    const valor = valorImputado(cf);
+    const valor = valorImputadoNoMes(cf, p);
     x.custosFixos = r2(x.custosFixos + valor);
     soma(x.custosRubricas, cf.nivel === 'confidencial' ? 'Outros custos de funcionamento' : cf.rubrica, valor);
     // Custo fixo confidencial: nunca aparece com a sua rubrica própria.

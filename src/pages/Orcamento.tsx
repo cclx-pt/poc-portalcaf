@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
+import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { Estado, Kpi, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, gravarOrcamento, gravarVersaoOrcamento, lerOrcamento, listarComunidades, listarCustosFixos, listarResumos } from '../lib/db';
 import { eur, hoje, pct, periodo, r2 } from '../lib/format';
-import { comunidadeAtiva, custoAtivo, mesesDecorridos, somarMeses, partesMes, valorImputado } from '../lib/resumos';
+import { comunidadeAtiva, custoAtivo, mesesDecorridos, somarMeses, partesMes, valorImputadoNoMes } from '../lib/resumos';
 import type { LinhaOrcamento, Orcamento as Orc } from '../lib/types';
 
 const GRUPO_LABEL = { entradas: 'Entradas', custosFixos: 'Custos fixos', despesas: 'Despesas e reembolsos' } as const;
@@ -46,7 +47,7 @@ export default function Orcamento() {
         const ent = Object.entries(t.entradasPorCategoria);
         if (ent.length) ent.forEach(([cat, v]) => novas.push({ comunidadeId: c.id, grupo: 'entradas', categoria: cat, anual: r2(v * fator) }));
         else novas.push({ comunidadeId: c.id, grupo: 'entradas', categoria: 'Total', anual: 0 });
-        const custoAno = r2(cf.filter((x) => x.comunidadeId === c.id).reduce((s, x) => s + Array.from({ length: 12 }, (_, i) => (custoAtivo(x, periodo(ano, i + 1)) ? valorImputado(x) : 0)).reduce((a, b) => a + b, 0), 0));
+        const custoAno = r2(cf.filter((x) => x.comunidadeId === c.id).reduce((s, x) => s + Array.from({ length: 12 }, (_, i) => (custoAtivo(x, periodo(ano, i + 1)) ? valorImputadoNoMes(x, periodo(ano, i + 1)) : 0)).reduce((a, b) => a + b, 0), 0));
         novas.push({ comunidadeId: c.id, grupo: 'custosFixos', categoria: 'Custos fixos (tabela)', anual: custoAno });
         Object.entries(t.despesasPorCategoria).forEach(([cat, v]) => novas.push({ comunidadeId: c.id, grupo: 'despesas', categoria: cat, anual: r2(v * fator) }));
       }
@@ -55,7 +56,7 @@ export default function Orcamento() {
     } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
 
-  async function guardar(aprovar: boolean) {
+  async function guardar(aprovar: boolean): Promise<boolean> {
     setOcupado(true); setMsg(null);
     try {
       const anterior = orc.dados;
@@ -71,11 +72,14 @@ export default function Orcamento() {
       await auditar(acesso!.email, aprovar ? 'aprovar orçamento' : 'guardar orçamento', `${ano} v${o.versao}`);
       await orc.recarregar();
       setMsg(aprovar ? `Orçamento ${ano} aprovado (versão ${o.versao}).` : 'Rascunho guardado.');
-    } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
+      return true;
+    } catch (e) { setMsg(mensagemErro(e)); return false; } finally { setOcupado(false); }
   }
 
   const estado = orc.dados?.estado;
   const alterado = JSON.stringify(linhas) !== JSON.stringify(orc.dados?.linhas ?? []);
+  // Sair com o orçamento alterado e por gravar: pergunta (grava como rascunho).
+  useAvisoSaida(alterado && !orc.aCarregar, () => guardar(false));
   const grupos: LinhaOrcamento['grupo'][] = ['entradas', 'custosFixos', 'despesas'];
 
   return (
