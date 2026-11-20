@@ -383,3 +383,6 @@ tr.duplicado td { background: #f2f2f2; }
 .pe .reportar { font-size: 11px; color: var(--grafite); }
 @media print { .pe .reportar { display: none; } }
 @media print { .codigo-ecra { border: none; padding: 0; } }
+
+/* Plano da análise automática (texto em Markdown, mostrado como texto). */
+.plano-texto { white-space: pre-wrap; font-size: 13px; max-height: 360px; overflow-y: auto; }

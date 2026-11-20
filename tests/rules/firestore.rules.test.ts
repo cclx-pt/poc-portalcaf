@@ -220,6 +220,8 @@ describe('bugs e melhorias', () => {
     await assertFails(setDoc(doc(as(LEITOR), 'pedidos', 'p3'), pedido(CAF)));
     await assertFails(setDoc(doc(as(LEITOR), 'pedidos', 'p4'), pedido(LEITOR, { estado: 'resolvido' })));
     await assertFails(setDoc(doc(as(LEITOR), 'pedidos', 'p5'), pedido(LEITOR, { tipo: 'outro' })));
+    // Ninguém cria um pedido já com plano aprovado (a automação implementaria um plano não revisto).
+    await assertFails(setDoc(doc(as(LEITOR), 'pedidos', 'p9'), pedido(LEITOR, { plano: 'x', planoEstado: 'aprovado' })));
     await assertFails(setDoc(doc(env.unauthenticatedContext().firestore(), 'pedidos', 'p6'), pedido('x@y.pt')));
   });
 
@@ -244,5 +246,32 @@ describe('bugs e melhorias', () => {
     await assertFails(updateDoc(doc(as(CAF), 'pedidos', 'p8'), { titulo: 'Outro' }));
     await assertFails(deleteDoc(doc(as(LEITOR), 'pedidos', 'p8')));
     await assertSucceeds(deleteDoc(doc(as(MASTER), 'pedidos', 'p8')));
+  });
+});
+
+describe('automação dos bugs e melhorias', () => {
+  const base = { tipo: 'bug', titulo: 'Botão não grava', descricao: 'Ao clicar nada acontece.', ecra: 'TES-02', ecraNome: 'R', caminho: '/r', estado: 'novo', criadoPor: LEITOR, criadoEm: '2026-11-20T14:00:00Z' };
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'pedidos', 'q1'), { ...base, plano: 'Mudar X', planoEm: '2026-11-21T02:00:00Z', planoEstado: 'proposto' });
+    });
+  });
+
+  it('só o Master aprova ou rejeita um plano proposto', async () => {
+    const { updateDoc } = await import('firebase/firestore');
+    await assertFails(updateDoc(doc(as(CAF), 'pedidos', 'q1'), { planoEstado: 'aprovado' }));
+    await assertFails(updateDoc(doc(as(MASTER), 'pedidos', 'q1'), { planoEstado: 'pr-aberto' }));
+    await assertFails(updateDoc(doc(as(MASTER), 'pedidos', 'q1'), { plano: 'Outro plano' }));
+    await assertSucceeds(updateDoc(doc(as(MASTER), 'pedidos', 'q1'), { planoEstado: 'aprovado', planoDecididoPor: MASTER, planoDecididoEm: '2026-11-21T09:00:00Z' }));
+    await assertFails(updateDoc(doc(as(MASTER), 'pedidos', 'q1'), { planoEstado: 'rejeitado' }));
+  });
+
+  it('só o Master pede nova análise; o CAF só liga e desliga o registo', async () => {
+    const { updateDoc } = await import('firebase/firestore');
+    await assertFails(updateDoc(doc(as(CAF), 'pedidos', 'q1'), { analisarAgoraEm: '2026-11-21T10:00:00Z' }));
+    await assertSucceeds(updateDoc(doc(as(MASTER), 'pedidos', 'q1'), { analisarAgoraEm: '2026-11-21T10:00:00Z' }));
+    await assertSucceeds(setDoc(doc(as(CAF), 'config', 'pedidos'), { ativo: true, alteradoPor: CAF }, { merge: true }));
+    await assertFails(setDoc(doc(as(CAF), 'config', 'pedidos'), { analisarAgoraEm: '2026-11-21T10:00:00Z' }, { merge: true }));
+    await assertSucceeds(setDoc(doc(as(MASTER), 'config', 'pedidos'), { analisarAgoraEm: '2026-11-21T10:00:00Z' }, { merge: true }));
   });
 });
