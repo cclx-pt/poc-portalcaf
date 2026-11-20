@@ -32,7 +32,12 @@ sequenceDiagram
 | Hora (Lisboa) | O que faz |
 |---|---|
 | 02:17 (modo noite) | Analisa todos os pedidos abertos sem plano; implementa os aprovados sem PR |
-| 08:17 a 22:17, de hora a hora (modo agora) | Só o que o Master pediu ("Analisar agora", "Pedir nova análise") e os aprovados sem PR; sem trabalho, termina logo |
+| De hora a hora, ao minuto 17 (modo agora) | Só o que o Master pediu ("Analisar agora", "Pedir nova análise") e os aprovados sem PR; sem trabalho, termina logo |
+
+**Sem utilização disponível no plano Claude:** nada se perde. Cada resultado é gravado logo que fica pronto, e o que
+ficou por fazer continua pendente. Se a análise da noite não terminar, as verificações de hora a hora fazem-na
+(modo noite) até ficar concluída, a partir do momento em que o plano volta a ter utilização. Uma implementação
+interrompida retoma no mesmo ramo (`auto/pedido-<ref>`) e não abre um segundo PR.
 
 ## Peças
 

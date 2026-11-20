@@ -12,7 +12,7 @@ import { writeFileSync } from 'node:fs';
 import { cert, initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { cifrar, decifrar } from './cifra';
-import { analisarTodosPendente, trabalhoDaAutomacao, type ConfigPedidos, type Pedido } from '../src/lib/pedidosBase';
+import { analisarTodosPendente, modoEfetivo, trabalhoDaAutomacao, type ConfigPedidos, type Pedido } from '../src/lib/pedidosBase';
 
 const env = (k: string) => { const v = process.env[k]; if (!v) throw new Error(`Falta a variável ${k}`); return v; };
 initializeApp({ credential: cert(JSON.parse(env('FIREBASE_SERVICE_ACCOUNT'))) });
@@ -23,9 +23,10 @@ const QUEM = 'automacao@portalcaf';
 export const CAMPOS_AUTOMACAO = ['plano', 'planoEm', 'planoEstado', 'prUrl', 'prNumero', 'automacaoNota', 'automacaoEm'] as const;
 
 async function exportar() {
-  const modo = (process.env.PEDIDOS_MODO === 'noite' ? 'noite' : 'agora') as 'noite' | 'agora';
   const cfgSnap = await db.doc('config/pedidos').get();
   const cfg = (cfgSnap.exists ? cfgSnap.data() : { ativo: true }) as ConfigPedidos;
+  // Uma noite que não terminou (ex.: sem utilização disponível) é retomada na verificação seguinte.
+  const modo = modoEfetivo(process.env.PEDIDOS_MODO === 'noite' ? 'noite' : 'agora', cfg);
   const todos = (await db.collection('pedidos').get()).docs.map((d) => ({ id: d.id, ...d.data() }) as Pedido);
   const analisarTodos = analisarTodosPendente(cfg);
   const pedidos = todos
@@ -40,7 +41,8 @@ async function exportar() {
 }
 
 async function atualizar() {
-  const dados = JSON.parse(decifrar(env('PEDIDOS_DADOS'))) as { resultados: { id: string; campos: Record<string, unknown> }[]; resumo?: string };
+  // concluido: true só na última gravação de uma execução que tratou tudo (marca a noite como concluída).
+  const dados = JSON.parse(decifrar(env('PEDIDOS_DADOS'))) as { resultados: { id: string; campos: Record<string, unknown> }[]; resumo?: string; modo?: 'noite' | 'agora'; concluido?: boolean };
   const agora = new Date().toISOString();
   const b = db.batch();
   for (const r of dados.resultados ?? []) {
@@ -49,7 +51,12 @@ async function atualizar() {
     b.update(db.doc(`pedidos/${r.id}`), { ...campos, automacaoEm: agora });
     b.create(db.collection('auditoria').doc(), { quem: QUEM, acao: 'Bugs e melhorias', detalhe: `#${r.id.slice(0, 6).toUpperCase()}: ${campos.planoEstado ?? 'atualizado'} (automação)`, em: agora });
   }
-  b.set(db.doc('config/pedidos'), { automacaoEm: agora, automacaoResumo: (dados.resumo ?? '').slice(0, 300) || FieldValue.delete() }, { merge: true });
+  b.set(db.doc('config/pedidos'), {
+    automacaoEm: agora,
+    automacaoResumo: (dados.resumo ?? '').slice(0, 300) || FieldValue.delete(),
+    ...(dados.concluido && dados.modo === 'noite' ? { noiteConcluidaEm: agora } : {}),
+    ...(dados.concluido ? { analisarAgoraAtendidoEm: agora } : {}),
+  }, { merge: true });
   await b.commit();
   console.log(`Atualizados ${dados.resultados?.length ?? 0} pedidos.`);
 }

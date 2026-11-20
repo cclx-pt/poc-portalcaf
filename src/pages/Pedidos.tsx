@@ -4,7 +4,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, Kpi, Modal, mensagemErro, useCarregar } from '../components/ui';
 import { auditar } from '../lib/db';
 import {
-  analisarTodosPendente, apagarPedido, atualizarPedido, decidirPlano, ESTADO_PEDIDO, ESTADO_PLANO, ESTADOS_ABERTOS, gravarConfigPedidos, lerConfigPedidos,
+  analisarTodosPendente, apagarPedido, modoEfetivo, atualizarPedido, decidirPlano, ESTADO_PEDIDO, ESTADO_PLANO, ESTADOS_ABERTOS, gravarConfigPedidos, lerConfigPedidos,
   listarPedidos, ordenarPedidos, pedirAnaliseAgora, PRIORIDADE_PEDIDO, refPedido, TIPO_PEDIDO,
   type EstadoPedido, type Pedido, type PrioridadePedido, type TipoPedido,
 } from '../lib/pedidos';
@@ -65,7 +65,7 @@ export default function Pedidos() {
     try {
       await pedirAnaliseAgora(acesso.email);
       await auditar(acesso.email, 'Bugs e melhorias', 'Pedida análise imediata dos pedidos abertos sem plano');
-      setMsg('Análise pedida. A automação verifica de hora a hora (das 8h às 22h) e analisa os pedidos abertos sem plano na próxima verificação.');
+      setMsg('Análise pedida. A automação verifica de hora a hora e analisa os pedidos abertos sem plano na próxima verificação.');
       await cfg.recarregar();
     } catch (e) { setErro(mensagemErro(e)); }
   }
@@ -83,7 +83,7 @@ export default function Pedidos() {
       const novo = { ...p, ...campos };
       lista.setDados(todos.map((x) => (x.id === p.id ? novo : x)));
       setDetalhe(novo);
-      setMsg(acao === 'aprovar' ? `Plano de ${refPedido(p.id)} aprovado: a automação abre o PR na próxima verificação (até 1 hora, das 8h às 22h; senão às 2h).`
+      setMsg(acao === 'aprovar' ? `Plano de ${refPedido(p.id)} aprovado: a automação abre o PR na próxima verificação (até 1 hora).`
         : acao === 'rejeitar' ? `Plano de ${refPedido(p.id)} rejeitado.` : `Nova análise de ${refPedido(p.id)} pedida.`);
     } catch (e) { setErro(mensagemErro(e)); }
   }
@@ -120,6 +120,7 @@ export default function Pedidos() {
               Análise automática: todas as noites (2h) a automação propõe um plano para cada pedido aberto; o Master aprova ou rejeita; aprovado, a automação abre um PR (o merge continua a pedir aprovação).
               {cfg.dados?.automacaoEm ? <span className="muted"> Última execução: {dataHora(cfg.dados.automacaoEm)}{cfg.dados.automacaoResumo ? ` · ${cfg.dados.automacaoResumo}` : ''}.</span> : <span className="muted"> Ainda não correu.</span>}
               {cfg.dados && analisarTodosPendente(cfg.dados) && <span className="muted"> Análise pedida em {dataHora(cfg.dados.analisarAgoraEm)}: a aguardar a próxima verificação.</span>}
+              {cfg.dados?.automacaoEm && modoEfetivo('agora', cfg.dados) === 'noite' && <span className="muted"> A análise da noite ainda não terminou (por exemplo, por falta de utilização disponível no plano Claude): é retomada nas verificações seguintes, de hora a hora, até ficar concluída.</span>}
             </p>
           </div>
           <span className="acoes" style={{ margin: 0, alignItems: 'center' }}>

@@ -88,6 +88,11 @@ export interface ConfigPedidos {
   analisarAgoraEm?: string; analisarAgoraPor?: string;
   /** Última execução da automação (escrito pela própria automação). */
   automacaoEm?: string; automacaoResumo?: string;
+  /** Última análise da noite concluída. Se a da noite não terminou (ex.: sem utilização disponível no plano),
+   *  as verificações seguintes fazem-na, até conseguirem. */
+  noiteConcluidaEm?: string;
+  /** Quando a automação terminou um "Analisar agora" (só depois de tratar todos os pedidos). */
+  analisarAgoraAtendidoEm?: string;
 }
 
 /**
@@ -104,5 +109,20 @@ export function trabalhoDaAutomacao(p: Pedido, o: { modo: 'noite' | 'agora'; ana
   return null;
 }
 
-/** "Analisar agora" (para todos) ainda por atender: pedido depois da última execução da automação. */
-export const analisarTodosPendente = (c: ConfigPedidos) => !!c.analisarAgoraEm && (!c.automacaoEm || c.analisarAgoraEm > c.automacaoEm);
+/**
+ * Modo efetivo de uma verificação: uma verificação "agora" passa a "noite" se a análise da noite de hoje
+ * (02:00 em Lisboa) ainda não foi concluída. Assim, uma noite falhada é retomada na verificação seguinte.
+ */
+export function modoEfetivo(pedido: 'noite' | 'agora', c: Pick<ConfigPedidos, 'noiteConcluidaEm'>, agora = new Date()): 'noite' | 'agora' {
+  if (pedido === 'noite') return 'noite';
+  const lisboa = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Lisbon', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(agora);
+  const v = (t: string) => lisboa.find((x) => x.type === t)?.value ?? '';
+  // Antes das 2h ainda conta a noite anterior.
+  const dia = Number(v('hour')) < 2 ? new Date(agora.getTime() - 86400000) : agora;
+  const diaTxt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Lisbon' }).format(dia); // AAAA-MM-DD
+  const concluida = c.noiteConcluidaEm ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Lisbon' }).format(new Date(c.noiteConcluidaEm)) : '';
+  return concluida >= diaTxt ? 'agora' : 'noite';
+}
+
+/** "Analisar agora" (para todos) ainda por atender: pedido depois do último que a automação terminou. */
+export const analisarTodosPendente = (c: ConfigPedidos) => !!c.analisarAgoraEm && (!c.analisarAgoraAtendidoEm || c.analisarAgoraEm > c.analisarAgoraAtendidoEm);
