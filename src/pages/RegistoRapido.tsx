@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Rodape, useMarcarAba } from '../components/ui';
+import { BotaoReportar } from '../components/Reportar';
 import { PAPEL_LABEL } from '../lib/types';
 import { hoje } from '../lib/format';
 import { filtrarLotesPresenca, type EntradaPresenca, type FiltroPresencas } from '../lib/presencas';
@@ -85,7 +86,7 @@ export default function RegistoRapido() {
           <p className="muted small" style={{ marginTop: 8 }}>Inclui os registos importados do Jotform e os feitos no portal. Corrigir ou apagar no portal não mexe no Jotform; os apagados não voltam a ser importados.</p>
         </>
       )}
-      <Rodape semValores />
+      <Rodape semValores acao={<BotaoReportar />} />
     </div>
   );
 }

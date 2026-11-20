@@ -34,6 +34,7 @@ export const ECRAS: Record<string, Ecra> = {
   '/configuracao': { codigo: 'ADM-01', nome: 'Configuração' },
   '/utilizadores': { codigo: 'ADM-02', nome: 'Utilizadores' },
   '/auditoria': { codigo: 'ADM-03', nome: 'Auditoria' },
+  '/pedidos': { codigo: 'ADM-04', nome: 'Bugs e melhorias' },
   '/publico': { codigo: 'EXT-02', nome: 'Página pública' },
   '/registar': { codigo: 'EXT-03', nome: 'Registo de presenças (link direto)' },
 };

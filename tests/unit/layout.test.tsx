@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 const sync = <T,>(v: T) => Object.assign(Promise.resolve(v), { __sync: v });
 vi.mock('../../src/auth/AuthProvider', () => ({ useAuth: () => ({ acesso: { email: 'tesouraria@cclx.pt', papel: 'master', nivel: 'confidencial', comunidades: ['*'] }, pode: () => true, temNivel: () => true, sair: () => {} }) }));
 vi.mock('../../src/lib/db', () => ({ listarComunidades: () => sync([{ id: 'almada', nome: 'Almada', ordem: 1 }]) }));
+vi.mock('../../src/lib/pedidos', () => ({ lerConfigPedidos: () => sync({ ativo: true }) }));
 vi.mock('../../src/components/ui', async (orig) => ({
   ...(await orig<typeof import('../../src/components/ui')>()),
   useCarregar: (fn: () => Promise<unknown> & { __sync?: unknown }) => { const p = fn(); return { dados: p.__sync, erro: null, aCarregar: false, recarregar: async () => {} }; },
@@ -27,5 +28,14 @@ describe('layout em telemóvel e tablet', () => {
     expect(html).toMatch(/class="grupo-botao"[^>]*aria-expanded="false"[^>]*>.*?Tesouraria/s);
     expect(html).toContain('title="Demonstração de resultados"');
   });
-});
 
+  it('rodapé com o código do ecrã e o botão para reportar bugs e melhorias', async () => {
+    const { default: Layout } = await import('../../src/components/Layout');
+    const html = renderToString(<MemoryRouter initialEntries={['/reconciliacao']}><Routes><Route element={<Layout />}><Route path="reconciliacao" element={<p>x</p>} /></Route></Routes></MemoryRouter>).replace(/<!-- -->/g, '');
+    expect(html).toContain('Reportar bug ou melhoria');
+    expect(html).toContain('Ecrã TES-02');
+    const adm = renderToString(<MemoryRouter initialEntries={['/pedidos']}><Routes><Route element={<Layout />}><Route path="pedidos" element={<p>x</p>} /></Route></Routes></MemoryRouter>).replace(/<!-- -->/g, '');
+    expect(adm).toContain('title="Bugs e melhorias"');
+    expect(adm).toContain('Ecrã ADM-04');
+  });
+});

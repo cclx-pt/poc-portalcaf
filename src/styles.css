@@ -379,5 +379,7 @@ tr.duplicado td { background: #f2f2f2; }
 
 /* Código do ecrã (rodapé e janelas), para referência ao pedir alterações. */
 .codigo-ecra { font-family: var(--titulo); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--grafite); border: 1px solid var(--linha); border-radius: 4px; padding: 1px 6px; white-space: nowrap; user-select: all; }
-.pe .codigo-ecra { margin-left: auto; }
+.pe-direita { margin-left: auto; display: inline-flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.pe .reportar { font-size: 11px; color: var(--grafite); }
+@media print { .pe .reportar { display: none; } }
 @media print { .codigo-ecra { border: none; padding: 0; } }
