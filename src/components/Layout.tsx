@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Building2, CalendarCheck, CalendarX, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, ListChecks, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Bug, Building2, CalendarCheck, CalendarX, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, ListChecks, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { useCarregar, useFiltros, Rodape } from './ui';
+import { BotaoReportar } from './Reportar';
 import { listarComunidades } from '../lib/db';
 import { NIVEL_LABEL, PAPEL_LABEL } from '../lib/types';
 
@@ -44,6 +45,7 @@ const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
     { to: '/configuracao', nome: 'Configuração', Icone: Settings, ver: (p) => p.pode('configurar') },
     { to: '/utilizadores', nome: 'Utilizadores', Icone: Users, ver: (p) => p.pode('utilizadores') },
     { to: '/auditoria', nome: 'Auditoria', Icone: ShieldCheck, ver: (p) => p.pode('auditoria') },
+    { to: '/pedidos', nome: 'Bugs e melhorias', Icone: Bug, ver: (p) => p.pode('configurar') },
   ] },
 ];
 
@@ -149,7 +151,7 @@ export default function Layout() {
           </div>
         </div>
         <Outlet />
-        <Rodape />
+        <Rodape acao={<BotaoReportar />} />
       </main>
     </div>
   );

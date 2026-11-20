@@ -3,6 +3,7 @@ import { renderToString } from 'react-dom/server';
 import type { Lote } from '../../src/lib/types';
 
 const sync = <T,>(v: T) => Object.assign(Promise.resolve(v), { __sync: v });
+vi.mock('../../src/lib/pedidos', () => ({ lerConfigPedidos: () => sync({ ativo: true }) }));
 const lote = (origem: Lote['origem'], comunidadeId: string, mes: number, regs: Partial<Lote['registos'][number]>[]): Lote => ({
   id: `${origem}_${mes}_${comunidadeId}`, origem, ano: 2026, mes, periodo: `2026-${String(mes).padStart(2, '0')}`, comunidadeId,
   registos: regs.map((r, i) => ({ id: `${origem}-${mes}-${i}`, data: `2026-${String(mes).padStart(2, '0')}-0${i + 1}`, valor: 0, categoria: 'Dízimo', ...r })),

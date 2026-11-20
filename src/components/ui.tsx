@@ -179,13 +179,16 @@ export function useMarcarAba(n: number) {
 }
 
 /** `semValores`: ecrãs sem dados financeiros (registo de presenças) não falam de euros. */
-export function Rodape({ ecra, semValores }: { ecra?: Ecra; semValores?: boolean }) {
+export function Rodape({ ecra, semValores, acao }: { ecra?: Ecra; semValores?: boolean; acao?: ReactNode }) {
   const atual = useCodigoEcra(ecra);
   return (
     <div className="pe">
       <b>CONSELHO ADMINISTRATIVO E FINANCEIRO • CCLX</b>
       <span>{semValores ? 'Portal CAF · PoC' : 'Portal CAF · PoC · Valores em euros (€), com duas casas decimais'}</span>
-      {atual && <span className="codigo-ecra" title="Código deste ecrã: indique-o ao pedir uma alteração">Ecrã {atual.codigo} · {atual.nome}</span>}
+      <span className="pe-direita">
+        {acao}
+        {atual && <span className="codigo-ecra" title="Código deste ecrã: indique-o ao pedir uma alteração">Ecrã {atual.codigo} · {atual.nome}</span>}
+      </span>
     </div>
   );
 }

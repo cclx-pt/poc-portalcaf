@@ -207,3 +207,42 @@ describe('registos (presenças da sua comunidade)', () => {
     await assertFails(setDoc(doc(as(REG_CDR), 'resumos', '2026_caldas-da-rainha'), { meses: [] }));
   });
 });
+
+describe('bugs e melhorias', () => {
+  const pedido = (email: string, extra: Record<string, unknown> = {}) => ({
+    tipo: 'bug', titulo: 'Botão não grava', descricao: 'Ao clicar em gravar nada acontece.', ecra: 'TES-02', ecraNome: 'Reconciliação',
+    caminho: '/reconciliacao', estado: 'novo', criadoPor: email, criadoEm: '2026-11-20T14:00:00Z', ...extra,
+  });
+
+  it('qualquer utilizador ativo regista em seu nome, como novo', async () => {
+    await assertSucceeds(setDoc(doc(as(REG_CDR), 'pedidos', 'p1'), pedido(REG_CDR)));
+    await assertSucceeds(setDoc(doc(as(LEITOR), 'pedidos', 'p2'), pedido(LEITOR, { tipo: 'melhoria' })));
+    await assertFails(setDoc(doc(as(LEITOR), 'pedidos', 'p3'), pedido(CAF)));
+    await assertFails(setDoc(doc(as(LEITOR), 'pedidos', 'p4'), pedido(LEITOR, { estado: 'resolvido' })));
+    await assertFails(setDoc(doc(as(LEITOR), 'pedidos', 'p5'), pedido(LEITOR, { tipo: 'outro' })));
+    await assertFails(setDoc(doc(env.unauthenticatedContext().firestore(), 'pedidos', 'p6'), pedido('x@y.pt')));
+  });
+
+  it('com o registo desligado ninguém regista; só Master e CAF ligam e desligam', async () => {
+    await assertFails(setDoc(doc(as(TES_CDR), 'config', 'pedidos'), { ativo: false }));
+    await assertSucceeds(setDoc(doc(as(CAF), 'config', 'pedidos'), { ativo: false }));
+    await assertFails(setDoc(doc(as(LEITOR), 'pedidos', 'p7'), pedido(LEITOR)));
+    await assertSucceeds(setDoc(doc(as(MASTER), 'config', 'pedidos'), { ativo: true }));
+    await assertSucceeds(setDoc(doc(as(LEITOR), 'pedidos', 'p7'), pedido(LEITOR)));
+  });
+
+  it('cada um lê os seus; Master e CAF leem todos e gerem estado, prioridade e nota', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'pedidos', 'p8'), pedido(LEITOR));
+    });
+    await assertSucceeds(getDoc(doc(as(LEITOR), 'pedidos', 'p8')));
+    await assertFails(getDoc(doc(as(TES_CDR), 'pedidos', 'p8')));
+    await assertSucceeds(getDoc(doc(as(CAF), 'pedidos', 'p8')));
+    await assertFails(setDoc(doc(as(LEITOR), 'pedidos', 'p8'), pedido(LEITOR, { estado: 'resolvido' })));
+    const { updateDoc, deleteDoc } = await import('firebase/firestore');
+    await assertSucceeds(updateDoc(doc(as(CAF), 'pedidos', 'p8'), { estado: 'em-curso', prioridade: 'alta', atualizadoPor: CAF }));
+    await assertFails(updateDoc(doc(as(CAF), 'pedidos', 'p8'), { titulo: 'Outro' }));
+    await assertFails(deleteDoc(doc(as(LEITOR), 'pedidos', 'p8')));
+    await assertSucceeds(deleteDoc(doc(as(MASTER), 'pedidos', 'p8')));
+  });
+});

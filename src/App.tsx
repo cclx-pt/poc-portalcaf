@@ -25,6 +25,7 @@ import Exportacao from './pages/Exportacao';
 import Configuracao from './pages/Configuracao';
 import Utilizadores from './pages/Utilizadores';
 import Auditoria from './pages/Auditoria';
+import Pedidos from './pages/Pedidos';
 import type { ReactElement } from 'react';
 
 function Protegido() {
@@ -83,6 +84,7 @@ export default function App() {
             <Route path="configuracao" element={<Se acao="configurar"><Configuracao /></Se>} />
             <Route path="utilizadores" element={<Se acao="utilizadores"><Utilizadores /></Se>} />
             <Route path="auditoria" element={<Se acao="auditoria"><Auditoria /></Se>} />
+            <Route path="pedidos" element={<Se acao="configurar"><Pedidos /></Se>} />
             <Route path="*" element={<Navigate to="/" />} />
           </Route>
         </Routes>

@@ -138,6 +138,32 @@ service cloud.firestore {
       allow write: if isMaster();
     }
 
+    // Interruptor do registo de bugs e melhorias: Master e CAF ligam e desligam (soma-se à regra de config acima).
+    match /config/pedidos {
+      allow write: if hasRole(['master', 'caf']);
+    }
+
+    // ---------- bugs e melhorias (registados no rodapé de cada ecrã) ----------
+    // Qualquer utilizador ativo regista, em seu nome, como "novo", se o registo estiver ligado.
+    // Lê os seus; Master e CAF leem todos, mudam estado, prioridade e nota, e apagam.
+    function registoPedidosLigado() {
+      return !exists(/databases/$(database)/documents/config/pedidos)
+        || get(/databases/$(database)/documents/config/pedidos).data.ativo != false;
+    }
+    match /pedidos/{id} {
+      allow create: if isActive()
+        && request.resource.data.criadoPor == myEmail()
+        && request.resource.data.estado == 'novo'
+        && request.resource.data.tipo in ['bug', 'melhoria']
+        && request.resource.data.titulo is string && request.resource.data.titulo.size() <= 120
+        && request.resource.data.descricao is string && request.resource.data.descricao.size() <= 4000
+        && registoPedidosLigado();
+      allow read: if hasRole(['master', 'caf']) || (isActive() && resource.data.criadoPor == myEmail());
+      allow update: if hasRole(['master', 'caf'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'prioridade', 'nota', 'atualizadoPor', 'atualizadoEm']);
+      allow delete: if hasRole(['master', 'caf']);
+    }
+
     // ---------- exceções de assistência (domingos sem assistência esperada) ----------
     match /assistencia_excecoes/{id} {
       allow read: if isActive();
