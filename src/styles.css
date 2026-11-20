@@ -384,5 +384,11 @@ tr.duplicado td { background: #f2f2f2; }
 @media print { .pe .reportar { display: none; } }
 @media print { .codigo-ecra { border: none; padding: 0; } }
 
+/* Alinhamento dos botões.
+   1) ".sec" é também a classe das secções (margem de 24px por baixo): num botão secundário essa margem
+      desalinhava-o dos botões vizinhos. Os botões nunca têm margem própria; o espaço é dado pelo contentor.
+   2) Numa linha de ações com campos (rótulo por cima do campo), os botões alinham pela base do campo. */
+button.sec, .btn.sec { margin-bottom: 0; }
+.acoes:has(> label.campo, > div.campo) { align-items: flex-end; }
 /* Plano da análise automática (texto em Markdown, mostrado como texto). */
 .plano-texto { white-space: pre-wrap; font-size: 13px; max-height: 360px; overflow-y: auto; }
