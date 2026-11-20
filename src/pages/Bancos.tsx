@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { LogoBanco, LogoConta } from '../components/LogoBanco';
 import SaldosBancos from './SaldosBancos';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
+import { Estado, Modal, mensagemErro, useCarregar, useFiltros, useMarcarAba } from '../components/ui';
 import { apagarBancoLote, auditar, gravar, gravarBancoLote, listarBanco, listarComunidades, listarContas, listarFechos } from '../lib/db';
 import { AmostraExtrato, CamposExtrato, limparMapa } from '../components/MapaExtratoEditor';
 import { lerFicheiro } from '../lib/ficheiros';
@@ -31,6 +31,7 @@ export default function Bancos() {
   const [limpar, setLimpar] = useState(false);
   const [ocultas, setOcultas] = useState<string[]>([]);
   const [vista, setVista] = useState<'mes' | 'saldos'>('mes');
+  useMarcarAba(vista === 'mes' ? 1 : 2);
   // Extratos sempre por mês: por omissão, o último mês com movimentos neste ano.
   const mesesComDados = [...new Set((banco.dados ?? []).map((l) => l.mes))].sort((a, b) => a - b);
   const [mesEscolhido, setMes] = useState<number | null>(null);

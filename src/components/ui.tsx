@@ -4,6 +4,8 @@ import { dataPT, eur, eurK, lerDataPT, mascaraDataPT, num } from '../lib/format'
 import { CATEGORICAS, CORES } from '../lib/cores';
 import { estadoMeses, textoMeses } from '../lib/resumos';
 import type { Resumo } from '../lib/types';
+import { useInRouterContext, useLocation } from 'react-router-dom';
+import { codigoCompleto, definirAba, ecraDe, useAbaEcra, type Ecra } from '../lib/ecras';
 
 // ---------- filtros globais (ano e comunidade) ----------
 interface Filtros { ano: number; setAno: (a: number) => void; comunidade: string; setComunidade: (c: string) => void }
@@ -128,6 +130,7 @@ export function useFocarErro(erro: unknown, raiz: { current: HTMLElement | null 
 export function Modal({ titulo, onFechar, children }: { titulo: string; onFechar: () => void; children: ReactNode }) {
   // Num formulário em janela, uma mensagem de erro que aparece leva o cursor ao campo com erro (ou mostra a mensagem).
   const caixa = useRef<HTMLDivElement>(null);
+  const ecra = useCodigoEcra();
   useEffect(() => {
     const el = caixa.current;
     if (!el || typeof MutationObserver === 'undefined') return;
@@ -142,7 +145,10 @@ export function Modal({ titulo, onFechar, children }: { titulo: string; onFechar
       <div className="modal" ref={caixa} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={titulo}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ margin: 0 }}>{titulo}</h2>
-          <button className="sec" onClick={onFechar} aria-label="Fechar">Fechar</button>
+          <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            {ecra && <span className="codigo-ecra" title="Código do ecrã de onde abriu esta janela">{ecra.codigo}</span>}
+            <button className="sec" onClick={onFechar} aria-label="Fechar">Fechar</button>
+          </span>
         </div>
         {children}
       </div>
@@ -150,11 +156,36 @@ export function Modal({ titulo, onFechar, children }: { titulo: string; onFechar
   );
 }
 
-export function Rodape() {
+/** Caminho atual (fora de um router, por exemplo nos testes, não há caminho). */
+function useCaminho(): string | null {
+  const noRouter = useInRouterContext();
+  // useInRouterContext é estável durante a vida do componente, por isso a chamada condicional é segura.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  return noRouter ? useLocation().pathname : null;
+}
+
+/** Código do ecrã atual ("TES-02", "ADM-01.2"), para referência ao pedir alterações. */
+export function useCodigoEcra(fixo?: Ecra): { codigo: string; nome: string } | null {
+  const caminho = useCaminho();
+  const aba = useAbaEcra();
+  const e = fixo ?? (caminho != null ? ecraDe(caminho) : null);
+  return e ? { codigo: codigoCompleto(e, aba), nome: e.nome } : null;
+}
+
+/** Num ecrã com separadores, indica qual está aberto (1, 2, 3…): o código passa a "ADM-01.2". */
+export function useMarcarAba(n: number) {
+  useEffect(() => { definirAba(n); }, [n]);
+  useEffect(() => () => definirAba(null), []);
+}
+
+/** `semValores`: ecrãs sem dados financeiros (registo de presenças) não falam de euros. */
+export function Rodape({ ecra, semValores }: { ecra?: Ecra; semValores?: boolean }) {
+  const atual = useCodigoEcra(ecra);
   return (
     <div className="pe">
       <b>CONSELHO ADMINISTRATIVO E FINANCEIRO • CCLX</b>
-      <span>Portal CAF · PoC · Valores em euros (€), com duas casas decimais</span>
+      <span>{semValores ? 'Portal CAF · PoC' : 'Portal CAF · PoC · Valores em euros (€), com duas casas decimais'}</span>
+      {atual && <span className="codigo-ecra" title="Código deste ecrã: indique-o ao pedir uma alteração">Ecrã {atual.codigo} · {atual.nome}</span>}
     </div>
   );
 }

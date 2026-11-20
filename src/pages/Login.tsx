@@ -3,6 +3,7 @@ import { isSignInWithEmailLink, sendSignInLinkToEmail, signInWithEmailLink } fro
 import { auth } from '../firebase';
 import { useAuth } from '../auth/AuthProvider';
 import { Rodape } from '../components/ui';
+import { ECRA_LOGIN } from '../lib/ecras';
 
 const BASE = import.meta.env.BASE_URL;
 const CHAVE_EMAIL = 'caf-portal:email-login';
@@ -60,7 +61,7 @@ export default function Login() {
           {msg && <div className="nota">{msg}</div>}
           <button onClick={() => void sair()}>Terminar sessão</button>
           <a href={`${BASE}#/publico`}>Ver a página pública</a>
-          <Rodape />
+          <Rodape ecra={ECRA_LOGIN} />
         </div>
       </div>
     );
@@ -94,7 +95,7 @@ export default function Login() {
 
         {msg && <div className="aviso">{msg}</div>}
         <a href={`${BASE}#/publico`}>Ver a página pública</a>
-        <Rodape />
+        <Rodape ecra={ECRA_LOGIN} />
       </div>
     </div>
   );
