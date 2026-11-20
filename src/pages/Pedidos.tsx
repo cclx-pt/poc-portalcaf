@@ -4,8 +4,9 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, Kpi, Modal, mensagemErro, useCarregar } from '../components/ui';
 import { auditar } from '../lib/db';
 import {
-  apagarPedido, atualizarPedido, ESTADO_PEDIDO, ESTADOS_ABERTOS, gravarConfigPedidos, lerConfigPedidos, listarPedidos, ordenarPedidos,
-  PRIORIDADE_PEDIDO, refPedido, TIPO_PEDIDO, type EstadoPedido, type Pedido, type PrioridadePedido, type TipoPedido,
+  analisarTodosPendente, apagarPedido, modoEfetivo, atualizarPedido, decidirPlano, ESTADO_PEDIDO, ESTADO_PLANO, ESTADOS_ABERTOS, gravarConfigPedidos, lerConfigPedidos,
+  listarPedidos, ordenarPedidos, pedirAnaliseAgora, PRIORIDADE_PEDIDO, refPedido, TIPO_PEDIDO,
+  type EstadoPedido, type Pedido, type PrioridadePedido, type TipoPedido,
 } from '../lib/pedidos';
 
 const dataHora = (s?: string) => (s ? new Date(s).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' }) : '—');
@@ -13,6 +14,7 @@ const dataHora = (s?: string) => (s ? new Date(s).toLocaleString('pt-PT', { date
 /** Administração › Bugs e melhorias (ADM-04): pedidos registados no rodapé dos ecrãs, e o interruptor do registo. */
 export default function Pedidos() {
   const { acesso } = useAuth();
+  const master = acesso?.papel === 'master';
   const cfg = useCarregar(lerConfigPedidos, []);
   const lista = useCarregar(listarPedidos, []);
   const [fEstado, setFEstado] = useState<'abertos' | 'todos' | EstadoPedido>('abertos');
@@ -57,6 +59,35 @@ export default function Pedidos() {
     } catch (e) { setErro(mensagemErro(e)); return false; }
   }
 
+  async function analisarAgora() {
+    if (!acesso) return;
+    setErro(null); setMsg(null);
+    try {
+      await pedirAnaliseAgora(acesso.email);
+      await auditar(acesso.email, 'Bugs e melhorias', 'Pedida análise imediata dos pedidos abertos sem plano');
+      setMsg('Análise pedida. A automação verifica de hora a hora e analisa os pedidos abertos sem plano na próxima verificação.');
+      await cfg.recarregar();
+    } catch (e) { setErro(mensagemErro(e)); }
+  }
+
+  /** Master: aprovar ou rejeitar o plano, ou pedir nova análise deste pedido. */
+  async function decidir(p: Pedido, acao: 'aprovar' | 'rejeitar' | 'reanalisar') {
+    if (!acesso) return;
+    setErro(null); setMsg(null);
+    const agora = new Date().toISOString();
+    const campos = acao === 'reanalisar' ? { analisarAgoraEm: agora }
+      : { planoEstado: acao === 'aprovar' ? 'aprovado' as const : 'rejeitado' as const, planoDecididoPor: acesso.email, planoDecididoEm: agora };
+    try {
+      await decidirPlano(p.id, campos);
+      await auditar(acesso.email, 'Bugs e melhorias', `${refPedido(p.id)} (${p.ecra}): ${acao === 'aprovar' ? 'plano aprovado' : acao === 'rejeitar' ? 'plano rejeitado' : 'pedida nova análise'}`);
+      const novo = { ...p, ...campos };
+      lista.setDados(todos.map((x) => (x.id === p.id ? novo : x)));
+      setDetalhe(novo);
+      setMsg(acao === 'aprovar' ? `Plano de ${refPedido(p.id)} aprovado: a automação abre o PR na próxima verificação (até 1 hora).`
+        : acao === 'rejeitar' ? `Plano de ${refPedido(p.id)} rejeitado.` : `Nova análise de ${refPedido(p.id)} pedida.`);
+    } catch (e) { setErro(mensagemErro(e)); }
+  }
+
   async function apagar(p: Pedido) {
     if (!acesso || !window.confirm(`Apagar o pedido ${refPedido(p.id)} "${p.titulo}"? Não se pode desfazer.`)) return;
     try {
@@ -85,11 +116,20 @@ export default function Pedidos() {
                 : <>Desligado: o botão não aparece e não se podem registar pedidos novos.</>}
               {cfg.dados?.alteradoEm && <span className="muted"> Alterado por {cfg.dados.alteradoPor} em {dataHora(cfg.dados.alteradoEm)}.</span>}
             </p>
+            <p className="small" style={{ margin: '4px 0 0' }}>
+              Análise automática: todas as noites (2h) a automação propõe um plano para cada pedido aberto; o Master aprova ou rejeita; aprovado, a automação abre um PR (o merge continua a pedir aprovação).
+              {cfg.dados?.automacaoEm ? <span className="muted"> Última execução: {dataHora(cfg.dados.automacaoEm)}{cfg.dados.automacaoResumo ? ` · ${cfg.dados.automacaoResumo}` : ''}.</span> : <span className="muted"> Ainda não correu.</span>}
+              {cfg.dados && analisarTodosPendente(cfg.dados) && <span className="muted"> Análise pedida em {dataHora(cfg.dados.analisarAgoraEm)}: a aguardar a próxima verificação.</span>}
+              {cfg.dados?.automacaoEm && modoEfetivo('agora', cfg.dados) === 'noite' && <span className="muted"> A análise da noite ainda não terminou (por exemplo, por falta de utilização disponível no plano Claude): é retomada nas verificações seguintes, de hora a hora, até ficar concluída.</span>}
+            </p>
           </div>
+          <span className="acoes" style={{ margin: 0, alignItems: 'center' }}>
+          {master && <button className="sec" disabled={!ativo} onClick={() => void analisarAgora()} title="Só o Master: a automação analisa já os pedidos abertos sem plano">Analisar agora</button>}
           <label className="opcao interruptor">
             <input type="checkbox" role="switch" checked={!!ativo} disabled={cfg.aCarregar} onChange={() => void alternarRegisto()} aria-label="Registo de bugs e melhorias" />
             <b>{ativo ? 'Ligado' : 'Desligado'}</b>
           </label>
+          </span>
         </div>
       </div>
 
@@ -123,7 +163,7 @@ export default function Pedidos() {
       <Estado aCarregar={lista.aCarregar} erro={lista.erro} vazio={!visiveis.length} />
       {visiveis.length > 0 && (
         <div className="tabela"><table>
-          <thead><tr><th>Ref.</th><th>Data</th><th>Tipo</th><th>Ecrã</th><th>Título</th><th>Registado por</th><th>Prioridade</th><th>Estado</th><th></th></tr></thead>
+          <thead><tr><th>Ref.</th><th>Data</th><th>Tipo</th><th>Ecrã</th><th>Título</th><th>Registado por</th><th>Prioridade</th><th>Estado</th><th>Plano</th><th></th></tr></thead>
           <tbody>{visiveis.map((p) => (
             <tr key={p.id}>
               <td className="small">{refPedido(p.id)}</td>
@@ -143,18 +183,23 @@ export default function Pedidos() {
                   {(Object.keys(ESTADO_PEDIDO) as EstadoPedido[]).map((k) => <option key={k} value={k}>{ESTADO_PEDIDO[k]}</option>)}
                 </select>
               </td>
+              <td className="small">{p.planoEstado ? <span className={p.planoEstado === 'proposto' ? 'etiqueta preta' : 'etiqueta'}>{ESTADO_PLANO[p.planoEstado]}</span> : '—'}
+                {p.prUrl && <div><a href={p.prUrl} target="_blank" rel="noreferrer">PR #{p.prNumero ?? ''}</a></div>}</td>
               <td className="acoes-linha"><button className="link" onClick={() => setDetalhe(p)}>Abrir</button></td>
             </tr>
           ))}</tbody>
         </table></div>
       )}
 
-      {detalhe && <DetalhePedido p={detalhe} onFechar={() => setDetalhe(null)} onGuardarNota={(nota) => mudar(detalhe, { nota })} onApagar={() => void apagar(detalhe)} />}
+      {detalhe && <DetalhePedido p={detalhe} master={master} onFechar={() => setDetalhe(null)} onGuardarNota={(nota) => mudar(detalhe, { nota })} onApagar={() => void apagar(detalhe)} onDecidir={(a) => void decidir(detalhe, a)} />}
     </>
   );
 }
 
-function DetalhePedido({ p, onFechar, onGuardarNota, onApagar }: { p: Pedido; onFechar: () => void; onGuardarNota: (nota: string) => Promise<boolean>; onApagar: () => void }) {
+function DetalhePedido({ p, master, onFechar, onGuardarNota, onApagar, onDecidir }: {
+  p: Pedido; master: boolean; onFechar: () => void; onGuardarNota: (nota: string) => Promise<boolean>; onApagar: () => void;
+  onDecidir: (a: 'aprovar' | 'rejeitar' | 'reanalisar') => void;
+}) {
   const [nota, setNota] = useState(p.nota ?? '');
   const [gravado, setGravado] = useState(false);
   return (
@@ -168,6 +213,23 @@ function DetalhePedido({ p, onFechar, onGuardarNota, onApagar }: { p: Pedido; on
       </tbody></table>
       <h3 style={{ marginTop: 14 }}>Descrição</h3>
       <p style={{ whiteSpace: 'pre-wrap' }}>{p.descricao}</p>
+      <h3 style={{ marginTop: 14 }}>Plano de implementação (análise automática)</h3>
+      {p.plano ? <>
+        <p className="small muted" style={{ margin: '0 0 6px' }}>{p.planoEstado ? ESTADO_PLANO[p.planoEstado] : ''}{p.planoEm && ` · proposto em ${dataHora(p.planoEm)}`}{p.planoDecididoEm && ` · decidido por ${p.planoDecididoPor} em ${dataHora(p.planoDecididoEm)}`}</p>
+        <div className="nota plano-texto">{p.plano}</div>
+      </> : <p className="small muted">Ainda sem plano: a análise automática corre todas as noites (ou com "Analisar agora").</p>}
+      {p.prUrl && <p className="small">PR: <a href={p.prUrl} target="_blank" rel="noreferrer">{p.prUrl}</a></p>}
+      {p.automacaoNota && <div className={p.planoEstado === 'erro' ? 'aviso' : 'nota'}>{p.automacaoNota}</div>}
+      {master && (
+        <div className="acoes">
+          {p.planoEstado === 'proposto' && <>
+            <button onClick={() => onDecidir('aprovar')}>Aprovar plano e abrir PR</button>
+            <button className="sec" onClick={() => onDecidir('rejeitar')}>Rejeitar plano</button>
+          </>}
+          {p.planoEstado !== 'aprovado' && p.planoEstado !== 'pr-aberto' && <button className="sec" onClick={() => onDecidir('reanalisar')}>{p.plano ? 'Pedir nova análise' : 'Analisar agora'}</button>}
+        </div>
+      )}
+      {!master && p.planoEstado === 'proposto' && <p className="small muted">Só o Master pode aprovar ou rejeitar o plano.</p>}
       <label className="campo" style={{ marginTop: 12 }}>Nota da administração (decisão, resposta, PR que resolveu)
         <textarea rows={3} value={nota} onChange={(e) => { setNota(e.target.value); setGravado(false); }} />
       </label>

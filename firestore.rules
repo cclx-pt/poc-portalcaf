@@ -139,8 +139,10 @@ service cloud.firestore {
     }
 
     // Interruptor do registo de bugs e melhorias: Master e CAF ligam e desligam (soma-se à regra de config acima).
+    // O "Analisar agora" e os campos da automação ficam só para o Master (regra de config acima).
     match /config/pedidos {
-      allow write: if hasRole(['master', 'caf']);
+      allow write: if hasRole(['caf'])
+        && request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys().hasOnly(['ativo', 'alteradoPor', 'alteradoEm']);
     }
 
     // ---------- bugs e melhorias (registados no rodapé de cada ecrã) ----------
@@ -152,6 +154,7 @@ service cloud.firestore {
     }
     match /pedidos/{id} {
       allow create: if isActive()
+        && request.resource.data.keys().hasOnly(['tipo', 'titulo', 'descricao', 'ecra', 'ecraNome', 'caminho', 'estado', 'criadoPor', 'criadoEm'])
         && request.resource.data.criadoPor == myEmail()
         && request.resource.data.estado == 'novo'
         && request.resource.data.tipo in ['bug', 'melhoria']
@@ -161,6 +164,12 @@ service cloud.firestore {
       allow read: if hasRole(['master', 'caf']) || (isActive() && resource.data.criadoPor == myEmail());
       allow update: if hasRole(['master', 'caf'])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'prioridade', 'nota', 'atualizadoPor', 'atualizadoEm']);
+      // Só o Master aprova ou rejeita o plano da automação e pede nova análise.
+      // O plano e o PR são escritos pela automação (conta de serviço, fora destas regras).
+      allow update: if isMaster()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['planoEstado', 'planoDecididoPor', 'planoDecididoEm', 'analisarAgoraEm'])
+        && (!('planoEstado' in request.resource.data.diff(resource.data).affectedKeys())
+            || (resource.data.planoEstado == 'proposto' && request.resource.data.planoEstado in ['aprovado', 'rejeitado']));
       allow delete: if hasRole(['master', 'caf']);
     }
 

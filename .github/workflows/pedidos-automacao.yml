@@ -1,0 +1,52 @@
+name: Automação dos bugs e melhorias
+
+# Ponte entre o Firestore e a tarefa agendada do Claude que analisa os pedidos e abre PRs.
+# Os dados vão sempre cifrados com PEDIDOS_CHAVE: o repositório é público.
+#   exportar  → artefacto "pedidos-cifrados" (1 dia) com o trabalho a fazer
+#   atualizar → grava no Firestore os planos, PRs e erros (entrada "dados", cifrada)
+on:
+  workflow_dispatch:
+    inputs:
+      acao:
+        description: 'exportar ou atualizar'
+        type: choice
+        options: [exportar, atualizar]
+        default: exportar
+      modo:
+        description: 'noite (analisa todos os pedidos novos) ou agora (só o que o Master pediu e os aprovados)'
+        type: choice
+        options: [agora, noite]
+        default: agora
+      dados:
+        description: 'Resultados cifrados (só para atualizar)'
+        default: ''
+
+concurrency:
+  group: pedidos-automacao
+  cancel-in-progress: false
+
+jobs:
+  ponte:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: ${{ inputs.acao }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PEDIDOS_CHAVE: ${{ secrets.PEDIDOS_CHAVE }}
+          PEDIDOS_ACAO: ${{ inputs.acao }}
+          PEDIDOS_MODO: ${{ inputs.modo }}
+          PEDIDOS_DADOS: ${{ inputs.dados }}
+        run: npx tsx scripts/pedidos-automacao.ts
+      - if: inputs.acao == 'exportar'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pedidos-cifrados
+          path: pedidos-cifrados.txt
+          retention-days: 1

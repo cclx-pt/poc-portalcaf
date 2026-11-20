@@ -390,3 +390,5 @@ tr.duplicado td { background: #f2f2f2; }
    2) Numa linha de ações com campos (rótulo por cima do campo), os botões alinham pela base do campo. */
 button.sec, .btn.sec { margin-bottom: 0; }
 .acoes:has(> label.campo, > div.campo) { align-items: flex-end; }
+/* Plano da análise automática (texto em Markdown, mostrado como texto). */
+.plano-texto { white-space: pre-wrap; font-size: 13px; max-height: 360px; overflow-y: auto; }
