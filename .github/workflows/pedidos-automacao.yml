@@ -2,7 +2,7 @@ name: Automação dos bugs e melhorias
 
 # Ponte entre o Firestore e a tarefa agendada do Claude que analisa os pedidos e abre PRs.
 # Os dados vão sempre cifrados com PEDIDOS_CHAVE: o repositório é público.
-#   exportar  → artefacto "pedidos-cifrados" (1 dia) com o trabalho a fazer
+#   exportar  → linha PEDIDOS_CIFRADOS:… no log (e artefacto de 1 dia) com o trabalho a fazer
 #   atualizar → grava no Firestore os planos, PRs e erros (entrada "dados", cifrada)
 on:
   workflow_dispatch:

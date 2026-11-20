@@ -3,7 +3,7 @@
  * A análise e a implementação são feitas por uma tarefa agendada do Claude, que não tem acesso ao Firestore:
  * esta ponte exporta o trabalho a fazer e grava os resultados, sempre cifrados (o repositório é público).
  *
- *   PEDIDOS_ACAO=exportar  → escreve pedidos-cifrados.txt com { modo, pedidos: [{ trabalho, ...pedido sem email }] }
+ *   PEDIDOS_ACAO=exportar  → escreve no log (linha PEDIDOS_CIFRADOS:…) e em pedidos-cifrados.txt { modo, pedidos: [{ trabalho, ...pedido sem email }] }
  *   PEDIDOS_ACAO=atualizar → lê PEDIDOS_DADOS (cifrado): { resultados: [{ id, campos }], resumo }
  *
  * Variáveis: FIREBASE_SERVICE_ACCOUNT, PEDIDOS_CHAVE, PEDIDOS_MODO (noite | agora), PEDIDOS_ACAO, PEDIDOS_DADOS.
@@ -35,7 +35,10 @@ async function exportar() {
     // Sem o email de quem reportou: a análise não precisa dele.
     .map(({ p, trabalho }) => { const { criadoPor: _c, atualizadoPor: _a, planoDecididoPor: _d, ...resto } = p; void _c; void _a; void _d; return { trabalho, ...resto }; });
   const saida = { modo, geradoEm: new Date().toISOString(), analisarTodos, pedidos };
-  writeFileSync('pedidos-cifrados.txt', cifrar(JSON.stringify(saida)));
+  const cifrado = cifrar(JSON.stringify(saida));
+  writeFileSync('pedidos-cifrados.txt', cifrado);
+  // A tarefa agendada lê o resultado do log (os artefactos não lhe são acessíveis). Vai cifrado: o log é público.
+  console.log(`PEDIDOS_CIFRADOS:${cifrado}`);
   // Só contagens no log (público).
   console.log(`Exportados ${pedidos.length} pedidos: ${pedidos.filter((x) => x.trabalho === 'analisar').length} para analisar, ${pedidos.filter((x) => x.trabalho === 'implementar').length} para implementar.`);
 }
