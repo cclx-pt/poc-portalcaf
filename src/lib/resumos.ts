@@ -528,3 +528,21 @@ export function calcularResumosComReais(d: DadosCalculo): Resumo[] {
   const reais = new Map(calcularResumos({ ...d, regraFechados: false }).map((r) => [r.id, r.meses]));
   return oficiais.map((r) => ({ ...r, mesesReais: reais.get(r.id) ?? r.meses }));
 }
+
+/** Como o Painel e as análises tratam os meses: valores reais de todos os meses, previsão nos abertos, ou só os fechados. */
+export type ModoMeses = 'reais' | 'previsoes' | 'fechados';
+export const MODOS_MESES: { valor: ModoMeses; nome: string }[] = [
+  { valor: 'reais', nome: 'Valores reais até hoje (Jotform e bancos, todos os meses)' },
+  { valor: 'previsoes', nome: 'Com previsões (meses abertos com a previsão dos custos fixos)' },
+  { valor: 'fechados', nome: 'Só meses fechados (valores reais)' },
+];
+
+/**
+ * Resumos no modo escolhido: "reais" troca os meses pelos mesesReais (resumos antigos sem eles ficam como estão);
+ * "fechados" deixa os meses abertos a zero; "previsoes" é a regra oficial, tal como foi calculada.
+ */
+export function resumosNoModo(rs: Resumo[], modo: ModoMeses): Resumo[] {
+  if (modo === 'reais') return rs.map((r) => (r.mesesReais ? { ...r, meses: r.mesesReais } : r));
+  if (modo === 'fechados') return rs.map((r) => ({ ...r, meses: r.meses.map((m) => (m.previsao ? { ...vazio(m.mes), previsao: true } : m)) }));
+  return rs;
+}

@@ -1,11 +1,11 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, useCarregar, useFiltros, Frescura } from '../components/ui';
+import { Estado, useCarregar, useFiltros, Frescura, SeletorMeses, useModoMeses } from '../components/ui';
 import { listarCategorias, listarComunidades, listarResumos } from '../lib/db';
 import { linhasDR, type LinhaDR } from '../lib/analise';
 import { eurContab, MESES, MESES_CURTOS, pct, r2, XLSX_EUR, hoje } from '../lib/format';
 import { OUTROS_FUNCIONAMENTO, classificador } from '../lib/rubricas';
-import { GERAIS_POR_REPARTIR, mesesDecorridos } from '../lib/resumos';
+import { GERAIS_POR_REPARTIR, mesesDecorridos, resumosNoModo } from '../lib/resumos';
 
 type Colunas = 'comunidades' | 'meses';
 /** Vencimentos são confidenciais: entram em "Outros custos de funcionamento"; estas linhas só aparecem com valor. */
@@ -29,7 +29,8 @@ export default function DemonstracaoResultados() {
   nomes.set(GERAIS_POR_REPARTIR, 'Gerais por repartir');
   nomes.set('bolsa-geral', 'Geral (por distribuir)');
   const ordem = new Map((coms.dados ?? []).map((c) => [c.id, c.ordem]));
-  const todos = resumos.dados ?? [];
+  const [modoMeses, setModoMeses] = useModoMeses();
+  const todos = useMemo(() => resumosNoModo(resumos.dados ?? [], modoMeses), [resumos.dados, modoMeses]);
   const sel = comunidade === 'todas' ? todos : todos.filter((r) => r.comunidadeId === comunidade);
 
   // Colunas e linhas
@@ -53,7 +54,7 @@ export default function DemonstracaoResultados() {
     }));
     return { cols: [...meses.map((m) => ({ id: String(m), nome: MESES_CURTOS[m - 1] })), { id: 'cclx', nome: 'Total' }], linhas: ls };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumos.dados, comunidade, colunas, de, ate, separar, coms.dados]);
+  }, [todos, comunidade, colunas, de, ate, separar, coms.dados]);
 
   const total = (tipo: 'entrada' | 'saida') => Object.fromEntries(cols.map((c) => [c.id, r2(linhas.filter((l) => l.tipo === tipo).reduce((s, l) => s + (l.valores[c.id] ?? 0), 0))]));
   const tE = total('entrada');
@@ -120,6 +121,7 @@ export default function DemonstracaoResultados() {
 
       <div className="card sec">
         <div className="filtros" style={{ alignItems: 'flex-end' }}>
+          <SeletorMeses modo={modoMeses} aoMudar={setModoMeses} resumos={resumos.dados ?? []} />
           <label className="campo">Colunas
             <select value={colunas} onChange={(e) => setColunas(e.target.value as Colunas)}>
               <option value="comunidades">Comunidades</option><option value="meses">Meses</option>

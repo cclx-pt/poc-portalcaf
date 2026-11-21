@@ -4,6 +4,7 @@ import { dataPT, eur, eurK, lerDataPT, mascaraDataPT, num } from '../lib/format'
 import { CATEGORICAS, CORES } from '../lib/cores';
 import { estadoMeses, textoMeses } from '../lib/resumos';
 import type { Resumo } from '../lib/types';
+import { MODOS_MESES, type ModoMeses } from '../lib/resumos';
 import { useInRouterContext, useLocation } from 'react-router-dom';
 import { codigoCompleto, definirAba, ecraDe, useAbaEcra, type Ecra } from '../lib/ecras';
 
@@ -241,5 +242,31 @@ export function CampoData({ rotulo, valor, onChange, max, obrigatorio }: { rotul
       </div>
       {erro && <span className="small erro-campo">{erro}</span>}
     </div>
+  );
+}
+
+// ---------- modo dos meses (Painel e análises) ----------
+const CHAVE_MODO_MESES = 'caf-portal:painel-meses';
+/** Modo dos meses escolhido no Painel ou nas análises; partilhado e guardado neste browser. Por omissão, valores reais. */
+export function useModoMeses(): [ModoMeses, (m: ModoMeses) => void] {
+  const [modo, setModo] = useState<ModoMeses>(() => {
+    try { const v = localStorage.getItem(CHAVE_MODO_MESES); return v === 'fechados' || v === 'previsoes' ? v : 'reais'; } catch { return 'reais'; }
+  });
+  const mudar = (m: ModoMeses) => { setModo(m); try { localStorage.setItem(CHAVE_MODO_MESES, m); } catch { /* sem armazenamento */ } };
+  return [modo, mudar];
+}
+
+/** Seletor "Meses"; avisa quando os resumos ainda não têm os valores reais (calculados antes desta opção). */
+export function SeletorMeses({ modo, aoMudar, resumos }: { modo: ModoMeses; aoMudar: (m: ModoMeses) => void; resumos?: Pick<Resumo, 'mesesReais'>[] }) {
+  const semReais = modo === 'reais' && (resumos ?? []).some((r) => !r.mesesReais);
+  return (
+    <>
+      <label className="campo">Meses
+        <select value={modo} onChange={(e) => aoMudar(e.target.value as ModoMeses)}>
+          {MODOS_MESES.map((m) => <option key={m.valor} value={m.valor}>{m.nome}</option>)}
+        </select>
+      </label>
+      {semReais && <span className="small muted">Os resumos foram calculados antes desta opção: carregue em "Recalcular resumos" (Painel) para ver os valores reais dos meses abertos.</span>}
+    </>
   );
 }
