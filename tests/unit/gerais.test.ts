@@ -344,3 +344,19 @@ describe('Painel: ligar e desligar componentes', () => {
     expect(a.saldo).toBe(100);
   });
 });
+
+import { calcularResumosComReais } from '../../src/lib/resumos';
+describe('Painel: valores reais até hoje (mesesReais)', () => {
+  it('os meses abertos têm os valores reais do Jotform em mesesReais, e a previsão em meses', () => {
+    const cf: CustoFixo = { id: 'r', comunidadeId: 'almada', rubrica: 'Renda', valorMensal: 500, ano: 2026, inicio: '2026-01', fim: '2026-12', nivel: 'privado' };
+    const rs = calcularResumosComReais(base({
+      regraFechados: true, mesesFechados: new Set(), custosFixos: [cf], hoje: '2026-02-20',
+      contribuir: [lote('contribuir', 'almada', 2026, 2, [{ valor: 70 }])],
+      despesas: [lote('despesas', 'almada', 2026, 2, [{ valor: 30, categoria: 'Material' }])],
+    }));
+    const r = rs.find((x) => x.comunidadeId === 'almada')!;
+    expect([r.meses[1].contribuir, r.meses[1].custosFixos]).toEqual([0, 500]);
+    expect([r.mesesReais![1].contribuir, r.mesesReais![1].despesas, r.mesesReais![1].custosFixos]).toEqual([70, 30, 500]);
+    expect(r.mesesReais![5].custosFixos).toBe(0); // custos fixos só até ao mês corrente
+  });
+});

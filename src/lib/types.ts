@@ -243,6 +243,9 @@ export interface Resumo {
   ano: number;
   comunidadeId: string;
   meses: ResumoMes[];
+  /** Os mesmos 12 meses com os valores reais de todos os meses (Jotform e banco), fechados ou não, e os custos
+   *  fixos até ao mês corrente. Usado no Painel em "Valores reais até hoje". Resumos antigos não o têm. */
+  mesesReais?: ResumoMes[];
   calculadoEm: string;
   calculadoPor: string;
 }

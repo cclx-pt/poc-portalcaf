@@ -22,11 +22,12 @@ vi.mock('../../src/components/ui', async (orig) => ({
 }));
 
 describe('Painel: com previsões ou só meses fechados', () => {
-  it('por omissão inclui os meses abertos (previsão)', async () => {
+  it('por omissão: valores reais até hoje (resumos antigos sem meses reais: avisa para recalcular)', async () => {
     const { default: Painel } = await import('../../src/pages/Painel');
     const html = renderToString(<Painel />).replace(/<!-- -->/g, '');
-    expect(html).toContain('Com previsões');
-    expect(html).toContain('3.000,00 €'); // entradas jan (fechado) + fev (aberto)
+    expect(html).toMatch(/<option value="reais" selected="">/);
+    expect(html).toContain('Recalcular resumos');
+    expect(html).toContain('3.000,00 €'); // sem mesesReais, usa os meses (jan + fev)
   });
 
   it('"Só meses fechados" deixa de fora os meses abertos', async () => {

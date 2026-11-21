@@ -15,7 +15,7 @@
 import { cert, initializeApp } from 'firebase-admin/app';
 import { FieldPath, getFirestore } from 'firebase-admin/firestore';
 import { SyncEmCurso, sincronizar, type ArmazemSync, type EstadoSync } from '../src/lib/sync';
-import { calcularPublico, calcularPublicoSite, calcularResumos } from '../src/lib/resumos';
+import { calcularPublico, calcularPublicoSite, calcularResumosComReais } from '../src/lib/resumos';
 import type { BancoLote, Categoria, Comunidade, CustoFixo, Lote, Origem } from '../src/lib/types';
 
 const QUEM = 'sync-automatico';
@@ -101,7 +101,7 @@ const armazem: ArmazemSync = {
     const assistenciaAnterior = privAnterior.filter((l) => l.origem === 'assistencia');
     comunidades.sort((a, b) => a.ordem - b.ordem);
     const hoje = new Date().toISOString().slice(0, 10);
-    const resumos = calcularResumos({ ano, comunidades, contribuir: de('contribuir'), depositos: de('depositos'), despesas: de('despesas'), assistencia, banco, custosFixos, mesesFechados, hoje, categorias, assistenciaAnterior, eventoCelebracao: configAss });
+    const resumos = calcularResumosComReais({ ano, comunidades, contribuir: de('contribuir'), depositos: de('depositos'), despesas: de('despesas'), assistencia, banco, custosFixos, mesesFechados, hoje, categorias, assistenciaAnterior, eventoCelebracao: configAss });
     const publico = calcularPublico(ano, resumos, comunidades, mesesFechados);
     const b = db.batch();
     for (const r of resumos) b.set(db.collection('resumos').doc(r.id), { ...r, calculadoPor: QUEM });

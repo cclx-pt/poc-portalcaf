@@ -4,8 +4,11 @@ import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros, mensagemErro, Fres
 import { listarComunidades, listarResumos } from '../lib/db';
 import { recalcularAno } from '../lib/recalcular';
 import { somarMeses, GERAIS_POR_REPARTIR, mesesDecorridos, estadoMeses, aplicarComponentes, TODOS_COMPONENTES, type ComponentesPainel } from '../lib/resumos';
+import type { Resumo } from '../lib/types';
 import { dec, eur, MESES_CURTOS, pct, hoje, r2 } from '../lib/format';
 import Publico from './Publico';
+
+type ModoMeses = 'reais' | 'previsoes' | 'fechados';
 
 export default function Painel() {
   const { acesso, pode, temNivel } = useAuth();
@@ -21,10 +24,11 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
   const comunidades = useCarregar(listarComunidades, []);
   const r = useCarregar(() => listarResumos(acesso!, ano), [ano, acesso?.email]);
   // "Com previsões": meses abertos com a previsão dos custos fixos. "Só meses fechados": os meses abertos ficam de fora.
-  const [modoMeses, setModoMeses] = useState<'previsoes' | 'fechados'>(() => {
-    try { return localStorage.getItem('caf-portal:painel-meses') === 'fechados' ? 'fechados' : 'previsoes'; } catch { return 'previsoes'; }
+  // "Valores reais até hoje" (por omissão): Jotform e banco de todos os meses, fechados ou não.
+  const [modoMeses, setModoMeses] = useState<ModoMeses>(() => {
+    try { const v = localStorage.getItem('caf-portal:painel-meses'); return v === 'fechados' || v === 'previsoes' ? v : 'reais'; } catch { return 'reais'; }
   });
-  const mudarModo = (m: 'previsoes' | 'fechados') => { setModoMeses(m); try { localStorage.setItem('caf-portal:painel-meses', m); } catch { /* sem armazenamento */ } };
+  const mudarModo = (m: ModoMeses) => { setModoMeses(m); try { localStorage.setItem('caf-portal:painel-meses', m); } catch { /* sem armazenamento */ } };
   // Componentes ligados (Contribuir, depósitos, reembolsos, custos fixos…), guardados neste browser.
   const [comp, setComp] = useState<ComponentesPainel>(() => {
     try { return { ...TODOS_COMPONENTES, ...JSON.parse(localStorage.getItem('caf-portal:painel-componentes') ?? '{}') }; } catch { return TODOS_COMPONENTES; }
@@ -37,8 +41,12 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
 
   const nomes = new Map((comunidades.dados ?? []).map((c) => [c.id, c.nome]));
   const todos = r.dados ?? [];
-  const selecionados = todos.filter((x) => (comunidade === 'todas' ? x.comunidadeId !== 'bolsa-geral' : x.comunidadeId === comunidade));
-  const abertos = new Set(estadoMeses(selecionados).abertos);
+  const reais = modoMeses === 'reais';
+  // Em "Valores reais", cada resumo usa os meses reais (resumos antigos, sem eles: os meses oficiais).
+  const comMeses = (x: Resumo): Resumo => (reais && x.mesesReais ? { ...x, meses: x.mesesReais } : x);
+  const semReais = reais && todos.some((x) => !x.mesesReais);
+  const selecionados = todos.filter((x) => (comunidade === 'todas' ? x.comunidadeId !== 'bolsa-geral' : x.comunidadeId === comunidade)).map(comMeses);
+  const abertos = new Set(reais ? [] : estadoMeses(selecionados).abertos);
   const soFechados = modoMeses === 'fechados';
   /** Meses que entram nos totais: todos, ou só os fechados. */
   const conta = (mes: number) => !soFechados || !abertos.has(mes);
@@ -50,7 +58,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
   const cfGeral = r2(selecionados.reduce((s0, x) => s0 + x.meses.reduce((t, mm) => t + (mm.cfGeralPrevisto ?? 0), 0), 0));
   const cfAnual = r2(cfProprio + cfGeral);
   const p = aplicarComponentes(tot, comp); // só os componentes ligados; custos e despesas que ficaram + parte dos gerais
-  const bolsa = todos.find((x) => x.comunidadeId === 'bolsa-geral');
+  const bolsa = todos.map(comMeses).find((x) => x.comunidadeId === 'bolsa-geral');
   const bolsaTot = bolsa ? somarMeses(bolsa.meses.filter((m) => conta(m.mes))) : null;
   const calculado = todos[0]?.calculadoEm;
 
@@ -68,7 +76,8 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
           <h1>{titulo}: custos x entradas {ano}</h1>
           <div className="linha" style={{ margin: '4px 0 8px' }}>
             <label className="campo">Meses
-              <select value={modoMeses} onChange={(e) => mudarModo(e.target.value as 'previsoes' | 'fechados')}>
+              <select value={modoMeses} onChange={(e) => mudarModo(e.target.value as ModoMeses)}>
+                <option value="reais">Valores reais até hoje (Jotform e bancos, todos os meses)</option>
                 <option value="previsoes">Com previsões (meses abertos com a previsão dos custos fixos)</option>
                 <option value="fechados">Só meses fechados (valores reais)</option>
               </select>
@@ -81,6 +90,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
                 ))}
               </span>
             </div>
+            {semReais && <span className="small muted">Os resumos foram calculados antes desta opção: carregue em "Recalcular resumos" para ver os valores reais dos meses abertos.</span>}
             {soFechados && <span className="small muted">{abertos.size ? `${nFechados} ${nFechados === 1 ? 'mês fechado' : 'meses fechados'}; os meses abertos não entram nos totais nem no gráfico.` : 'Todos os meses com dados estão fechados.'}</span>}
           </div>
           <p className="muted">
@@ -125,7 +135,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
               <table>
                 <thead><tr><th>Comunidade</th><th className="num">Entradas (€)</th><th className="num">Custos fixos (€)</th><th className="num">Despesas (€)</th><th className="num">Parte dos gerais (€)</th><th className="num">Saldo (€)</th><th className="num">Cobertura</th></tr></thead>
                 <tbody>
-                  {todos.filter((x) => x.comunidadeId !== 'bolsa-geral')
+                  {todos.map(comMeses).filter((x) => x.comunidadeId !== 'bolsa-geral')
                     .sort((a, b) => (comunidades.dados?.find((c) => c.id === a.comunidadeId)?.ordem ?? 50) - (comunidades.dados?.find((c) => c.id === b.comunidadeId)?.ordem ?? 50))
                     .map((x) => { const t = aplicarComponentes(somarMeses(x.meses.filter((m) => conta(m.mes))), comp); return (
                       <tr key={x.id}>
