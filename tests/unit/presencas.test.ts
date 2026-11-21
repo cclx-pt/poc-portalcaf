@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EVENTOS_INICIAIS, ID_PORTAL, comunidadesDoUtilizador, corrigirRegisto, entradaDeRegisto, eCorrigido, acrescentarRegisto, novoRegistoPresenca, removerRegisto, validarPresenca } from '../../src/lib/presencas';
+import { EVENTOS_INICIAIS, ID_PORTAL, comunidadesDoUtilizador, corrigirRegisto, entradaDeRegisto, eCorrigido, acrescentarRegisto, novoRegistoPresenca, removerRegisto, resumoRegistoPresenca, validarPresenca } from '../../src/lib/presencas';
 import type { Lote } from '../../src/lib/types';
 
 const entrada = { data: '2026-11-15', evento: 'Celebração Domingo', comunidadeId: 'almada', adultos: 120, jump: 8, criancas: 20, connects: 5, observacoes: 'Culto com visitas' };
@@ -204,5 +204,22 @@ describe('filtro por elemento de contagem', () => {
     expect(ids({ contagem: 'jump', contagemCond: 'preenchida' })).toEqual(['a']);
     expect(ids({ contagem: 'jump', contagemCond: 'vazia' })).toEqual(['b', 'c']);
     expect(ids({ contagem: 'adultos', contagemCond: 'vazia' })).toEqual(['c']);
+  });
+});
+
+describe('resumo de um registo na lista colapsável', () => {
+  it('soma todas as contagens (base e extra) e devolve os detalhes com os rótulos', () => {
+    const r = { valor: 100, extra: { jump: 5, criancas: 20, connects: 3, online: 12 } };
+    const { total, detalhes } = resumoRegistoPresenca(r, [{ id: 'online', nome: 'Online' }]);
+    expect(total).toBe(140);
+    expect(detalhes).toEqual([
+      { rotulo: 'Jump', valor: 5 }, { rotulo: 'Crianças', valor: 20 }, { rotulo: "Connect's", valor: 3 }, { rotulo: 'Online', valor: 12 },
+    ]);
+  });
+  it('contagens base em falta contam 0; extra em falta ficam vazias (mostram "—")', () => {
+    const { total, detalhes } = resumoRegistoPresenca({ valor: 60, extra: {} }, [{ id: 'online', nome: 'Online' }]);
+    expect(total).toBe(60);
+    expect(detalhes.find((d) => d.rotulo === 'Jump')?.valor).toBe(0);
+    expect(detalhes.find((d) => d.rotulo === 'Online')?.valor).toBeNull();
   });
 });

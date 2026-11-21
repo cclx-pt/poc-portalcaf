@@ -231,3 +231,19 @@ export function contagensEmBrancoAZero(e: EntradaPresenca, pedidas: string[]): E
   }
   return out;
 }
+
+/**
+ * Resumo de um registo para a lista colapsável: total de pessoas (todas as contagens, base e extra) e os detalhes
+ * (rótulo e valor) que só aparecem quando o registo é expandido. Contagens extra em falta mostram "—".
+ */
+export function resumoRegistoPresenca(r: Pick<Registo, 'valor' | 'extra'>, extras: { id: string; nome: string }[] = []): { total: number; detalhes: { rotulo: string; valor: number | null }[] } {
+  const n = (v: unknown) => { const x = Number(v); return v == null || v === '' || !Number.isFinite(x) ? null : x; };
+  const detalhes = [
+    { rotulo: 'Jump', valor: n(r.extra?.jump) ?? 0 },
+    { rotulo: 'Crianças', valor: n(r.extra?.criancas) ?? 0 },
+    { rotulo: "Connect's", valor: n(r.extra?.connects) ?? 0 },
+    ...extras.map((c) => ({ rotulo: c.nome, valor: n(r.extra?.[c.id]) })),
+  ];
+  const total = (n(r.valor) ?? 0) + detalhes.reduce((s, d) => s + (d.valor ?? 0), 0);
+  return { total, detalhes };
+}
