@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros, mensagemErro, Frescura } from '../components/ui';
 import { listarComunidades, listarResumos } from '../lib/db';
 import { recalcularAno } from '../lib/recalcular';
-import { somarMeses, partesMes, GERAIS_POR_REPARTIR, mesesDecorridos, estadoMeses } from '../lib/resumos';
+import { somarMeses, GERAIS_POR_REPARTIR, mesesDecorridos, estadoMeses, aplicarComponentes, TODOS_COMPONENTES, type ComponentesPainel } from '../lib/resumos';
 import { dec, eur, MESES_CURTOS, pct, hoje, r2 } from '../lib/format';
 import Publico from './Publico';
 
@@ -25,6 +25,15 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
     try { return localStorage.getItem('caf-portal:painel-meses') === 'fechados' ? 'fechados' : 'previsoes'; } catch { return 'previsoes'; }
   });
   const mudarModo = (m: 'previsoes' | 'fechados') => { setModoMeses(m); try { localStorage.setItem('caf-portal:painel-meses', m); } catch { /* sem armazenamento */ } };
+  // Componentes ligados (Contribuir, depósitos, reembolsos, custos fixos…), guardados neste browser.
+  const [comp, setComp] = useState<ComponentesPainel>(() => {
+    try { return { ...TODOS_COMPONENTES, ...JSON.parse(localStorage.getItem('caf-portal:painel-componentes') ?? '{}') }; } catch { return TODOS_COMPONENTES; }
+  });
+  const alternarComp = (k: keyof ComponentesPainel) => setComp((c) => {
+    const n = { ...c, [k]: !c[k] };
+    try { localStorage.setItem('caf-portal:painel-componentes', JSON.stringify(n)); } catch { /* sem armazenamento */ }
+    return n;
+  });
 
   const nomes = new Map((comunidades.dados ?? []).map((c) => [c.id, c.nome]));
   const todos = r.dados ?? [];
@@ -40,7 +49,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
   const cfProprio = r2(selecionados.reduce((s0, x) => s0 + x.meses.reduce((t, mm) => t + (mm.cfPrevisto ?? 0), 0), 0));
   const cfGeral = r2(selecionados.reduce((s0, x) => s0 + x.meses.reduce((t, mm) => t + (mm.cfGeralPrevisto ?? 0), 0), 0));
   const cfAnual = r2(cfProprio + cfGeral);
-  const p = partesMes(tot); // custos e despesas que ficaram + parte dos gerais (somam ao saldo)
+  const p = aplicarComponentes(tot, comp); // só os componentes ligados; custos e despesas que ficaram + parte dos gerais
   const bolsa = todos.find((x) => x.comunidadeId === 'bolsa-geral');
   const bolsaTot = bolsa ? somarMeses(bolsa.meses.filter((m) => conta(m.mes))) : null;
   const calculado = todos[0]?.calculadoEm;
@@ -64,6 +73,14 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
                 <option value="fechados">Só meses fechados (valores reais)</option>
               </select>
             </label>
+            <div className="campo" role="group" aria-label="Componentes incluídos">
+              <span>Incluir</span>
+              <span className="linha" style={{ gap: 12 }}>
+                {([['contribuir', 'Contribuir'], ['depositos', 'Depósitos'], ['transferencias', 'Transferências e bolsa'], ['despesas', 'Reembolsos e despesas'], ['custosFixos', 'Custos fixos'], ['gerais', 'Parte dos gerais']] as [keyof ComponentesPainel, string][]).map(([k, rot]) => (
+                  <label key={k} className="opcao"><input type="checkbox" checked={comp[k]} onChange={() => alternarComp(k)} />{rot}</label>
+                ))}
+              </span>
+            </div>
             {soFechados && <span className="small muted">{abertos.size ? `${nFechados} ${nFechados === 1 ? 'mês fechado' : 'meses fechados'}; os meses abertos não entram nos totais nem no gráfico.` : 'Todos os meses com dados estão fechados.'}</span>}
           </div>
           <p className="muted">
@@ -78,25 +95,25 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
       <Estado aCarregar={r.aCarregar} erro={r.erro} vazio={!todos.length} />
       {!!todos.length && <>
         <div className="cards">
-          <Kpi titulo="Entradas" valor={eur(tot.entradas)} sub={<>Contribuir {eur(tot.contribuir)} · coletas {eur(tot.coletas)}{tot.quotaBolsa ? ` · bolsa ${eur(tot.quotaBolsa)}` : ''}</>} />
-          <Kpi titulo="Custos fixos anuais" valor={eur(cfAnual)} sub={`Previsão do ano · inclui ${eur(cfGeral)} da parte do geral`} />
-          <Kpi titulo="Custos fixos mensais" valor={eur(r2(cfAnual / 12))} sub={`Média por mês · inclui ${eur(r2(cfGeral / 12))} da parte do geral`} />
-          <Kpi titulo="Despesas e reembolsos" valor={eur(p.despesas)} />
+          <Kpi titulo="Entradas" valor={eur(p.entradas)} sub={<>{comp.contribuir && <>Contribuir {eur(tot.contribuir)}</>}{comp.depositos && <> · coletas {eur(tot.coletas)}</>}{comp.transferencias && !!tot.quotaBolsa && <> · bolsa {eur(tot.quotaBolsa)}</>}</>} />
+          {comp.custosFixos && <Kpi titulo="Custos fixos anuais" valor={eur(cfAnual)} sub={`Previsão do ano · inclui ${eur(cfGeral)} da parte do geral`} />}
+          {comp.custosFixos && <Kpi titulo="Custos fixos mensais" valor={eur(r2(cfAnual / 12))} sub={`Média por mês · inclui ${eur(r2(cfGeral / 12))} da parte do geral`} />}
+          {comp.despesas && <Kpi titulo="Despesas e reembolsos" valor={eur(p.despesas)} />}
           {!!p.gerais && <Kpi titulo="Parte dos gerais" valor={eur(p.gerais)} sub="Custos gerais repartidos por média proporcional de assistência" />}
-          <Kpi titulo="Saldo" valor={eur(tot.saldo)} negativo={tot.saldo < 0} sub={tot.saldo < 0 ? 'Défice coberto pelo orçamento geral' : undefined} />
-          <Kpi titulo="Cobertura dos custos fixos" valor={p.custosFixos ? pct(tot.entradas / p.custosFixos) : '—'} sub="Entradas ÷ custos fixos" />
+          <Kpi titulo="Saldo" valor={eur(p.saldo)} negativo={p.saldo < 0} sub={p.saldo < 0 ? 'Défice coberto pelo orçamento geral' : undefined} />
+          {comp.custosFixos && <Kpi titulo="Cobertura dos custos fixos" valor={p.custosFixos ? pct(p.entradas / p.custosFixos) : '—'} sub="Entradas ÷ custos fixos" />}
         </div>
 
         <div className="sec card">
           <h2>Entradas e saídas por mês</h2>
           <GraficoBarras empilhado dados={porMes.map((m, i) => {
-            const pm = partesMes(m);
-            return { rotulo: MESES_CURTOS[i], _previsao: abertos.has(i + 1), Contribuir: m.contribuir, Coletas: m.coletas + m.transferencias + m.quotaBolsa, 'Custos fixos': pm.custosFixos, Despesas: pm.despesas, Gerais: pm.gerais };
+            const pm = aplicarComponentes(m, comp);
+            return { rotulo: MESES_CURTOS[i], _previsao: abertos.has(i + 1), Contribuir: pm.contribuir, Coletas: r2(pm.entradas - pm.contribuir), 'Custos fixos': pm.custosFixos, Despesas: pm.despesas, Gerais: pm.gerais };
           })} series={[
-            { key: 'Contribuir', nome: 'Contribuir', stack: 'e', cor: 'entradas' },
-            { key: 'Coletas', nome: 'Coletas, transferências e bolsa', stack: 'e', cor: 'entradas2' },
-            { key: 'Custos fixos', nome: 'Custos fixos', stack: 's', cor: 'saidas' },
-            { key: 'Despesas', nome: 'Despesas e reembolsos', stack: 's', cor: 'saidas2' },
+            ...(comp.contribuir ? [{ key: 'Contribuir', nome: 'Contribuir', stack: 'e', cor: 'entradas' as const }] : []),
+            ...(comp.depositos || comp.transferencias ? [{ key: 'Coletas', nome: comp.depositos && comp.transferencias ? 'Coletas, transferências e bolsa' : comp.depositos ? 'Depósitos de coletas' : 'Transferências e bolsa', stack: 'e', cor: 'entradas2' as const }] : []),
+            ...(comp.custosFixos ? [{ key: 'Custos fixos', nome: 'Custos fixos', stack: 's', cor: 'saidas' as const }] : []),
+            ...(comp.despesas ? [{ key: 'Despesas', nome: 'Despesas e reembolsos', stack: 's', cor: 'saidas2' as const }] : []),
             ...(p.gerais ? [{ key: 'Gerais', nome: 'Parte dos gerais', stack: 's', cor: 'saidas3' as const }] : []),
           ]} />
         </div>
@@ -110,7 +127,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
                 <tbody>
                   {todos.filter((x) => x.comunidadeId !== 'bolsa-geral')
                     .sort((a, b) => (comunidades.dados?.find((c) => c.id === a.comunidadeId)?.ordem ?? 50) - (comunidades.dados?.find((c) => c.id === b.comunidadeId)?.ordem ?? 50))
-                    .map((x) => { const t = partesMes(somarMeses(x.meses.filter((m) => conta(m.mes)))); return (
+                    .map((x) => { const t = aplicarComponentes(somarMeses(x.meses.filter((m) => conta(m.mes))), comp); return (
                       <tr key={x.id}>
                         <td>{x.comunidadeId === GERAIS_POR_REPARTIR ? 'Gerais por repartir' : nomes.get(x.comunidadeId) ?? x.comunidadeId}</td>
                         <td className="num">{dec(t.entradas)}</td><td className="num">{dec(t.custosFixos)}</td><td className="num">{dec(t.despesas)}</td><td className="num">{dec(t.gerais)}</td>
@@ -118,7 +135,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
                         <td className="num">{t.custosFixos ? pct(t.entradas / t.custosFixos) : '—'}</td>
                       </tr>); })}
                 </tbody>
-                <tfoot><tr className="total-geral"><td>Total</td><td className="num">{dec(tot.entradas)}</td><td className="num">{dec(p.custosFixos)}</td><td className="num">{dec(p.despesas)}</td><td className="num">{dec(p.gerais)}</td><td className={'num' + (tot.saldo < 0 ? ' neg' : '')}>{dec(tot.saldo)}</td><td className="num">{p.custosFixos ? pct(tot.entradas / p.custosFixos) : '—'}</td></tr></tfoot>
+                <tfoot><tr className="total-geral"><td>Total</td><td className="num">{dec(p.entradas)}</td><td className="num">{dec(p.custosFixos)}</td><td className="num">{dec(p.despesas)}</td><td className="num">{dec(p.gerais)}</td><td className={'num' + (p.saldo < 0 ? ' neg' : '')}>{dec(p.saldo)}</td><td className="num">{p.custosFixos ? pct(p.entradas / p.custosFixos) : '—'}</td></tr></tfoot>
               </table>
             </div>
             {bolsaTot && (bolsaTot.contribuir + bolsaTot.coletas + bolsaTot.transferencias) > 0 && (
@@ -132,8 +149,8 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
 
         <div className="grid2">
           <Detalhe titulo="Entradas por categoria" dados={tot.entradasPorCategoria} />
-          <Detalhe titulo="Despesas e reembolsos por categoria" dados={tot.despesasPorCategoria} />
-          <Detalhe titulo="Custos fixos por rubrica" dados={tot.custosRubricas} nota="Vencimentos e Segurança Social são confidenciais: aparecem juntos em “Outros custos de funcionamento”." />
+          {comp.despesas && <Detalhe titulo="Despesas e reembolsos por categoria" dados={tot.despesasPorCategoria} />}
+          {comp.custosFixos && <Detalhe titulo="Custos fixos por rubrica" dados={tot.custosRubricas} nota="Vencimentos e Segurança Social são confidenciais: aparecem juntos em “Outros custos de funcionamento”." />}
         </div>
       </>}
     </>
