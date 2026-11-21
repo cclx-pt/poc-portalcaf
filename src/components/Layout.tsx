@@ -21,18 +21,6 @@ const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
     { to: '/depositos', nome: 'Depósitos de coletas', Icone: Banknote, ver: privado },
     { to: '/reembolsos', nome: 'Reembolsos e despesas', Icone: Receipt, ver: privado },
   ] },
-  { id: 'registos', titulo: 'Registos', itens: [
-    { to: '/registos/presencas', nome: 'Presenças por evento', Icone: CalendarCheck, ver: privado, end: true },
-    { to: '/registos/presencas/novo', nome: 'Registar presenças', Icone: ClipboardList, ver: (p) => privado(p) && p.pode('registar') },
-    { to: '/registos/presencas/em-falta', nome: 'Registos em falta', Icone: CalendarX, ver: (p) => privado(p) && p.pode('registar') },
-    { to: '/registos/batismos', nome: 'Batismos', Icone: Droplets, ver: privado, etiqueta: 'em desenvolvimento' },
-    { to: '/registos/conversoes', nome: 'Conversões', Icone: HeartHandshake, ver: privado, etiqueta: 'em desenvolvimento' },
-  ] },
-  { id: 'analise', titulo: 'Análise', itens: [
-    { to: '/analise/resultados', nome: 'Demonstração de resultados', Icone: Scale, ver: privado },
-    { to: '/analise/comparacao', nome: 'Comparação entre comunidades', Icone: ChartColumn, ver: privado },
-    { to: '/analise/relatorio', nome: 'Relatório custos x entradas', Icone: FileText, ver: privado },
-  ] },
   { id: 'tesouraria', titulo: 'Tesouraria', itens: [
     { to: '/bancos', nome: 'Bancos (extratos e saldos)', Icone: Landmark, ver: (p) => p.pode('bancos') },
     { to: '/reconciliacao', nome: 'Reconciliação bancária', Icone: ListChecks, ver: (p) => p.pode('bancos') },
@@ -40,6 +28,18 @@ const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
     { to: '/orcamento', nome: 'Orçamento', Icone: PiggyBank, ver: privado },
     { to: '/fecho', nome: 'Fecho mensal e publicação', Icone: LockKeyhole, ver: (p) => p.pode('publicar') },
     { to: '/exportacao', nome: 'Exportação contabilista', Icone: FileSpreadsheet, ver: (p) => p.pode('exportar') },
+  ] },
+  { id: 'analise', titulo: 'Análise', itens: [
+    { to: '/analise/resultados', nome: 'Demonstração de resultados', Icone: Scale, ver: privado },
+    { to: '/analise/comparacao', nome: 'Comparação entre comunidades', Icone: ChartColumn, ver: privado },
+    { to: '/analise/relatorio', nome: 'Relatório custos x entradas', Icone: FileText, ver: privado },
+  ] },
+  { id: 'registos', titulo: 'Registos', itens: [
+    { to: '/registos/presencas', nome: 'Presenças por evento', Icone: CalendarCheck, ver: privado, end: true },
+    { to: '/registos/presencas/novo', nome: 'Registar presenças', Icone: ClipboardList, ver: (p) => privado(p) && p.pode('registar') },
+    { to: '/registos/presencas/em-falta', nome: 'Registos em falta', Icone: CalendarX, ver: (p) => privado(p) && p.pode('registar') },
+    { to: '/registos/batismos', nome: 'Batismos', Icone: Droplets, ver: privado, etiqueta: 'em desenvolvimento' },
+    { to: '/registos/conversoes', nome: 'Conversões', Icone: HeartHandshake, ver: privado, etiqueta: 'em desenvolvimento' },
   ] },
   { id: 'admin', titulo: 'Administração', itens: [
     { to: '/configuracao', nome: 'Configuração', Icone: Settings, ver: (p) => p.pode('configurar') },
