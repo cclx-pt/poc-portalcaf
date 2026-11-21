@@ -204,7 +204,7 @@ describe('páginas', () => {
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/registo-rapido.html', html);
   });
 
-  it('Lista de presenças: começa colapsada, com Corrigir em cada registo e os detalhes por expandir', async () => {
+  it('Lista de presenças: uma linha por registo com todas as contagens, sem expandir', async () => {
     const { ListaPresencas } = await import('../../src/pages/RegistarPresencas');
     const l = lote('assistencia', 'almada', 11, [
       { data: '2026-11-08', valor: 105, evento: 'Celebração Domingo', extra: { jump: 7, criancas: 12, alteradoPor: 'ana@x.pt', alteradoEm: '2026-11-17T14:05:00.000Z' } },
@@ -212,14 +212,11 @@ describe('páginas', () => {
     ]);
     const html = renderToString(<ListaPresencas lotes={[l]} comunidades={[{ id: 'almada', nome: 'Almada', ordem: 1 }]} soPortal={false} aposApagar={async () => {}} />);
     expect(html.match(/>Corrigir</g)?.length).toBe(2);
-    expect(html).toContain('Expandir todos');
-    expect(html).toContain('Total de pessoas');
+    for (const t of ['>Jump<', '>Crianças<', '>Total<', '>Origem<', '>Última alteração<', '>Jotform<']) expect(html).toContain(t);
     expect(html).toContain('>124<'); // 105 + 7 + 12
-    expect(html.match(/aria-expanded="false"/g)?.length).toBe(2);
-    // Detalhes (Jump, última alteração, quem registou) só aparecem ao expandir.
-    expect(html).not.toContain('Última alteração');
-    expect(html).not.toContain('ana@x.pt');
-    expect(html).not.toContain('class="detalhe"');
+    expect(html).toContain('>7<');
+    expect(html).not.toContain('Expandir todos');
+    expect(html).not.toContain('aria-expanded');
   });
 
   it('Registos em falta (telemóvel): por comunidade do utilizador, com o evento; a tocar abre o registo', async () => {
@@ -353,5 +350,8 @@ describe('Registos em falta (página própria)', () => {
     expect(html).toMatch(/<details class="sec card registos-falta">/); // sem open: começa colapsada
     expect(html).toMatch(/Registos em falta <span class="neg">\((<!-- -->)?\d+(<!-- -->)?\)<\/span>/);
     expect(html).toContain('>Registar<'); // tocar num registo em falta preenche o formulário
+    // O histórico também é uma secção colapsável (começa fechada), com o número de registos.
+    expect(html.match(/<details class="sec card registos-falta">/g)?.length).toBe(2);
+    expect(html).toMatch(/Registos de presenças em (<!-- -->)?\d{4}(<!-- -->)? <span class="muted">\(/);
   });
 });

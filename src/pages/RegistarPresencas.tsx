@@ -287,13 +287,11 @@ export function RegistosEmFaltaLista({ ano, hoje: hojeIso, comunidades, lotes, a
   );
 }
 
-/** Lista de registos de presenças (do portal ou de todos), com Apagar nos registos feitos no portal. Cada registo começa colapsado (só o resumo) e expande-se para ver os detalhes. */
+/** Lista de registos de presenças (do portal ou de todos), uma linha por registo com todas as contagens. */
 export function ListaPresencas({ lotes, comunidades, soPortal, aposApagar }: { lotes: Lote[]; comunidades: Comunidade[]; soPortal: boolean; aposApagar: () => Promise<void> }) {
   const { acesso, pode } = useAuth();
   const [erro, setErro] = useState<string | null>(null);
   const [aCorrigir, setACorrigir] = useState<{ lote: Lote; registoId: string } | null>(null);
-  // Registos expandidos (ids); vazio ao entrar, para começar sempre colapsado.
-  const [abertos, setAbertos] = useState<Set<string>>(() => new Set());
   const config = useCarregar(lerConfigAssistencia, []);
   const extras = catalogoContagens(config.dados).filter((c) => !IDS_BASE.includes(c.id));
   const nomes = new Map(comunidades.map((c) => [c.id, c.nome]));
@@ -317,46 +315,36 @@ export function ListaPresencas({ lotes, comunidades, soPortal, aposApagar }: { l
     .flatMap((l) => l.registos.filter((r) => !soPortal || eRegistoDoPortal(r)).map((r) => ({ l, r })))
     .sort((a, b) => b.r.data.localeCompare(a.r.data)).slice(0, soPortal ? 30 : 200);
   if (!linhas.length) return <p className="muted">Sem registos.</p>;
-  const todosAbertos = linhas.every(({ r }) => abertos.has(r.id));
-  const alternar = (id: string) => setAbertos((a) => { const n = new Set(a); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const NCOLUNAS = 7;
+  const contagens = resumoRegistoPresenca(linhas[0].r, extras).detalhes.map((d) => d.rotulo);
   return (
     <>
       {erro && <div className="aviso">{erro}</div>}
-      <div className="acoes" style={{ marginBottom: 6 }}>
-        <button className="link" onClick={() => setAbertos(todosAbertos ? new Set() : new Set(linhas.map(({ r }) => r.id)))}>{todosAbertos ? 'Colapsar todos' : 'Expandir todos'}</button>
-      </div>
       <div className="tabela"><table className="tabela-presencas">
-        <thead><tr><th><span className="sr-only">Detalhes</span></th><th>Data</th><th>Evento</th><th>Comunidade</th><th className="num">Jovens e adultos</th><th className="num">Total de pessoas</th><th /></tr></thead>
-        <tbody>{linhas.flatMap(({ l, r }) => {
-          const aberto = abertos.has(r.id);
+        <thead><tr>
+          <th>Data</th><th>Evento</th><th>Comunidade</th><th className="num">Jovens e adultos</th>
+          {contagens.map((c) => <th key={c} className="num">{c}</th>)}
+          <th className="num">Total</th><th>Origem</th><th>Última alteração</th><th />
+        </tr></thead>
+        <tbody>{linhas.map(({ l, r }) => {
           const { total, detalhes } = resumoRegistoPresenca(r, extras);
-          const idDet = `det-${r.id}`;
-          const linha = (
+          const obs = String(r.extra?.observacoes ?? '').trim();
+          const portal = eRegistoDoPortal(r);
+          return (
             <tr key={r.id} className={duplicados.has(r.id) ? 'duplicado' : ''}>
-              <td className="expandir"><button className="link seta" aria-expanded={aberto} aria-controls={idDet} aria-label={`${aberto ? 'Ocultar' : 'Ver'} detalhes do registo de ${r.evento} em ${dataPt(r.data)}`} onClick={() => alternar(r.id)}>{aberto ? '▾' : '▸'}</button></td>
-              <td data-rotulo="Data">{dataPt(r.data)}{duplicados.has(r.id) && <> <span className="etiqueta neg" title="Há mais do que um registo deste evento nesta comunidade neste dia">Duplicado</span></>}</td><td data-rotulo="Evento">{r.evento}{r.descricao ? ` · ${r.descricao}` : ''}</td><td data-rotulo="Comunidade">{nomes.get(l.comunidadeId) ?? l.comunidadeId}</td>
-              <td className="num" data-rotulo="Jovens e adultos">{num(r.valor)}</td><td className="num" data-rotulo="Total de pessoas">{num(total)}</td>
+              <td data-rotulo="Data">{dataPt(r.data)}{duplicados.has(r.id) && <> <span className="etiqueta neg" title="Há mais do que um registo deste evento nesta comunidade neste dia">Duplicado</span></>}</td>
+              <td data-rotulo="Evento">{r.evento}{r.descricao ? ` · ${r.descricao}` : ''}{obs && <div className="muted small" title={obs}>{obs.length > 60 ? `${obs.slice(0, 60)}…` : obs}</div>}</td>
+              <td data-rotulo="Comunidade">{nomes.get(l.comunidadeId) ?? l.comunidadeId}</td>
+              <td className="num" data-rotulo="Jovens e adultos">{num(r.valor)}</td>
+              {detalhes.map((d) => <td key={d.rotulo} className="num" data-rotulo={d.rotulo}>{d.valor == null ? '—' : num(d.valor)}</td>)}
+              <td className="num" data-rotulo="Total"><b>{num(total)}</b></td>
+              <td className="small" data-rotulo="Origem" title={portal ? String(r.extra?.registadoPor ?? '') : undefined}>{portal ? 'Portal' : 'Jotform'}</td>
+              <td className="small" data-rotulo="Última alteração" title={r.extra?.alteradoPor ? String(r.extra.alteradoPor) : undefined}>{r.extra?.alteradoEm ? dataHora(String(r.extra.alteradoEm)) : '—'}</td>
               <td className="acoes-linha">
                 {pode('registar') && <button className="link" onClick={() => setACorrigir({ lote: l, registoId: r.id })}>Corrigir</button>}
                 {podeApagar(r) && <button className="link" onClick={() => void apagar(l, r.id)}>Apagar</button>}
               </td>
             </tr>
           );
-          if (!aberto) return [linha];
-          const obs = String(r.extra?.observacoes ?? '').trim();
-          return [linha, (
-            <tr key={`${r.id}-det`} id={idDet} className="detalhe">
-              <td colSpan={NCOLUNAS}>
-                <dl className="detalhe-presenca">
-                  {detalhes.map((d) => <div key={d.rotulo}><dt>{d.rotulo}</dt><dd>{d.valor == null ? '—' : num(d.valor)}</dd></div>)}
-                  {obs && <div><dt>Observações</dt><dd>{obs}</dd></div>}
-                  <div><dt>Origem</dt><dd>{eRegistoDoPortal(r) ? `Portal · ${String(r.extra?.registadoPor ?? '')}` : 'Jotform'}</dd></div>
-                  <div><dt>Última alteração</dt><dd>{r.extra?.alteradoEm ? `${dataHora(String(r.extra.alteradoEm))} · ${String(r.extra.alteradoPor ?? '')}` : '—'}</dd></div>
-                </dl>
-              </td>
-            </tr>
-          )];
         })}</tbody>
       </table></div>
       {aCorrigir && (
@@ -422,6 +410,8 @@ export default function RegistarPresencas() {
   const inicial: Partial<EntradaPresenca> = Object.keys(doLink).length ? doLink : comunidade !== 'todas' ? { comunidadeId: comunidade } : {};
   const [filtro, setFiltro] = useState<Omit<FiltroPresencas, 'comunidadeId'>>({});
   const filtrados = filtrarLotesPresenca(lotes.dados ?? [], { ...filtro, comunidadeId: comunidade });
+  const idsComunidades = new Set(comunidades.map((c) => c.id));
+  const nRegistos = filtrados.filter((l) => idsComunidades.has(l.comunidadeId)).reduce((s, l) => s + l.registos.length, 0);
   // Registos em falta das comunidades do filtro do topo; escolher um preenche o formulário deste ecrã.
   const comunidadesFalta = comunidade === 'todas' ? comunidades : comunidades.filter((c) => c.id === comunidade);
   const faltas = useFaltasPresencas({ ano, hoje: hoje(), comunidades: comunidadesFalta, lotes: lotes.dados ?? [] });
@@ -454,14 +444,14 @@ export default function RegistarPresencas() {
           <RegistosEmFaltaLista compacto semTitulo ano={ano} hoje={hoje()} comunidades={comunidadesFalta} lotes={lotes.dados ?? []} aoEscolher={escolherEmFalta} />
         </details>
       )}
-      <div className="sec">
-        <h2>Registos de presenças em {ano}</h2>
+      <details className="sec card registos-falta">
+        <summary><h2>Registos de presenças em {ano} <span className="muted">({num(nRegistos)})</span></h2></summary>
         <p className="muted small">Do Jotform e do portal, das suas comunidades (ano e comunidade do filtro do topo). Depois de importados, os registos do Jotform passam a ser do portal: corrigir ou apagar não mexe no Jotform, e a sincronização só traz submissões novas (não repete as apagadas nem um dia e evento já registados). Corrigir e apagar ficam na auditoria.</p>
         {(() => { const n = duplicadosPresenca(filtrarLotesPresenca(lotes.dados ?? [], { comunidadeId: comunidade })).size; return n ? <div className="aviso">{`Há ${n} registos duplicados (mesma comunidade, dia e evento). Use "Só duplicados" para os ver e apague ou corrija os que estão a mais.`}</div> : null; })()}
         <FiltrosListaPresencas comunidades={comunidades} lotes={lotes.dados ?? []} filtro={{ ...filtro, comunidadeId: comunidade }}
           aoMudar={({ comunidadeId, ...f }) => { setFiltro(f); if (comunidadeId) setComunidade(comunidadeId); }} />
         <ListaPresencas lotes={filtrados} comunidades={comunidades} soPortal={false} aposApagar={lotes.recarregar} />
-      </div>
+      </details>
     </>
   );
 }
