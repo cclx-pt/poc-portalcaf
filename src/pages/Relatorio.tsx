@@ -126,7 +126,7 @@ export default function Relatorio() {
             <h2>Médias mensais por ano</h2>
             <GraficoBarras altura={220} dados={[P ? { r: P, a: ano - 1 } : null, { r: A, a: ano }].filter(Boolean).map((x) => ({
               rotulo: String(x!.a), Entradas: x!.r.meses ? r2(x!.r.entradas / x!.r.meses) : 0, Saídas: x!.r.meses ? r2(x!.r.saidas / x!.r.meses) : 0,
-            }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas' }]} />
+            }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas', saida: true }]} resultado />
           </div>
           <div className="card">
             <h2>Composição dos custos fixos ({ano})</h2>
@@ -136,7 +136,7 @@ export default function Relatorio() {
 
         <div className="card sec">
           <h2>Entradas e saídas por mês ({ano})</h2>
-          <GraficoBarras altura={230} dados={meses.map((m) => ({ rotulo: MESES_CURTOS[m.mes - 1], _previsao: abertosRel.has(m.mes), Entradas: m.entradas, Saídas: m.saidas }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas' }]} />
+          <GraficoBarras altura={230} dados={meses.map((m) => ({ rotulo: MESES_CURTOS[m.mes - 1], _previsao: abertosRel.has(m.mes), Entradas: m.entradas, Saídas: m.saidas }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas', saida: true }]} resultado />
         </div>
 
         <div className="sec quebra-antes">

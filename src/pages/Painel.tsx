@@ -102,15 +102,15 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
 
         <div className="sec card">
           <h2>Entradas e saídas por mês</h2>
-          <GraficoBarras empilhado dados={porMes.map((m, i) => {
+          <GraficoBarras empilhado resultado dados={porMes.map((m, i) => {
             const pm = aplicarComponentes(m, comp);
             return { rotulo: MESES_CURTOS[i], _previsao: abertos.has(i + 1), Contribuir: pm.contribuir, Coletas: r2(pm.entradas - pm.contribuir), 'Custos fixos': pm.custosFixos, Despesas: pm.despesas, Gerais: pm.gerais };
           })} series={[
             ...(comp.contribuir ? [{ key: 'Contribuir', nome: 'Contribuir', stack: 'e', cor: 'entradas' as const }] : []),
             ...(comp.depositos || comp.transferencias ? [{ key: 'Coletas', nome: comp.depositos && comp.transferencias ? 'Coletas, transferências e bolsa' : comp.depositos ? 'Depósitos de coletas' : 'Transferências e bolsa', stack: 'e', cor: 'entradas2' as const }] : []),
-            ...(comp.custosFixos ? [{ key: 'Custos fixos', nome: 'Custos fixos', stack: 's', cor: 'saidas' as const }] : []),
-            ...(comp.despesas ? [{ key: 'Despesas', nome: 'Despesas e reembolsos', stack: 's', cor: 'saidas2' as const }] : []),
-            ...(p.gerais ? [{ key: 'Gerais', nome: 'Parte dos gerais', stack: 's', cor: 'saidas3' as const }] : []),
+            ...(comp.custosFixos ? [{ key: 'Custos fixos', nome: 'Custos fixos', stack: 's', cor: 'saidas' as const, saida: true }] : []),
+            ...(comp.despesas ? [{ key: 'Despesas', nome: 'Despesas e reembolsos', stack: 's', cor: 'saidas2' as const, saida: true }] : []),
+            ...(p.gerais ? [{ key: 'Gerais', nome: 'Parte dos gerais', stack: 's', cor: 'saidas3' as const, saida: true }] : []),
           ]} />
         </div>
 

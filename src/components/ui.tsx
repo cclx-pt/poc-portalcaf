@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { dataPT, eur, eurK, lerDataPT, mascaraDataPT, num } from '../lib/format';
 import { CATEGORICAS, CORES } from '../lib/cores';
 import { estadoMeses, textoMeses } from '../lib/resumos';
@@ -65,8 +65,9 @@ export function Kpi({ titulo, valor, sub, negativo }: { titulo: string; valor: s
 
 // ---------- gráfico de barras ----------
 export const TONS = CATEGORICAS;
-export interface Serie { key: string; nome: string; stack?: string; cor?: keyof typeof CORES | string }
-export function GraficoBarras({ dados, series, altura = 280, empilhado, unidade = 'eur' }: {
+/** `saida: true`: a série é uma saída e desenha-se abaixo do zero (gráfico divergente). */
+export interface Serie { key: string; nome: string; stack?: string; cor?: keyof typeof CORES | string; saida?: boolean }
+export function GraficoBarras({ dados, series, altura = 280, empilhado, unidade = 'eur', resultado }: {
   /** Linhas com `_previsao: true` (mês aberto) aparecem em tom claro e tracejado. */
   dados: Record<string, string | number | boolean | undefined>[];
   series: Serie[];
@@ -74,35 +75,74 @@ export function GraficoBarras({ dados, series, altura = 280, empilhado, unidade 
   empilhado?: boolean;
   /** 'pessoas': eixos e dicas sem símbolo de moeda. */
   unidade?: 'eur' | 'pessoas';
+  /** Com saídas: mostra o resultado (entradas − saídas) de cada barra, a azul se positivo e a vermelho se negativo. */
+  resultado?: boolean;
 }) {
   const fmtEixo = (v: number) => (unidade === 'eur' ? eurK(v) : num(v));
   const fmtDica = (v: number) => (unidade === 'eur' ? eur(v) : num(v, Number.isInteger(v) ? 0 : 1));
   const cor = (s: Serie, i: number) => (s.cor && s.cor in CORES ? CORES[s.cor as keyof typeof CORES] : s.cor ?? CATEGORICAS[i % CATEGORICAS.length]);
-  // Cantos arredondados só no topo de cada barra (na última série de cada pilha).
-  const ultimaDaPilha = (s: Serie, i: number) => !empilhado || series.slice(i + 1).every((x) => (x.stack ?? 'a') !== (s.stack ?? 'a'));
+  // Gráfico divergente (boa prática para entradas e saídas): entradas acima do zero, saídas abaixo,
+  // linha do zero marcada e, opcionalmente, o resultado de cada mês como ponto azul (positivo) ou vermelho (negativo).
+  const divergente = series.some((s) => s.saida);
+  const RES = '__resultado';
+  const linhas = divergente ? dados.map((d) => {
+    const o: Record<string, string | number | boolean | undefined> = { ...d };
+    let saldo = 0;
+    for (const s of series) {
+      const v = Number(d[s.key] ?? 0) || 0;
+      saldo += s.saida ? -v : v;
+      if (s.saida) o[s.key] = -Math.abs(v);
+    }
+    o[RES] = Math.round(saldo * 100) / 100;
+    return o;
+  }) : dados;
+  const empilhar = empilhado || divergente;
+  const pilha = (s: Serie) => (divergente ? 'sinal' : s.stack ?? 'a');
+  // Cantos arredondados só na ponta exterior de cada pilha (topo nas entradas, base nas saídas).
+  const ultimaDaPilha = (s: Serie, i: number) => !empilhar
+    || series.slice(i + 1).every((x) => pilha(x) !== pilha(s) || (divergente && !!x.saida !== !!s.saida));
+  const raio = (s: Serie, i: number): [number, number, number, number] | number =>
+    (ultimaDaPilha(s, i) ? (s.saida ? [0, 0, 4, 4] : [4, 4, 0, 0]) : 0);
   const temPrevisao = dados.some((d) => d._previsao === true);
+  const verResultado = divergente && resultado;
+  const sinalDoResultado = (v: number) => (v < 0 ? CORES.negativo : CORES.positivo);
   return (
     <div>
-    <div role="img" aria-label={'Gráfico: ' + series.map((s) => s.nome).join(', ') + (temPrevisao ? ' (barras claras: previsão dos custos fixos)' : '')} style={{ width: '100%', height: altura }}>
+    <div role="img" aria-label={'Gráfico: ' + series.map((s) => s.nome + (s.saida ? ' (saída, abaixo do zero)' : '')).join(', ') + (verResultado ? ', resultado (azul positivo, vermelho negativo)' : '') + (temPrevisao ? ' (barras claras: previsão dos custos fixos)' : '')} style={{ width: '100%', height: altura }}>
       <ResponsiveContainer>
-        <BarChart data={dados} margin={{ top: 10, right: 10, left: 10, bottom: 0 }} barCategoryGap="30%" barGap={4}>
+        <ComposedChart data={linhas} margin={{ top: 10, right: 10, left: 10, bottom: 0 }} barCategoryGap="30%" barGap={4} stackOffset={divergente ? 'sign' : undefined}>
           <CartesianGrid stroke={CORES.grelha} vertical={false} />
-          <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.texto }} axisLine={{ stroke: CORES.eixo }} tickLine={false} />
-          <YAxis tickFormatter={(v) => fmtEixo(Number(v))} tick={{ fontSize: 11, fill: CORES.texto }} axisLine={false} tickLine={false} width={80} />
-          <Tooltip cursor={{ fill: '#f2f2f2' }} formatter={(v) => fmtDica(Number(v))}
+          <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.texto }} axisLine={divergente ? false : { stroke: CORES.eixo }} tickLine={false} />
+          <YAxis tickFormatter={(v) => (divergente && Number(v) < 0 ? `−${fmtEixo(Math.abs(Number(v)))}` : fmtEixo(Number(v)))} tick={{ fontSize: 11, fill: CORES.texto }} axisLine={false} tickLine={false} width={84} />
+          {divergente && <ReferenceLine y={0} stroke={CORES.texto} strokeWidth={1.5} />}
+          <Tooltip cursor={{ fill: '#f2f2f2' }}
+            formatter={(v, nome, item) => {
+              const n = Number(v);
+              if (item?.dataKey === RES) return [`${n < 0 ? '−' : '+'}${fmtDica(Math.abs(n))}`, 'Resultado'];
+              const s = series.find((x) => x.key === item?.dataKey);
+              return [fmtDica(Math.abs(n)), s?.saida ? `${String(nome)} (saída)` : String(nome)];
+            }}
             labelFormatter={(l, p) => (p?.[0]?.payload?._previsao ? `${l} · previsão (mês aberto)` : String(l))} contentStyle={{ border: '1px solid #333', borderRadius: 0, fontSize: 12 }} />
-          {series.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} iconType="square" formatter={(v) => <span style={{ color: CORES.texto }}>{v}</span>} />}
+          {(series.length > 1 || verResultado) && <Legend wrapperStyle={{ fontSize: 12 }} iconType="square" formatter={(v) => <span style={{ color: CORES.texto }}>{v}</span>} />}
           {series.map((s, i) => (
-            <Bar key={s.key} dataKey={s.key} name={s.nome} fill={cor(s, i)} stackId={empilhado ? s.stack ?? 'a' : undefined}
-              maxBarSize={36} radius={ultimaDaPilha(s, i) ? [4, 4, 0, 0] : 0} stroke="#fff" strokeWidth={empilhado ? 1 : 0} isAnimationActive={false}>
-              {temPrevisao && dados.map((d, j) => (d._previsao
+            <Bar key={s.key} dataKey={s.key} name={s.saida ? `${s.nome} (saída)` : s.nome} fill={cor(s, i)} stackId={empilhar ? pilha(s) : undefined}
+              maxBarSize={36} radius={raio(s, i)} stroke="#fff" strokeWidth={empilhar ? 1 : 0} isAnimationActive={false}>
+              {temPrevisao && linhas.map((d, j) => (d._previsao
                 ? <Cell key={j} fillOpacity={0.3} stroke={cor(s, i)} strokeDasharray="3 2" strokeWidth={1} />
                 : <Cell key={j} />))}
             </Bar>
           ))}
-        </BarChart>
+          {verResultado && (
+            <Line dataKey={RES} name="Resultado (entradas − saídas)" stroke={CORES.texto} strokeWidth={1.5} strokeDasharray="4 3" isAnimationActive={false} legendType="circle"
+              dot={(p: { cx?: number; cy?: number; value?: number; index?: number }) => (
+                <circle key={p.index} cx={p.cx} cy={p.cy} r={5} fill={sinalDoResultado(Number(p.value))} stroke="#fff" strokeWidth={2} />
+              )}
+              activeDot={false} />
+          )}
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
+    {divergente && <p className="nota-previsao">Entradas acima do zero, saídas abaixo.{verResultado ? ' Pontos: resultado de cada mês (azul positivo, vermelho negativo).' : ''}</p>}
     {temPrevisao && <p className="nota-previsao">Barras claras e tracejadas: meses abertos, só com a previsão dos custos fixos (sem valores reais).</p>}
     </div>
   );

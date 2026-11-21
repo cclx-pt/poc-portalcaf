@@ -147,7 +147,7 @@ export default function Comparacao() {
 
         <div className="card sec">
           <h2>Entradas e saídas por comunidade</h2>
-          <GraficoBarras dados={ordenadas.map((l) => ({ rotulo: l.nome, Entradas: l.entradas, Saídas: l.saidas }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas' }]} altura={260} />
+          <GraficoBarras dados={ordenadas.map((l) => ({ rotulo: l.nome, Entradas: l.entradas, Saídas: l.saidas }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas', saida: true }]} resultado altura={260} />
         </div>
 
         <div className="card sec">
