@@ -517,3 +517,14 @@ export function aplicarComponentes(t: Pick<ResumoMes, 'entradas' | 'contribuir' 
     saldo: r2(entradas - custosFixos - despesas - gerais),
   };
 }
+
+/**
+ * Resumos com a regra dos meses fechados (meses) e, à parte, os valores reais de todos os meses (mesesReais),
+ * para o Painel poder mostrar o que já entrou e saiu mesmo antes de os meses fecharem.
+ */
+export function calcularResumosComReais(d: DadosCalculo): Resumo[] {
+  const oficiais = calcularResumos(d);
+  if (d.regraFechados === false) return oficiais;
+  const reais = new Map(calcularResumos({ ...d, regraFechados: false }).map((r) => [r.id, r.meses]));
+  return oficiais.map((r) => ({ ...r, mesesReais: reais.get(r.id) ?? r.meses }));
+}
