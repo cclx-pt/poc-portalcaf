@@ -402,3 +402,9 @@ button.sec, .btn.sec { margin-bottom: 0; }
 .acoes:has(> label.campo, > div.campo) { align-items: flex-end; }
 /* Plano da análise automática (texto em Markdown, mostrado como texto). */
 .plano-texto { white-space: pre-wrap; font-size: 13px; max-height: 360px; overflow-y: auto; }
+/* Registar presenças: secção colapsável dos registos em falta, entre o formulário e o histórico. */
+.registos-falta > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.registos-falta > summary::-webkit-details-marker { display: none; }
+.registos-falta > summary::before { content: '▸'; font-size: 16px; }
+.registos-falta[open] > summary::before { content: '▾'; }
+.registos-falta > summary h2 { margin: 0; font-size: 18px; }

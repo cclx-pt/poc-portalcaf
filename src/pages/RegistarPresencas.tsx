@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar, useFiltros, useFocarErro } from '../components/ui';
 import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { auditar, gravarLote, lerConfigAssistencia, lerLote, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
-import { registosEmFalta } from '../lib/domingos';
+import { registosEmFalta, totalEmFalta, type FaltasComunidade } from '../lib/domingos';
 import { dataPT, hoje, norm, num } from '../lib/format';
 import { acrescentarRegisto, campoDoErroPresenca, comunidadesDoUtilizador, contagensEmBrancoAZero, duplicadosPresenca, filtrarLotesPresenca, type FiltroPresencas, corrigirRegisto, entradaDeRegisto, eRegistoDoPortal, novoRegistoPresenca, removerRegisto, resumoRegistoPresenca, validarPresenca, type EntradaPresenca } from '../lib/presencas';
 import { recalcularAno } from '../lib/recalcular';
@@ -32,8 +32,10 @@ export function useLotesPresencas(ano: number) {
 }
 
 /** Formulário de registo, equivalente ao Jotform "CCLX : Registo de Presenças". Só grava no portal. */
-export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, aoFechar, inicial }: {
+export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, aoFechar, inicial, aoMudarRascunho }: {
   comunidades: Comunidade[]; lotes: Lote[]; aposGravar: () => Promise<void>;
+  /** Avisa quando há (ou deixa de haver) um registo começado por gravar. */
+  aoMudarRascunho?: (ativo: boolean) => void;
   /** Valores iniciais de um registo novo (ex.: um domingo em falta escolhido na consulta). */
   inicial?: Partial<EntradaPresenca>;
   /** Corrigir um registo existente (do portal ou do Jotform), no mesmo mês e comunidade. */
@@ -55,6 +57,7 @@ export function FormularioPresencas({ comunidades, lotes, aposGravar, edicao, ao
   const [rascunhos, setRascunhos] = useState(() => (edicao ? [] : lerRascunhos(armazemLocal(), acesso?.email ?? '')));
   // Rascunho no dispositivo: guarda a cada alteração, quando já há data, evento, comunidade e alguma contagem.
   const comRascunho = !edicao && deveGuardarRascunho(e);
+  useEffect(() => { aoMudarRascunho?.(comRascunho); }, [comRascunho, aoMudarRascunho]);
   useEffect(() => {
     if (!comRascunho || !acesso) return;
     const agora = new Date().toISOString();
@@ -234,23 +237,32 @@ export function ResumoRegistoGuardado({ entrada: e, comunidade, nota, aoFechar, 
   );
 }
 
-/** Registos em falta (eventos com contagem obrigatória), por comunidade do utilizador. Tocar num abre o registo desse dia e evento. */
-export function RegistosEmFaltaLista({ ano, hoje: hojeIso, comunidades, lotes, aoEscolher, compacto }: {
-  ano: number; hoje: string; comunidades: Comunidade[]; lotes: Lote[]; aoEscolher: (data: string, comunidadeId: string, evento: string) => void;
-  /** Painel lateral: título mais pequeno e só as comunidades com registos em falta. */
-  compacto?: boolean;
-}) {
+/** Registos em falta por comunidade (null enquanto a configuração e as exceções carregam). */
+export function useFaltasPresencas({ ano, hoje: hojeIso, comunidades, lotes }: { ano: number; hoje: string; comunidades: Comunidade[]; lotes: Lote[] }): { falta: FaltasComunidade[]; eventos: string[] } | null {
   const config = useCarregar(lerConfigAssistencia, []);
   const excecoes = useCarregar(listarExcecoes, []);
   if (config.aCarregar || excecoes.aCarregar) return null;
   const falta = registosEmFalta({ ano, hoje: hojeIso, comunidades, assistencia: lotes, excecoes: excecoes.dados ?? [], eventos: eventosEfetivos(config.dados), eventoCelebracao: config.dados?.eventoCelebracao ?? null });
+  return { falta, eventos: [...new Set(falta.flatMap((f) => f.emFalta.map((x) => x.evento)))] };
+}
+
+/** Registos em falta (eventos com contagem obrigatória), por comunidade do utilizador. Tocar num abre o registo desse dia e evento. */
+export function RegistosEmFaltaLista({ ano, hoje: hojeIso, comunidades, lotes, aoEscolher, compacto, semTitulo }: {
+  ano: number; hoje: string; comunidades: Comunidade[]; lotes: Lote[]; aoEscolher: (data: string, comunidadeId: string, evento: string) => void;
+  /** Painel lateral: título mais pequeno e só as comunidades com registos em falta. */
+  compacto?: boolean;
+  /** O título fica fora (ex.: no <summary> de uma secção colapsável). */
+  semTitulo?: boolean;
+}) {
+  const dados = useFaltasPresencas({ ano, hoje: hojeIso, comunidades, lotes });
+  if (!dados) return null;
+  const { falta, eventos: eventosObrig } = dados;
   const nomes = new Map(comunidades.map((c) => [c.id, c.nome]));
   const mostrar = compacto ? falta.filter((f) => f.emFalta.length) : falta;
-  const totalFalta = falta.reduce((s0, f) => s0 + f.emFalta.length, 0);
-  const eventosObrig = [...new Set(falta.flatMap((f) => f.emFalta.map((x) => x.evento)))];
+  const totalFalta = totalEmFalta(falta);
   return (
     <div className={compacto ? 'domingos-falta compacto' : 'sec domingos-falta'}>
-      {compacto ? <h2 style={{ marginTop: 0 }}>Registos em falta <span className={totalFalta ? 'neg' : 'muted'}>({num(totalFalta)})</span></h2> : <h2>Registos em falta</h2>}
+      {semTitulo ? null : compacto ? <h2 style={{ marginTop: 0 }}>Registos em falta <span className={totalFalta ? 'neg' : 'muted'}>({num(totalFalta)})</span></h2> : <h2>Registos em falta</h2>}
       <p className="muted small">Dias até ontem sem registo dos eventos com contagem obrigatória{eventosObrig.length ? ` (${eventosObrig.join(', ')})` : ''}. Não contam as datas sem assistência esperada (exceções). Toque num registo em falta para o registar.</p>
       {compacto && !totalFalta && falta.length > 0 && <p className="ok-box small">Está tudo registado.</p>}
       {mostrar.map((f) => (
@@ -398,27 +410,50 @@ export function FiltrosListaPresencas({ comunidades, lotes, filtro, aoMudar }: {
   );
 }
 
-/** Página "Registar presenças" dentro do portal: formulário e registos com filtros. Os registos em falta têm página própria. */
+/** Página "Registar presenças" dentro do portal: formulário, registos em falta (colapsável, preenche o formulário) e registos com filtros. */
 export default function RegistarPresencas() {
   const coms = useComunidadesDoUtilizador();
   const { ano, comunidade, setComunidade } = useFiltros();
   const lotes = useLotesPresencas(ano);
   const comunidades = coms.dados ?? [];
   // Vindo dos Registos em falta: ?data=…&comunidade=…&evento=… preenche o formulário.
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const doLink: Partial<EntradaPresenca> = Object.fromEntries(Object.entries({ data: params.get('data'), comunidadeId: params.get('comunidade'), evento: params.get('evento') }).filter(([, v]) => v)) as Partial<EntradaPresenca>;
   const inicial: Partial<EntradaPresenca> = Object.keys(doLink).length ? doLink : comunidade !== 'todas' ? { comunidadeId: comunidade } : {};
   const [filtro, setFiltro] = useState<Omit<FiltroPresencas, 'comunidadeId'>>({});
   const filtrados = filtrarLotesPresenca(lotes.dados ?? [], { ...filtro, comunidadeId: comunidade });
+  // Registos em falta das comunidades do filtro do topo; escolher um preenche o formulário deste ecrã.
+  const comunidadesFalta = comunidade === 'todas' ? comunidades : comunidades.filter((c) => c.id === comunidade);
+  const faltas = useFaltasPresencas({ ano, hoje: hoje(), comunidades: comunidadesFalta, lotes: lotes.dados ?? [] });
+  const nFalta = faltas ? totalEmFalta(faltas.falta) : 0;
+  const emCurso = useRef(false);
+  const aoMudarRascunho = useCallback((ativo: boolean) => { emCurso.current = ativo; }, []);
+  const formulario = useRef<HTMLDivElement>(null);
+  const [focar, setFocar] = useState(0);
+  useEffect(() => {
+    if (!focar || !formulario.current) return;
+    formulario.current.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    formulario.current.querySelector<HTMLInputElement>('input[type="number"]')?.focus({ preventScroll: true });
+  }, [focar]);
+  function escolherEmFalta(data: string, comunidadeId: string, evento: string) {
+    if (emCurso.current && !confirm('Substituir o registo em curso? Fica como rascunho neste dispositivo.')) return;
+    setParams({ data, comunidade: comunidadeId, evento }, { replace: true });
+    setFocar((n) => n + 1);
+  }
   return (
     <>
-      <div className="linha" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <h1>Registar presenças</h1>
-        <Link className="btn sec" to="/registos/presencas/em-falta">Ver registos em falta</Link>
-      </div>
+      <h1>Registar presenças</h1>
       <p className="muted">Equivalente ao formulário CCLX : Registo de Presenças. Grava só no portal (o Jotform não é alterado) e entra de imediato no mapa de presenças e nos registos em falta. Link direto para telemóvel: <a href="#/registar">portalcaf.cclx.pt/#/registar</a>.</p>
       <Estado aCarregar={coms.aCarregar} erro={coms.erro} />
-      {!coms.aCarregar && <FormularioPresencas key={params.toString()} inicial={inicial} comunidades={comunidades} lotes={lotes.dados ?? []} aposGravar={lotes.recarregar} />}
+      <div ref={formulario}>
+        {!coms.aCarregar && <FormularioPresencas key={params.toString()} inicial={inicial} comunidades={comunidades} lotes={lotes.dados ?? []} aposGravar={lotes.recarregar} aoMudarRascunho={aoMudarRascunho} />}
+      </div>
+      {!coms.aCarregar && !lotes.aCarregar && comunidades.length > 0 && (
+        <details className="sec card registos-falta">
+          <summary><h2>Registos em falta <span className={nFalta ? 'neg' : 'muted'}>({num(nFalta)})</span></h2></summary>
+          <RegistosEmFaltaLista compacto semTitulo ano={ano} hoje={hoje()} comunidades={comunidadesFalta} lotes={lotes.dados ?? []} aoEscolher={escolherEmFalta} />
+        </details>
+      )}
       <div className="sec">
         <h2>Registos de presenças em {ano}</h2>
         <p className="muted small">Do Jotform e do portal, das suas comunidades (ano e comunidade do filtro do topo). Depois de importados, os registos do Jotform passam a ser do portal: corrigir ou apagar não mexe no Jotform, e a sincronização só traz submissões novas (não repete as apagadas nem um dia e evento já registados). Corrigir e apagar ficam na auditoria.</p>

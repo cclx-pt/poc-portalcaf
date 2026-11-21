@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { domingosDoAno, domingosEmFalta, eDomingo } from '../../src/lib/domingos';
+import { domingosDoAno, domingosEmFalta, eDomingo, totalEmFalta } from '../../src/lib/domingos';
 import type { Comunidade, ExcecaoAssistencia, Lote } from '../../src/lib/types';
 
 const COMS: Comunidade[] = [
@@ -88,5 +88,13 @@ describe('datas possíveis de um evento', () => {
     expect(datasPossiveis(ev, 2026, '2026-11-16', exc, undefined, '2026-11-01')).toEqual(['2026-11-01', '2026-11-15']);
     expect(datasPossiveis(ev, 2026, '2026-11-16', exc, 'moita', '2026-11-01')).toEqual(['2026-11-01']);
     expect(datasPossiveis({ ...ev, dias: [] }, 2026, '2026-11-16', exc)).toEqual([]);
+  });
+});
+
+describe('total de registos em falta', () => {
+  it('soma os registos em falta de todas as comunidades', () => {
+    const f = (n: number) => ({ emFalta: Array.from({ length: n }, (_, i) => ({ data: `2026-01-0${i + 1}`, evento: 'Culto' })) });
+    expect(totalEmFalta([f(2), f(0), f(3)])).toBe(5);
+    expect(totalEmFalta([])).toBe(0);
   });
 });
