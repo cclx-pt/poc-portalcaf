@@ -121,3 +121,8 @@ export function datasPossiveis(e: Pick<EventoConfig, 'dias'>, ano: number, hoje:
 export function totalEmFalta(falta: Pick<FaltasComunidade, 'emFalta'>[]): number {
   return falta.reduce((s, f) => s + f.emFalta.length, 0);
 }
+
+/** "45/45 (100%)": registados de esperados, com a percentagem arredondada; sem esperados, só os registados. */
+export function textoRegistadosEsperados(n: number, esperados: number, fmt: (v: number) => string = String): string {
+  return esperados ? `${fmt(n)}/${fmt(esperados)} (${Math.round((n / esperados) * 100)}%)` : fmt(n);
+}

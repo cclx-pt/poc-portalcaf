@@ -189,18 +189,9 @@ input[aria-invalid="true"] { border-color: #d03b3b; }
   .tabela-presencas tr { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; border-bottom: 1px solid var(--claro); padding: 8px 0; }
   .tabela-presencas td { border: none; padding: 2px 0; text-align: left; }
   .tabela-presencas td[data-rotulo]::before { content: attr(data-rotulo); display: block; font-size: 10px; color: var(--cinza); text-transform: uppercase; letter-spacing: .06em; }
-  .tabela-presencas td.expandir, .tabela-presencas tr.detalhe td { grid-column: 1 / -1; text-align: left; }
-  .detalhe-presenca { display: grid; grid-template-columns: 1fr 1fr; }
 }
 .acoes-linha { white-space: nowrap; }
-/* Lista de presenças colapsável: seta por registo e linha de detalhe. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.tabela-presencas td.expandir { width: 44px; padding: 0; text-align: center; }
-.tabela-presencas .seta { min-width: 44px; min-height: 44px; font-size: 16px; text-decoration: none; }
-.tabela-presencas tr.detalhe td { background: var(--claro, #f4f4f4); }
-.detalhe-presenca { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 0; font-size: 13px; }
-.detalhe-presenca dt { font-size: 10px; color: var(--cinza); text-transform: uppercase; letter-spacing: .06em; }
-.detalhe-presenca dd { margin: 0; }
 .acoes-linha .link + .link { margin-left: 10px; }
 .resumo-registo { width: 100%; border-collapse: collapse; margin-top: 8px; }
 .resumo-registo th { text-align: left; font-weight: 500; color: var(--grafite); padding: 6px 12px 6px 0; width: 45%; border-bottom: 1px solid var(--claro); }

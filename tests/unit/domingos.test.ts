@@ -98,3 +98,12 @@ describe('total de registos em falta', () => {
     expect(totalEmFalta([])).toBe(0);
   });
 });
+
+import { textoRegistadosEsperados } from '../../src/lib/domingos';
+describe('REG-01: domingos registados / esperados por comunidade', () => {
+  it('mostra a percentagem à frente; sem esperados, só os registados', () => {
+    expect(textoRegistadosEsperados(45, 45)).toBe('45/45 (100%)');
+    expect(textoRegistadosEsperados(30, 45)).toBe('30/45 (67%)');
+    expect(textoRegistadosEsperados(7, 0)).toBe('7');
+  });
+});

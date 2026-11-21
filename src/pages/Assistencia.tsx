@@ -5,7 +5,7 @@ import { SyncEstado } from '../components/SyncEstado';
 import { lerConfigAssistencia, listarComunidades, listarExcecoes, listarLotes } from '../lib/db';
 import { sincronizarAgora } from '../lib/syncWeb';
 import { MESES, MESES_CURTOS, norm, num } from '../lib/format';
-import { contaParaMedia, datasPossiveis, eDomingo, registosEmFalta } from '../lib/domingos';
+import { contaParaMedia, datasPossiveis, eDomingo, registosEmFalta, textoRegistadosEsperados } from '../lib/domingos';
 import { eventosEfetivos } from '../lib/eventos';
 import { CATEGORICAS } from '../lib/cores';
 import { ocorrenciasDeEvento, pesoDasMedias } from '../lib/presencas';
@@ -116,6 +116,12 @@ export default function Assistencia() {
   const evCfg = evento !== 'todos' ? eventosEfetivos(config.dados).find((e) => norm(e.nome) === norm(evento)) : undefined;
   const possiveis = evCfg ? datasPossiveis(evCfg, ano, hojeIso, excecoes.dados ?? [], comunidade === 'todas' ? undefined : comunidade) : [];
   const possiveisMes = (mes: number) => possiveis.filter((d) => Number(d.slice(5, 7)) === mes).length;
+  // Coluna Domingos/Eventos do mapa: com todas as comunidades, só as datas com dados; com uma comunidade,
+  // "com dados / esperados" (os esperados dependem da comunidade: datas sem assistência esperada e início/fim).
+  const comEsperados = possiveis.length > 0 && comunidade !== 'todas';
+  // Por comunidade: registados / esperados nessa comunidade (percentagem à frente).
+  const esperadosCom = (c: string) => (evCfg ? datasPossiveis(evCfg, ano, hojeIso, excecoes.dados ?? [], c).length : 0);
+  const registadosDeEsperados = (n: number, esperados: number) => textoRegistadosEsperados(n, esperados, num);
   const emFaltaTotal = falta.reduce((s0, f) => s0 + f.emFalta.length, 0);
   const esperadosTotal = falta.reduce((s0, f) => s0 + f.esperados, 0);
 
@@ -188,7 +194,7 @@ export default function Assistencia() {
             <tbody>
               {porMes.map((m, i) => (
                 <tr key={i} className={m.n ? '' : 'muted'}>
-                  <td>{MESES[i]}</td><td className="num" title={possiveis.length ? 'Registados / possíveis' : undefined}>{possiveis.length ? (possiveisMes(i + 1) || m.n ? `${num(m.n)}/${num(possiveisMes(i + 1))}` : '—') : m.n ? num(m.n) : '—'}</td>
+                  <td>{MESES[i]}</td><td className="num" title={comEsperados ? 'Com dados / esperados' : 'Com dados'}>{comEsperados ? (possiveisMes(i + 1) || m.n ? `${num(m.n)}/${num(possiveisMes(i + 1))}` : '—') : m.n ? num(m.n) : '—'}</td>
                   <td className="num">{m.n ? num(m.soma.adultos) : '—'}</td><td className="num">{m1(media(m, 'adultos'))}</td><td className="num">{m.n ? num(m.max) : '—'}</td>
                   {(['jump', 'criancas', 'connects', 'total'] as const).map((k) => (
                     <FragCel key={k} total={m.n ? m.soma[k] : null} media={media(m, k)} />
@@ -198,7 +204,7 @@ export default function Assistencia() {
             </tbody>
             <tfoot>
               <tr className="total-geral">
-                <th>Total do ano</th><th className="num">{possiveis.length ? `${num(ano_.n)}/${num(possiveis.length)}` : num(ano_.n)}</th>
+                <th>Total do ano</th><th className="num" title={comEsperados ? 'Com dados / esperados' : 'Com dados'}>{comEsperados ? `${num(ano_.n)}/${num(possiveis.length)}` : num(ano_.n)}</th>
                 <th className="num">{num(ano_.soma.adultos)}</th><th className="num">{m1(media(ano_, 'adultos'))}</th><th className="num">{num(ano_.max)}</th>
                 {(['jump', 'criancas', 'connects', 'total'] as const).map((k) => <FragCel key={k} total={ano_.soma[k]} media={media(ano_, k)} cab />)}
               </tr>
@@ -209,20 +215,20 @@ export default function Assistencia() {
               </tr>
             </tfoot>
           </table></div>
-          <p className="muted small">Média mensal = total do ano a dividir pelos meses com registos ({mesesComDados}).{possiveis.length ? ` Na coluna ${unidade === 'domingo' ? 'Domingos' : 'Eventos'}: registados / possíveis (os dias do evento até ontem, sem as datas sem assistência esperada).` : ''}</p>
+          <p className="muted small">Média mensal = total do ano a dividir pelos meses com registos ({mesesComDados}).{` Na coluna ${unidade === 'domingo' ? 'Domingos' : 'Eventos'}: ${comEsperados ? `com dados / esperados nesta comunidade (os dias do evento até ontem, sem as datas sem assistência esperada).` : `${unidade === 'domingo' ? 'domingos' : 'datas'} com dados (cada data conta uma vez, em qualquer comunidade).`}`}</p>
         </div>
 
         {comunidade === 'todas' && porCom.size > 1 && (
           <div className="sec">
             <h2>Por comunidade</h2>
-            <p className="muted small">{`Médias por ${unidade}, arredondadas. Cada coluna "%" é o peso da comunidade no total dessa coluna (ex.: média de jovens e adultos da comunidade a dividir pela soma das médias de todas as comunidades). Na linha do total, as médias são a soma das médias das comunidades e os ${unidade === 'domingo' ? 'domingos' : 'eventos'} são a soma dos de cada comunidade.`}</p>
+            <p className="muted small">{`Médias por ${unidade}, arredondadas. Cada coluna "%" é o peso da comunidade no total dessa coluna (ex.: média de jovens e adultos da comunidade a dividir pela soma das médias de todas as comunidades). Na coluna ${unidade === 'domingo' ? 'Domingos' : 'Eventos'}: registados / esperados em cada comunidade, com a percentagem. Na linha do total, as médias são a soma das médias das comunidades e os ${unidade === 'domingo' ? 'domingos' : 'eventos'} são as datas com dados (cada data conta uma vez).`}</p>
             <div className="tabela"><table>
               <thead><tr><th>Comunidade</th><th className="num">{unidade === 'domingo' ? 'Domingos' : 'Eventos'}</th><th className="num">{`Média jovens e adultos por ${unidade}`}</th><th className="num">%</th><th className="num">{`Média total de pessoas por ${unidade}`}</th><th className="num">%</th><th className="num">Total jovens e adultos</th><th className="num">%</th><th className="num">Total de pessoas</th><th className="num">%</th></tr></thead>
               <tbody>{linhasCom.map(([c, a]) => (
-                <tr key={c}><td>{nomes.get(c) ?? c}</td><td className="num">{num(a.n)}</td><td className="num">{num(media(a, 'adultos') ?? 0)}</td><td className="num">{pct1(pesos[c])}</td><td className="num">{num(media(a, 'total') ?? 0)}</td><td className="num">{pct1(pesosMediaTotal[c])}</td><td className="num">{num(a.soma.adultos)}</td><td className="num">{pct1(pesosAdultos[c])}</td><td className="num">{num(a.soma.total)}</td><td className="num">{pct1(pesosPessoas[c])}</td></tr>
+                <tr key={c}><td>{nomes.get(c) ?? c}</td><td className="num" title={evCfg ? 'Registados / esperados nesta comunidade' : undefined}>{registadosDeEsperados(a.n, esperadosCom(c))}</td><td className="num">{num(media(a, 'adultos') ?? 0)}</td><td className="num">{pct1(pesos[c])}</td><td className="num">{num(media(a, 'total') ?? 0)}</td><td className="num">{pct1(pesosMediaTotal[c])}</td><td className="num">{num(a.soma.adultos)}</td><td className="num">{pct1(pesosAdultos[c])}</td><td className="num">{num(a.soma.total)}</td><td className="num">{pct1(pesosPessoas[c])}</td></tr>
               ))}</tbody>
               <tfoot><tr className="total-geral">
-                <th>Total</th><th className="num">{num(linhasCom.reduce((s0, [, a]) => s0 + a.n, 0))}</th>
+                <th>Total</th><th className="num" title={`${unidade === 'domingo' ? 'Domingos' : 'Datas'} com dados (cada data conta uma vez)`}>{num(ano_.n)}</th>
                 <th className="num">{num(somaMedias('adultos'))}</th><th className="num">100,0%</th><th className="num">{num(somaMedias('total'))}</th><th className="num">100,0%</th>
                 <th className="num">{num(linhasCom.reduce((s0, [, a]) => s0 + a.soma.adultos, 0))}</th><th className="num">100,0%</th><th className="num">{num(linhasCom.reduce((s0, [, a]) => s0 + a.soma.total, 0))}</th><th className="num">100,0%</th>
               </tr></tfoot>
