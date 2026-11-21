@@ -323,3 +323,24 @@ describe('custos fixos previstos (anual e mensal) com a parte do geral', () => {
     expect(mes(rs, 'almada', 4).cfPrevisto).toBe(500);
   });
 });
+
+import { aplicarComponentes, TODOS_COMPONENTES } from '../../src/lib/resumos';
+describe('Painel: ligar e desligar componentes', () => {
+  const t = { entradas: 1150, contribuir: 600, coletas: 300, transferencias: 200, quotaBolsa: 50, geralEntradas: 0, custosFixos: 500, despesas: 200, saldo: 300, geralSaidas: 150, cedidoGeral: { entradas: 0, custosFixos: 0, despesas: 0 } };
+  it('com tudo ligado, igual ao resumo', () => {
+    const a = aplicarComponentes(t, TODOS_COMPONENTES);
+    expect(a.entradas).toBe(1150);
+    expect(a.saldo).toBe(1150 - 500 - 200 - 150);
+  });
+  it('desligar Contribuir e Custos fixos tira-os das entradas, das saídas e do saldo', () => {
+    const a = aplicarComponentes(t, { ...TODOS_COMPONENTES, contribuir: false, custosFixos: false });
+    expect(a.entradas).toBe(550);
+    expect(a.custosFixos).toBe(0);
+    expect(a.saldo).toBe(550 - 200 - 150);
+  });
+  it('só depósitos e reembolsos', () => {
+    const a = aplicarComponentes(t, { contribuir: false, depositos: true, transferencias: false, custosFixos: false, despesas: true, gerais: false });
+    expect(a.entradas).toBe(300);
+    expect(a.saldo).toBe(100);
+  });
+});

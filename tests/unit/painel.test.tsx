@@ -39,4 +39,15 @@ describe('Painel: com previsões ou só meses fechados', () => {
     expect(html).not.toContain('3.000,00 €');
     expect(html).toContain('1 mês fechado');
   });
+
+  it('componentes desligados saem das entradas e do saldo', async () => {
+    vi.stubGlobal('localStorage', { getItem: (k: string) => (k === 'caf-portal:painel-componentes' ? JSON.stringify({ custosFixos: false }) : null), setItem: () => {} });
+    vi.resetModules();
+    const { default: Painel } = await import('../../src/pages/Painel');
+    const html = renderToString(<Painel />).replace(/<!-- -->/g, '');
+    vi.unstubAllGlobals();
+    expect(html).toContain('Incluir');
+    expect(html).not.toContain('Custos fixos anuais');
+    expect(html).toContain('3.000,00 €'); // saldo = entradas sem custos fixos
+  });
 });

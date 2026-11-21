@@ -492,3 +492,28 @@ export function textoMeses(ano: number, e: ReturnType<typeof estadoMeses>): stri
   const ab = intervalos(e.abertos);
   return `${reais} ${ab.charAt(0).toUpperCase()}${ab.slice(1)} (meses abertos): só a previsão dos custos fixos.`;
 }
+
+/** Componentes que o Painel pode ligar e desligar. */
+export interface ComponentesPainel { contribuir: boolean; depositos: boolean; transferencias: boolean; custosFixos: boolean; despesas: boolean; gerais: boolean }
+export const TODOS_COMPONENTES: ComponentesPainel = { contribuir: true, depositos: true, transferencias: true, custosFixos: true, despesas: true, gerais: true };
+
+/**
+ * Valores de um período só com os componentes ligados (Painel).
+ * Entradas = Contribuir + depósitos de coletas + transferências e bolsa geral (o que foi cedido aos gerais já está descontado).
+ * Saídas = custos fixos + despesas e reembolsos + parte dos gerais. Saldo = entradas ligadas − saídas ligadas.
+ */
+export function aplicarComponentes(t: Pick<ResumoMes, 'entradas' | 'contribuir' | 'coletas' | 'transferencias' | 'quotaBolsa' | 'geralEntradas' | 'custosFixos' | 'despesas' | 'saldo'> & Partial<Pick<ResumoMes, 'cedidoGeral' | 'geralSaidas'>>, c: ComponentesPainel) {
+  const p = partesMes(t);
+  const fora = (c.contribuir ? 0 : t.contribuir) + (c.depositos ? 0 : t.coletas) + (c.transferencias ? 0 : t.transferencias + t.quotaBolsa + (t.geralEntradas ?? 0));
+  const entradas = r2(p.entradas - fora);
+  const custosFixos = c.custosFixos ? p.custosFixos : 0;
+  const despesas = c.despesas ? p.despesas : 0;
+  const gerais = c.gerais ? p.gerais : 0;
+  return {
+    entradas, custosFixos, despesas, gerais,
+    contribuir: c.contribuir ? t.contribuir : 0,
+    coletas: c.depositos ? t.coletas : 0,
+    transferencias: c.transferencias ? r2(t.transferencias + t.quotaBolsa) : 0,
+    saldo: r2(entradas - custosFixos - despesas - gerais),
+  };
+}
