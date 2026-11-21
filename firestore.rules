@@ -131,6 +131,11 @@ service cloud.firestore {
       allow read: if isActive();
       allow write: if hasRole(['master', 'caf']);
     }
+    // Fotografia dos dados de cada mês fechado, por comunidade (mesma visibilidade dos resumos).
+    match /fotos_fecho/{id} {
+      allow read: if isActive() && myNivel() >= 1 && inScope(resource.data.comunidadeId);
+      allow write: if hasRole(['master', 'caf']);
+    }
 
     // ---------- configuração geral (ex.: tipo de evento que conta como celebração de domingo) ----------
     match /config/{id} {

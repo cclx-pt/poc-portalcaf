@@ -82,7 +82,7 @@ export function GraficoBarras({ dados, series, altura = 280, empilhado, unidade 
   const temPrevisao = dados.some((d) => d._previsao === true);
   return (
     <div>
-    <div role="img" aria-label={'Gráfico: ' + series.map((s) => s.nome).join(', ') + (temPrevisao ? ' (barras claras: previsão dos custos fixos)' : '')} style={{ width: '100%', height: altura }}>
+    <div role="img" aria-label={'Gráfico: ' + series.map((s) => s.nome).join(', ') + (temPrevisao ? ' (barras claras: meses abertos, valores provisórios)' : '')} style={{ width: '100%', height: altura }}>
       <ResponsiveContainer>
         <BarChart data={dados} margin={{ top: 10, right: 10, left: 10, bottom: 0 }} barCategoryGap="30%" barGap={4}>
           <CartesianGrid stroke={CORES.grelha} vertical={false} />
@@ -102,7 +102,7 @@ export function GraficoBarras({ dados, series, altura = 280, empilhado, unidade 
         </BarChart>
       </ResponsiveContainer>
     </div>
-    {temPrevisao && <p className="nota-previsao">Barras claras e tracejadas: meses abertos, só com a previsão dos custos fixos (sem valores reais).</p>}
+    {temPrevisao && <p className="nota-previsao">Barras claras e tracejadas: meses abertos, com valores provisórios (registos já feitos e previsão dos custos fixos por pagar).</p>}
     </div>
   );
 }

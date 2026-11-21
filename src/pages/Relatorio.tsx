@@ -178,7 +178,7 @@ export default function Relatorio() {
         <div className="sec">
           <h2>Pressupostos e notas</h2>
           <ul>
-            <li>Período: {periodo}. Os meses fechados (fecho mensal) contam os valores reais, sem custos fixos; os meses abertos contam só a previsão dos custos fixos e aparecem em tom claro nos gráficos.</li>
+            <li>Período: {periodo}. Os meses fechados contam os dados fotografados no fecho mensal, sem previsão dos custos fixos; os meses abertos são provisórios (Contribuir, Depósitos, Reembolsos e banco já registados, mais a previsão dos custos fixos por pagar) e aparecem em tom claro nos gráficos.</li>
             <li>Entradas do contribuir.cclx.pt só com o campo Pago preenchido ("PAGO"); coletas em dinheiro pelos depósitos registados.</li>
             <li>Os custos e proveitos gerais da CCLX são repartidos pelas comunidades conforme a média de jovens e adultos dos últimos 12 meses.</li>
             <li>Vencimentos e Segurança Social aparecem agregados em "Outros custos de funcionamento".</li>

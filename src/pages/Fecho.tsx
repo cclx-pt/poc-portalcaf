@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, mensagemErro, useCarregar, useFiltros } from '../components/ui';
-import { auditar, gravarFecho, listarFechos } from '../lib/db';
+import { apagarFotosFecho, auditar, gravarFecho, listarFechos } from '../lib/db';
 import { recalcularAno } from '../lib/recalcular';
 import { MESES, periodo } from '../lib/format';
 
@@ -21,6 +21,10 @@ export default function Fecho() {
     try {
       await gravarFecho({ periodo: p, estado: fechar ? 'fechado' : 'aberto', por: acesso!.email, em: new Date().toISOString() });
       await auditar(acesso!.email, fechar ? 'fechar mês' : 'reabrir mês', p);
+      // Fechar fotografa os dados do mês (passam a ser os do fecho); reabrir apaga a fotografia.
+      if (!fechar) await apagarFotosFecho(p);
+      await recalcularAno(acesso!, ano, fechar ? p : undefined);
+      setMsg(fechar ? `${p} fechado: os dados do mês ficaram fotografados e são estes que contam.` : `${p} reaberto: a fotografia do fecho foi apagada e o mês volta a ter valores provisórios.`);
       await fechos.recarregar();
     } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
@@ -33,7 +37,7 @@ export default function Fecho() {
   return (
     <>
       <h1>Fecho mensal e publicação {ano}</h1>
-      <p className="muted">Depois de reconciliado, o CAF fecha o mês: deixa de poder ser alterado (só o Master pode) e passa a aparecer na página pública. Reabrir fica registado na auditoria.</p>
+      <p className="muted">Depois de reconciliado, o CAF fecha o mês: deixa de poder ser alterado (só o Master pode), os dados do mês ficam fotografados (são os do fecho que contam nas análises) e passa a aparecer na página pública. Enquanto o mês está aberto, as análises usam Contribuir, Depósitos, Reembolsos e banco já registados, mais a previsão dos custos fixos por pagar. Reabrir apaga a fotografia e fica registado na auditoria.</p>
       {msg && <div className="nota">{msg}</div>}
       <div className="acoes">
         <button disabled={ocupado} onClick={publicar}>Recalcular resumos e publicar</button>

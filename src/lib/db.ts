@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import type {
-  BancoLote, Categoria, Dimensao, Comunidade, Conta, CustoFixo, Fecho, Lote, Nivel, Orcamento, Origem, Perfil, Publico, PublicoSite, Resumo, ExcecaoAssistencia, ConfigAssistencia,
+  BancoLote, Categoria, Dimensao, Comunidade, Conta, CustoFixo, Fecho, FotoFecho, Lote, Nivel, Orcamento, Origem, Perfil, Publico, PublicoSite, Resumo, ExcecaoAssistencia, ConfigAssistencia,
 } from './types';
 import { NIVEIS, nivelNum } from './types';
 import type { RegraBanco } from './classificacaoBanco';
@@ -147,6 +147,14 @@ export const gravarVersaoOrcamento = (o: Orcamento) => setDoc(doc(db, 'orcamento
 // ---------- fechos ----------
 export const listarFechos = () => lista<Fecho & { id: string }>('fechos');
 export const gravarFecho = (f: Fecho) => setDoc(doc(db, 'fechos', f.periodo), f);
+/** Fotografias dos meses fechados (os dados do fecho), por comunidade. */
+export const listarFotosFecho = (a: Acesso, ano: number) => lista<FotoFecho>('fotos_fecho', where('ano', '==', ano), ...porComunidade(a));
+export async function apagarFotosFecho(periodo: string) {
+  const snap = await getDocs(query(collection(db, 'fotos_fecho'), where('periodo', '==', periodo)));
+  const b = writeBatch(db);
+  snap.docs.forEach((d) => b.delete(d.ref));
+  if (snap.size) await b.commit();
+}
 
 // ---------- segredo Jotform (só master) ----------
 export async function lerSegredoJotform(): Promise<{ apiKey: string; base: string } | null> {

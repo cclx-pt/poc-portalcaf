@@ -2,7 +2,7 @@ import { MESES, periodo, r2 } from './format';
 import { OUTROS_FUNCIONAMENTO, classificador } from './rubricas';
 import { pedacosDe } from './classificacaoBanco';
 import { contaParaMedia } from './domingos';
-import type { BancoLote, Categoria, Comunidade, CustoFixo, Lote, ParteRubrica, Publico, PublicoMes, PublicoSite, Resumo, ResumoMes } from './types';
+import type { BancoLote, Categoria, Comunidade, CustoFixo, FotoFecho, Lote, ParteRubrica, Publico, PublicoMes, PublicoSite, Resumo, ResumoMes } from './types';
 
 export interface DadosCalculo {
   ano: number;
@@ -15,8 +15,10 @@ export interface DadosCalculo {
   custosFixos: CustoFixo[];
   mesesFechados: Set<string>;
   /**
-   * Regra dos meses fechados (decisão do CAF, 18/11/2026; ativa por omissão): nos meses fechados contam os valores
-   * reais (Jotform e banco) e não os custos fixos; nos meses abertos conta só a previsão dos custos fixos (previsao = true).
+   * Regra dos meses (decisão do CAF, 21/11/2026; ativa por omissão). Contribuir, Depósitos e Reembolsos são fidedignos e
+   * contam sempre como definitivos, tal como o banco já registado. Nos meses abertos (previsao = true) junta-se a previsão
+   * dos custos fixos, só na parte ainda por pagar (o que já saiu na mesma comunidade e categoria abate à previsão). Nos meses
+   * fechados não há previsão e valem os dados do fecho (ver aplicarFotos).
    * false: comportamento antigo (tudo, com custos fixos até ao mês corrente).
    */
   regraFechados?: boolean;
@@ -238,10 +240,17 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
     somaParte(m(com, mes).rubricas[tipo], rubrica, 'local', valor);
   };
 
+  // Saídas já registadas por comunidade, mês e categoria: abatem à previsão dos custos fixos dos meses abertos.
+  const pago = new Map<string, number>();
+  const chavePago = (com: string, mes: number, categoria?: string) => `${com}|${mes}|${(categoria ?? '').trim().toLowerCase()}`;
+  const pagar = (com: string, mes: number, categoria: string | undefined, valor: number) => {
+    if (!categoria) return;
+    const k = chavePago(com, mes, categoria); pago.set(k, r2((pago.get(k) ?? 0) + valor));
+  };
+
   // Taxa IFTHENPAY: 03.07 Taxas (decisão do CAF); sem ela, 03.03 Bancos e pagamentos.
   const nomeComissao = (d.categorias ?? []).find((c) => c.codigo === '03.07')?.nome ?? (d.categorias ?? []).find((c) => c.codigo === '03.03')?.nome ?? 'Comissões bancárias';
   for (const l of d.contribuir) for (const r of l.registos) {
-    if (!fechado(l.mes)) continue;
     const x = m(l.comunidadeId, l.mes); x.contribuir = r2(x.contribuir + r.valor); x.n.contribuir++; soma(x.entradasPorCategoria, r.categoria || 'Sem categoria', r.valor);
     registar(l.comunidadeId, l.mes, 'entrada', r.categoria || 'Sem categoria', r.valor);
     // Comissão IFTHENPAY: diferença entre o valor e o líquido recebido.
@@ -253,14 +262,13 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
     }
   }
   for (const l of d.depositos) for (const r of l.registos) {
-    if (!fechado(l.mes)) continue;
     const x = m(l.comunidadeId, l.mes); x.coletas = r2(x.coletas + r.valor); x.n.coletas++; soma(x.entradasPorCategoria, 'Coletas em dinheiro', r.valor);
     registar(l.comunidadeId, l.mes, 'entrada', 'Coletas em dinheiro', r.valor);
   }
   for (const l of d.despesas) for (const r of l.registos) {
-    if (!fechado(l.mes)) continue;
     const x = m(l.comunidadeId, l.mes); x.despesas = r2(x.despesas + r.valor); x.n.despesas++; soma(x.despesasPorCategoria, r.categoria || 'Sem categoria', r.valor);
     registar(l.comunidadeId, l.mes, 'saida', r.categoria || 'Sem categoria', r.valor);
+    pagar(l.comunidadeId, l.mes, r.categoria, r.valor);
   }
   for (const b of d.banco) for (const r0 of b.registos) {
     // Movimento repartido: cada parte conta na sua comunidade.
@@ -270,10 +278,10 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
       // Movimentos financeiros (depósitos, transferências internas…) não são receita nem despesa.
       if (r.categoria && classificar(r.categoria, r.valor > 0 ? 'entrada' : 'saida').financeiro) continue;
       const mes = Number(r.data.slice(5, 7));
-      if (Number(r.data.slice(0, 4)) !== d.ano || !fechado(mes)) continue;
+      if (Number(r.data.slice(0, 4)) !== d.ano) continue;
       const x = m(r.comunidadeId, mes);
       if (r.valor > 0) { x.transferencias = r2(x.transferencias + r.valor); x.n.transferencias++; soma(x.entradasPorCategoria, r.categoria || 'Transferências', r.valor); registar(r.comunidadeId, mes, 'entrada', r.categoria || 'Transferências', r.valor); }
-      else { x.despesas = r2(x.despesas - r.valor); x.n.despesas++; soma(x.despesasPorCategoria, r.categoria || 'Débitos bancários', -r.valor); registar(r.comunidadeId, mes, 'saida', r.categoria || 'Débitos bancários', -r.valor); }
+      else { x.despesas = r2(x.despesas - r.valor); x.n.despesas++; soma(x.despesasPorCategoria, r.categoria || 'Débitos bancários', -r.valor); registar(r.comunidadeId, mes, 'saida', r.categoria || 'Débitos bancários', -r.valor); pagar(r.comunidadeId, mes, r.categoria, -r.valor); }
     }
   }
   // Assistência média de adultos por comunidade e mês.
@@ -285,7 +293,7 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
   }
   for (const [k, a] of ass) { const [c, mes] = k.split('|'); m(c, Number(mes)).adultosMedia = r2(a.soma / a.n); }
 
-  // Custos fixos dos meses decorridos.
+  // Custos fixos: previsão dos meses abertos (com a regra) ou dos meses decorridos (sem ela).
   const boloCfPrev = Array.from({ length: 12 }, () => 0);
   for (const cf of d.custosFixos) for (let mes = 1; mes <= ate; mes++) {
     const p = periodo(d.ano, mes);
@@ -302,7 +310,15 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
     if (regra && fechado(mes)) continue;
     const comCf = destino(cf.comunidadeId, p); // custo de uma comunidade já terminada: na sucessora
     const x = m(comCf, mes);
-    const valor = valorImputadoNoMes(cf, p);
+    let valor = valorImputadoNoMes(cf, p);
+    if (regra) {
+      // Mês aberto: só a parte ainda por pagar (o banco e os reembolsos da mesma categoria já contam como reais).
+      const k = chavePago(comCf, mes, cf.categoria || cf.rubrica);
+      const jaPago = pago.get(k) ?? 0;
+      const abate = Math.min(valor, jaPago);
+      if (abate > 0) { pago.set(k, r2(jaPago - abate)); valor = r2(valor - abate); }
+      if (!valor) continue;
+    }
     x.custosFixos = r2(x.custosFixos + valor);
     soma(x.custosRubricas, cf.nivel === 'confidencial' ? 'Outros custos de funcionamento' : cf.rubrica, valor);
     // Custo fixo confidencial: nunca aparece com a sua rubrica própria.
@@ -464,7 +480,7 @@ export function somarMeses(ms: ResumoMes[]) {
   return t;
 }
 
-/** Que meses estão fechados (valores reais) e abertos (só previsão dos custos fixos). */
+/** Que meses estão fechados (dados do fecho) e abertos (valores provisórios, com a previsão dos custos fixos). */
 export function estadoMeses(resumos: Pick<Resumo, 'meses'>[]): { regra: boolean; fechados: number[]; abertos: number[] } {
   const prev = new Map<number, boolean>();
   for (const r of resumos) for (const m of r.meses) if (typeof m.previsao === 'boolean') prev.set(m.mes, (prev.get(m.mes) ?? false) || m.previsao);
@@ -486,9 +502,41 @@ function intervalos(meses: number[]): string {
 /** Frase clara para os gráficos: até onde há valores reais e o que é previsão. */
 export function textoMeses(ano: number, e: ReturnType<typeof estadoMeses>): string {
   if (!e.regra) return '';
-  if (!e.fechados.length) return `Ainda não há meses fechados em ${ano}: os valores são só a previsão dos custos fixos.`;
-  const reais = `Valores reais: meses fechados (${intervalos(e.fechados)} de ${ano}).`;
+  if (!e.fechados.length) return `Ainda não há meses fechados em ${ano}: valores provisórios, com os registos já feitos e a previsão dos custos fixos por pagar.`;
+  const reais = `Dados do fecho: meses fechados (${intervalos(e.fechados)} de ${ano}).`;
   if (!e.abertos.length) return reais;
   const ab = intervalos(e.abertos);
-  return `${reais} ${ab.charAt(0).toUpperCase()}${ab.slice(1)} (meses abertos): só a previsão dos custos fixos.`;
+  return `${reais} ${ab.charAt(0).toUpperCase()}${ab.slice(1)} (meses abertos): valores provisórios, com os registos já feitos e a previsão dos custos fixos por pagar.`;
+}
+
+/**
+ * Meses fechados: valem os dados fotografados no fecho (decisão do CAF, 21/11/2026), mesmo que depois mudem regras,
+ * categorias ou custos fixos. Um mês fechado sem fotografia (fechado antes desta regra) fica com o valor calculado.
+ * Uma comunidade sem linha na fotografia (criada depois do fecho) fica a zeros nesse mês.
+ */
+export function aplicarFotos(resumos: Resumo[], fotos: Pick<FotoFecho, 'ano' | 'mes' | 'comunidadeId' | 'dados'>[], ano: number, mesesFechados: Set<string>): Resumo[] {
+  const porMes = new Map<number, Map<string, ResumoMes>>();
+  for (const f of fotos) {
+    if (f.ano !== ano || !mesesFechados.has(periodo(ano, f.mes))) continue;
+    if (!porMes.has(f.mes)) porMes.set(f.mes, new Map());
+    porMes.get(f.mes)!.set(f.comunidadeId, f.dados);
+  }
+  if (!porMes.size) return resumos;
+  const out = resumos.map((r) => ({ ...r, meses: [...r.meses] }));
+  const ids = new Set(out.map((r) => r.comunidadeId));
+  for (const m of porMes.values()) for (const c of m.keys()) if (!ids.has(c)) {
+    ids.add(c);
+    out.push({ id: `${ano}_${c}`, ano, comunidadeId: c, meses: Array.from({ length: 12 }, (_, i) => vazio(i + 1)), calculadoEm: out[0]?.calculadoEm ?? new Date().toISOString(), calculadoPor: '' });
+  }
+  for (const r of out) for (const [mes, m] of porMes) {
+    const f = m.get(r.comunidadeId);
+    r.meses[mes - 1] = { ...(f ? structuredClone(f) : vazio(mes)), mes, previsao: false };
+  }
+  return out;
+}
+
+/** Fotografia do mês (uma linha por comunidade), a gravar no fecho. */
+export function fotografar(resumos: Resumo[], ano: number, mes: number, por: string, em: string): FotoFecho[] {
+  const p = periodo(ano, mes);
+  return resumos.map((r) => ({ id: `${p}_${r.comunidadeId}`, periodo: p, ano, mes, comunidadeId: r.comunidadeId, dados: { ...r.meses[mes - 1], previsao: false }, em, por }));
 }

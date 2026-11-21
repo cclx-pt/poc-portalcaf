@@ -228,7 +228,7 @@ export interface ResumoMes {
   adultosMedia12m: number | null;
   /** O que foi registado aqui em categorias gerais e saiu para a repartição. */
   cedidoGeral: { entradas: number; custosFixos: number; despesas: number };
-  /** Mês aberto: só a previsão dos custos fixos (os valores reais contam quando o mês fechar). */
+  /** Mês aberto: valores provisórios (registos já feitos e previsão dos custos fixos por pagar). */
   previsao?: boolean;
   /** Custos fixos previstos da comunidade no mês (tabela, mesmo com o mês fechado). */
   cfPrevisto?: number;
@@ -295,6 +295,18 @@ export interface Fecho {
   estado: 'fechado' | 'aberto';
   por: string;
   em: string;
+}
+
+/** Fotografia de um mês fechado para uma comunidade (fotos_fecho/{periodo}_{comunidadeId}): os dados do fecho. */
+export interface FotoFecho {
+  id: string;
+  periodo: string;
+  ano: number;
+  mes: number;
+  comunidadeId: string;
+  dados: ResumoMes;
+  em: string;
+  por: string;
 }
 
 /** Domingo em que não é esperada assistência (ex.: culto conjunto, retiro). */

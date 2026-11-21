@@ -244,29 +244,82 @@ describe('comissão IFTHENPAY (Contribuir com líquido)', () => {
   });
 });
 
-describe('meses fechados e previsão dos custos fixos', () => {
-  it('mês fechado: valores reais sem custos fixos; mês aberto: só a previsão dos custos fixos, marcada', () => {
-    const cf: CustoFixo = { id: 'r', comunidadeId: 'almada', rubrica: 'Renda', valorMensal: 500, ano: 2026, inicio: '2026-01', fim: '2026-12', nivel: 'privado' };
+describe('meses abertos e fechados (regra de 21/11/2026)', () => {
+  const cf: CustoFixo = { id: 'r', comunidadeId: 'almada', rubrica: 'Renda', valorMensal: 500, ano: 2026, inicio: '2026-01', fim: '2026-12', nivel: 'privado' };
+  const mov = (id: string, data: string, valor: number, categoria: string) => ({ id, data, descricao: id, valor, categoria, comunidadeId: 'almada', contabilizar: true });
+  const banco = (mes: number, registos: ReturnType<typeof mov>[]) => [{ id: `b${mes}`, contaId: 'cgd', ano: 2026, mes, periodo: `2026-${String(mes).padStart(2, '0')}`, atualizadoEm: '', atualizadoPor: '', registos }];
+
+  it('mês aberto: Contribuir, Depósitos, Reembolsos e banco contam como definitivos, mais a previsão dos custos fixos', () => {
     const rs = calcularResumos(base({
       regraFechados: true, mesesFechados: new Set(['2026-01']), custosFixos: [cf],
       contribuir: [lote('contribuir', 'almada', 2026, 1, [{ valor: 100 }]), lote('contribuir', 'almada', 2026, 2, [{ valor: 70 }])],
+      depositos: [lote('depositos', 'almada', 2026, 2, [{ valor: 40 }])],
       despesas: [lote('despesas', 'almada', 2026, 2, [{ valor: 30, categoria: 'Material' }])],
+      banco: banco(2, [mov('of', '2026-02-10', 25, 'Dízimos')]),
     }));
     const jan = mes(rs, 'almada', 1); const fev = mes(rs, 'almada', 2); const dez = mes(rs, 'almada', 12);
     expect([jan.previsao, jan.contribuir, jan.custosFixos]).toEqual([false, 100, 0]);
-    expect([fev.previsao, fev.contribuir, fev.despesas, fev.custosFixos]).toEqual([true, 0, 0, 500]);
+    expect([fev.previsao, fev.contribuir, fev.coletas, fev.despesas, fev.transferencias, fev.custosFixos]).toEqual([true, 70, 40, 30, 25, 500]);
     expect([dez.previsao, dez.custosFixos]).toEqual([true, 500]); // a previsão cobre o ano todo
+  });
+
+  it('mês aberto: o que já saiu na mesma categoria abate à previsão (sem contar duas vezes)', () => {
+    const rs = calcularResumos(base({
+      regraFechados: true, custosFixos: [cf],
+      banco: banco(3, [mov('renda', '2026-03-05', -500, 'Renda')]),
+      despesas: [lote('despesas', 'almada', 2026, 4, [{ valor: 200, categoria: 'renda' }])],
+    }));
+    const mar = mes(rs, 'almada', 3); const abr = mes(rs, 'almada', 4);
+    // Março: renda paga pelo banco, nada por pagar.
+    expect([mar.despesas, mar.custosFixos]).toEqual([500, 0]);
+    // Abril: reembolso de 200 na mesma categoria; ficam 300 por pagar.
+    expect([abr.despesas, abr.custosFixos]).toEqual([200, 300]);
+    // Os gerais (Renda é geral) somam o real e a previsão, sem duplicar: 500 em março, 500 em abril.
+    const totalSaidas = (m: number) => Math.round(rs.reduce((t, r) => t + r.meses[m - 1].saidas, 0) * 100) / 100;
+    expect([totalSaidas(3), totalSaidas(4)]).toEqual([500, 500]);
+  });
+
+  it('mês fechado: sem previsão dos custos fixos, só os valores registados', () => {
+    const rs = calcularResumos(base({ regraFechados: true, mesesFechados: new Set(['2026-05']), custosFixos: [cf], despesas: [lote('despesas', 'almada', 2026, 5, [{ valor: 30, categoria: 'Material' }])] }));
+    expect([mes(rs, 'almada', 5).custosFixos, mes(rs, 'almada', 5).despesas]).toEqual([0, 30]);
   });
 });
 
-describe('texto dos meses fechados e da previsão', () => {
-  it('diz até quando há valores reais e que o resto é previsão dos custos fixos', async () => {
+describe('fotografia do fecho', () => {
+  it('os meses fechados usam os dados fotografados; os abertos e os meses sem fotografia ficam calculados', async () => {
+    const { aplicarFotos, fotografar } = await import('../../src/lib/resumos');
+    const dados = (valor: number) => base({ regraFechados: true, mesesFechados: new Set(['2026-01', '2026-02']), contribuir: [lote('contribuir', 'almada', 2026, 1, [{ valor }]), lote('contribuir', 'almada', 2026, 2, [{ valor }]), lote('contribuir', 'almada', 2026, 3, [{ valor }])] });
+    const fotos = fotografar(calcularResumos(dados(100)), 2026, 1, 'caf@x', '2026-02-01T10:00:00Z');
+    expect(fotos.find((f) => f.comunidadeId === 'almada')).toMatchObject({ id: '2026-01_almada', periodo: '2026-01', mes: 1, dados: { contribuir: 100, previsao: false } });
+    // Depois do fecho, alguém altera os dados: janeiro mantém o valor do fecho.
+    const fechados = new Set(['2026-01', '2026-02']);
+    const rs = aplicarFotos(calcularResumos(dados(999)), fotos, 2026, fechados);
+    expect(mes(rs, 'almada', 1).contribuir).toBe(100);
+    expect(mes(rs, 'almada', 2).contribuir).toBe(999); // fechado sem fotografia: calculado
+    expect(mes(rs, 'almada', 3).contribuir).toBe(999); // aberto
+    // Mês reaberto: a fotografia deixa de contar.
+    expect(mes(aplicarFotos(calcularResumos(dados(999)), fotos, 2026, new Set(['2026-02'])), 'almada', 1).contribuir).toBe(999);
+  });
+  it('comunidade sem linha na fotografia fica a zeros nesse mês; comunidade só na fotografia aparece', async () => {
+    const { aplicarFotos } = await import('../../src/lib/resumos');
+    const rs0 = calcularResumos(base({ contribuir: [lote('contribuir', 'porto', 2026, 1, [{ valor: 50 }])] }));
+    const foto = { ano: 2026, mes: 1, comunidadeId: 'antiga', dados: { ...mes(rs0, 'almada', 1), contribuir: 10 } };
+    const rs = aplicarFotos(rs0, [foto], 2026, new Set(['2026-01']));
+    expect(mes(rs, 'porto', 1).contribuir).toBe(0);
+    expect(mes(rs, 'antiga', 1).contribuir).toBe(10);
+    expect(mes(rs0, 'porto', 1).contribuir).toBe(50); // não altera os resumos recebidos
+  });
+});
+
+describe('texto dos meses fechados e abertos', () => {
+  it('diz até quando há dados do fecho e que o resto é provisório', async () => {
     const { estadoMeses, textoMeses } = await import('../../src/lib/resumos');
     const r = (fechados: number[]) => [{ id: 'x', ano: 2026, comunidadeId: 'a', calculadoEm: '', calculadoPor: '', meses: Array.from({ length: 12 }, (_, i) => ({ mes: i + 1, previsao: !fechados.includes(i + 1) })) }] as unknown as Resumo[];
+    const prov = 'valores provisórios, com os registos já feitos e a previsão dos custos fixos por pagar.';
     expect(estadoMeses(r([1, 2, 3]))).toEqual({ regra: true, fechados: [1, 2, 3], abertos: [4, 5, 6, 7, 8, 9, 10, 11, 12] });
-    expect(textoMeses(2026, estadoMeses(r([1, 2, 3])))).toBe('Valores reais: meses fechados (janeiro a março de 2026). Abril a dezembro (meses abertos): só a previsão dos custos fixos.');
-    expect(textoMeses(2026, estadoMeses(r([])))).toBe('Ainda não há meses fechados em 2026: os valores são só a previsão dos custos fixos.');
-    expect(textoMeses(2026, estadoMeses(r([1, 3])))).toBe('Valores reais: meses fechados (janeiro e março de 2026). Fevereiro e abril a dezembro (meses abertos): só a previsão dos custos fixos.');
+    expect(textoMeses(2026, estadoMeses(r([1, 2, 3])))).toBe(`Dados do fecho: meses fechados (janeiro a março de 2026). Abril a dezembro (meses abertos): ${prov}`);
+    expect(textoMeses(2026, estadoMeses(r([])))).toBe(`Ainda não há meses fechados em 2026: ${prov}`);
+    expect(textoMeses(2026, estadoMeses(r([1, 3])))).toBe(`Dados do fecho: meses fechados (janeiro e março de 2026). Fevereiro e abril a dezembro (meses abertos): ${prov}`);
     expect(estadoMeses([{ meses: [{ mes: 1 }] }] as unknown as Resumo[]).regra).toBe(false);
   });
 });
