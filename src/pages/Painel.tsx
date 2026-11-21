@@ -20,20 +20,29 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
   const [msg, setMsg] = useState<string | null>(null);
   const comunidades = useCarregar(listarComunidades, []);
   const r = useCarregar(() => listarResumos(acesso!, ano), [ano, acesso?.email]);
+  // "Com previsões": meses abertos com a previsão dos custos fixos. "Só meses fechados": os meses abertos ficam de fora.
+  const [modoMeses, setModoMeses] = useState<'previsoes' | 'fechados'>(() => {
+    try { return localStorage.getItem('caf-portal:painel-meses') === 'fechados' ? 'fechados' : 'previsoes'; } catch { return 'previsoes'; }
+  });
+  const mudarModo = (m: 'previsoes' | 'fechados') => { setModoMeses(m); try { localStorage.setItem('caf-portal:painel-meses', m); } catch { /* sem armazenamento */ } };
 
   const nomes = new Map((comunidades.dados ?? []).map((c) => [c.id, c.nome]));
   const todos = r.dados ?? [];
   const selecionados = todos.filter((x) => (comunidade === 'todas' ? x.comunidadeId !== 'bolsa-geral' : x.comunidadeId === comunidade));
-  const porMes = Array.from({ length: 12 }, (_, i) => somarMeses(selecionados.map((s) => s.meses[i])));
-  const tot = somarMeses(porMes);
   const abertos = new Set(estadoMeses(selecionados).abertos);
+  const soFechados = modoMeses === 'fechados';
+  /** Meses que entram nos totais: todos, ou só os fechados. */
+  const conta = (mes: number) => !soFechados || !abertos.has(mes);
+  const porMes = Array.from({ length: 12 }, (_, i) => somarMeses(conta(i + 1) ? selecionados.map((s) => s.meses[i]) : []));
+  const tot = somarMeses(porMes);
+  const nFechados = Array.from({ length: 12 }, (_, i) => i + 1).filter((m) => !abertos.has(m)).length;
   // Custos fixos previstos (tabela) do ano, com a parte dos custos fixos gerais repartida pela média proporcional de assistência.
   const cfProprio = r2(selecionados.reduce((s0, x) => s0 + x.meses.reduce((t, mm) => t + (mm.cfPrevisto ?? 0), 0), 0));
   const cfGeral = r2(selecionados.reduce((s0, x) => s0 + x.meses.reduce((t, mm) => t + (mm.cfGeralPrevisto ?? 0), 0), 0));
   const cfAnual = r2(cfProprio + cfGeral);
   const p = partesMes(tot); // custos e despesas que ficaram + parte dos gerais (somam ao saldo)
   const bolsa = todos.find((x) => x.comunidadeId === 'bolsa-geral');
-  const bolsaTot = bolsa ? somarMeses(bolsa.meses) : null;
+  const bolsaTot = bolsa ? somarMeses(bolsa.meses.filter((m) => conta(m.mes))) : null;
   const calculado = todos[0]?.calculadoEm;
 
   async function recalcular() {
@@ -48,6 +57,15 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
       <div className="linha" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <h1>{titulo}: custos x entradas {ano}</h1>
+          <div className="linha" style={{ margin: '4px 0 8px' }}>
+            <label className="campo">Meses
+              <select value={modoMeses} onChange={(e) => mudarModo(e.target.value as 'previsoes' | 'fechados')}>
+                <option value="previsoes">Com previsões (meses abertos com a previsão dos custos fixos)</option>
+                <option value="fechados">Só meses fechados (valores reais)</option>
+              </select>
+            </label>
+            {soFechados && <span className="small muted">{abertos.size ? `${nFechados} ${nFechados === 1 ? 'mês fechado' : 'meses fechados'}; os meses abertos não entram nos totais nem no gráfico.` : 'Todos os meses com dados estão fechados.'}</span>}
+          </div>
           <p className="muted">
             {calculado ? `Resumos calculados em ${new Date(calculado).toLocaleString('pt-PT')}.` : 'Ainda não há resumos calculados para este ano.'}{' '}
             Entradas = Contribuir + coletas + transferências atribuídas + quota da bolsa geral. Saídas = custos fixos + despesas e reembolsos + parte dos custos gerais (repartidos por média proporcional de assistência).
@@ -92,7 +110,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
                 <tbody>
                   {todos.filter((x) => x.comunidadeId !== 'bolsa-geral')
                     .sort((a, b) => (comunidades.dados?.find((c) => c.id === a.comunidadeId)?.ordem ?? 50) - (comunidades.dados?.find((c) => c.id === b.comunidadeId)?.ordem ?? 50))
-                    .map((x) => { const t = partesMes(somarMeses(x.meses)); return (
+                    .map((x) => { const t = partesMes(somarMeses(x.meses.filter((m) => conta(m.mes)))); return (
                       <tr key={x.id}>
                         <td>{x.comunidadeId === GERAIS_POR_REPARTIR ? 'Gerais por repartir' : nomes.get(x.comunidadeId) ?? x.comunidadeId}</td>
                         <td className="num">{dec(t.entradas)}</td><td className="num">{dec(t.custosFixos)}</td><td className="num">{dec(t.despesas)}</td><td className="num">{dec(t.gerais)}</td>
