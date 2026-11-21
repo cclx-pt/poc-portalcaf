@@ -4,6 +4,7 @@ import { auth } from '../firebase';
 import { useAuth } from '../auth/AuthProvider';
 import { Rodape } from '../components/ui';
 import { ECRA_LOGIN } from '../lib/ecras';
+import { verificarAcesso } from '../lib/acessos';
 
 const BASE = import.meta.env.BASE_URL;
 const CHAVE_EMAIL = 'caf-portal:email-login';
@@ -56,8 +57,8 @@ export default function Login() {
       <div className="login">
         <div className="caixa">
           <img src={`${BASE}caf-logo.png`} alt="CAF, Conselho Administrativo e Financeiro, CCLX" />
-          <h2>Sem acesso ao portal</h2>
-          <p>A conta <b>{user.email}</b> ainda não tem um perfil ativo. Peça ao Master (tesouraria@cclx.pt) para lhe dar acesso.</p>
+          <h2>Utilizador não está registado</h2>
+          <p>A conta <b>{user.email}</b> não tem um perfil ativo no portal. Peça ao Master (tesouraria@cclx.pt) para lhe dar acesso.</p>
           {msg && <div className="nota">{msg}</div>}
           <button onClick={() => void sair()}>Terminar sessão</button>
           <a href={`${BASE}#/publico`}>Ver a página pública</a>
@@ -86,6 +87,11 @@ export default function Login() {
           <label className="campo">Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></label>
           <button disabled={ocupado || !email.includes('@')} onClick={() => correr(async () => {
             const endereco = email.trim().toLowerCase();
+            // Não envia o link a quem não está registado (nem ativo).
+            if (await verificarAcesso(endereco) === 'nao-registado') {
+              setMsg(`Utilizador não está registado: ${endereco} não tem acesso ao portal. Peça ao Master (tesouraria@cclx.pt) para lhe dar acesso.`);
+              return;
+            }
             await sendSignInLinkToEmail(auth, endereco, { url: urlRegresso(), handleCodeInApp: true });
             window.localStorage.setItem(CHAVE_EMAIL, endereco);
             window.localStorage.setItem(CHAVE_DESTINO, window.location.hash);
