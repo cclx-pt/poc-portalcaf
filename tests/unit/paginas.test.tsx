@@ -204,16 +204,22 @@ describe('páginas', () => {
     if (process.env.GUARDAR_HTML) (await import('node:fs')).writeFileSync('/tmp/smoke/registo-rapido.html', html);
   });
 
-  it('Lista de presenças: Corrigir em cada registo e última alteração com quem', async () => {
+  it('Lista de presenças: começa colapsada, com Corrigir em cada registo e os detalhes por expandir', async () => {
     const { ListaPresencas } = await import('../../src/pages/RegistarPresencas');
     const l = lote('assistencia', 'almada', 11, [
-      { data: '2026-11-08', valor: 105, evento: 'Celebração Domingo', extra: { alteradoPor: 'ana@x.pt', alteradoEm: '2026-11-17T14:05:00.000Z' } },
+      { data: '2026-11-08', valor: 105, evento: 'Celebração Domingo', extra: { jump: 7, criancas: 12, alteradoPor: 'ana@x.pt', alteradoEm: '2026-11-17T14:05:00.000Z' } },
       { data: '2026-11-15', valor: 90, evento: 'Celebração Domingo' },
     ]);
     const html = renderToString(<ListaPresencas lotes={[l]} comunidades={[{ id: 'almada', nome: 'Almada', ordem: 1 }]} soPortal={false} aposApagar={async () => {}} />);
-    expect(html).toContain('Última alteração');
-    expect(html).toMatch(/17\/11\/2026 \d{2}:05 · ana@x\.pt/);
     expect(html.match(/>Corrigir</g)?.length).toBe(2);
+    expect(html).toContain('Expandir todos');
+    expect(html).toContain('Total de pessoas');
+    expect(html).toContain('>124<'); // 105 + 7 + 12
+    expect(html.match(/aria-expanded="false"/g)?.length).toBe(2);
+    // Detalhes (Jump, última alteração, quem registou) só aparecem ao expandir.
+    expect(html).not.toContain('Última alteração');
+    expect(html).not.toContain('ana@x.pt');
+    expect(html).not.toContain('class="detalhe"');
   });
 
   it('Registos em falta (telemóvel): por comunidade do utilizador, com o evento; a tocar abre o registo', async () => {
