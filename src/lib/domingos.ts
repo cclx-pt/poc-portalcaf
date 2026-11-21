@@ -116,3 +116,8 @@ export function datasPossiveis(e: Pick<EventoConfig, 'dias'>, ano: number, hoje:
   }
   return out;
 }
+
+/** Total de registos em falta em todas as comunidades (título da secção e painéis). */
+export function totalEmFalta(falta: Pick<FaltasComunidade, 'emFalta'>[]): number {
+  return falta.reduce((s, f) => s + f.emFalta.length, 0);
+}

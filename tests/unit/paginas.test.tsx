@@ -329,7 +329,23 @@ describe('Registos em falta (página própria)', () => {
     const { MemoryRouter } = await import('react-router-dom');
     const { default: RegistarPresencas } = await import('../../src/pages/RegistarPresencas');
     const html = renderToString(<MemoryRouter initialEntries={['/registos/presencas/novo?data=2026-11-15&comunidade=almada&evento=Culto']}><RegistarPresencas /></MemoryRouter>);
-    expect(html).toContain('Ver registos em falta');
+    expect(html).not.toContain('Ver registos em falta');
     expect(html).toContain('15/11/2026');
+  });
+
+  it('Registar presenças: registos em falta numa secção colapsada, antes do histórico', async () => {
+    const { MemoryRouter } = await import('react-router-dom');
+    const { default: RegistarPresencas } = await import('../../src/pages/RegistarPresencas');
+    CONFIG_ASS.atual = { eventoCelebracao: 'Culto', eventosConfig: [{ id: 'culto', nome: 'Culto', ativo: true, contagens: ['adultos'], dias: [0], horario: { diaTodo: true } }] } as never;
+    const html = renderToString(<MemoryRouter><RegistarPresencas /></MemoryRouter>);
+    CONFIG_ASS.atual = { eventoCelebracao: null };
+    const iFalta = html.indexOf('Registos em falta');
+    const iHist = html.indexOf('Registos de presenças em');
+    expect(iFalta).toBeGreaterThan(-1);
+    expect(iFalta).toBeLessThan(iHist);
+    expect(html.indexOf('Guardar registo')).toBeLessThan(iFalta); // depois do formulário
+    expect(html).toMatch(/<details class="sec card registos-falta">/); // sem open: começa colapsada
+    expect(html).toMatch(/Registos em falta <span class="neg">\((<!-- -->)?\d+(<!-- -->)?\)<\/span>/);
+    expect(html).toContain('>Registar<'); // tocar num registo em falta preenche o formulário
   });
 });
