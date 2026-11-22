@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { CartesianGrid, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis, LabelList } from 'recharts';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, GraficoBarras, useCarregar, useFiltros, Frescura } from '../components/ui';
+import { Estado, GraficoBarras, useCarregar, useFiltros, Frescura, SeletorMeses, useModoMeses } from '../components/ui';
 import { listarComunidades, listarResumos } from '../lib/db';
 import { totaisPeriodo } from '../lib/analise';
 import { dec, eur, eurK, MESES, MESES_CURTOS, num, pct, r2, hoje } from '../lib/format';
-import { GERAIS_POR_REPARTIR, mesesDecorridos } from '../lib/resumos';
+import { GERAIS_POR_REPARTIR, mesesDecorridos, resumosNoModo } from '../lib/resumos';
 import { CORES, corDivergente } from '../lib/cores';
 
 interface Linha {
@@ -52,6 +52,8 @@ export default function Comparacao() {
   const { ano } = useFiltros();
   const resumos = useCarregar(() => listarResumos(acesso!, ano), [ano, acesso?.email]);
   const coms = useCarregar(listarComunidades, []);
+  const [modoMeses, setModoMeses] = useModoMeses();
+  const dadosModo = useMemo(() => resumosNoModo(resumos.dados ?? [], modoMeses), [resumos.dados, modoMeses]);
   const [de, setDe] = useState(1);
   const [ate, setAte] = useState(12);
   const [gerais, setGerais] = useState(true);
@@ -64,7 +66,7 @@ export default function Comparacao() {
     const ls: Linha[] = [];
     let pr: Linha | null = null;
     let tE = 0, tS = 0, tD = 0, tA = 0, temA = false;
-    for (const r of resumos.dados ?? []) {
+    for (const r of dadosModo) {
       if (r.comunidadeId === 'bolsa-geral') continue;
       const t = totaisPeriodo(r, de, ate);
       const e = r2(t.entradas - (gerais ? 0 : t.geralEntradas));
@@ -78,7 +80,7 @@ export default function Comparacao() {
     const total = linha('cclx', 'CCLX', r2(tE), r2(tS), temA ? r2(tA) : null, r2(tD));
     return { linhas: ls, cclx: total, porRepartir: pr };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumos.dados, coms.dados, de, ate, gerais]);
+  }, [dadosModo, coms.dados, de, ate, gerais]);
 
   const ordenadas = [...linhas].sort((a, b) => {
     const va = a[ordem.k] ?? -Infinity, vb = b[ordem.k] ?? -Infinity;
@@ -88,7 +90,7 @@ export default function Comparacao() {
   // Mapa de calor: resultado por mês e comunidade.
   const meses = Array.from({ length: ate - de + 1 }, (_, i) => de + i);
   const calor = ordenadas.map((l) => {
-    const r = (resumos.dados ?? []).find((x) => x.comunidadeId === l.id)!;
+    const r = dadosModo.find((x) => x.comunidadeId === l.id)!;
     return { l, vals: meses.map((m) => { const x = r.meses[m - 1]; return r2(x.entradas - x.saidas - (gerais ? 0 : (x.geralEntradas ?? 0) - (x.geralSaidas ?? 0))); }) };
   });
   const maxAbs = Math.max(1, ...calor.flatMap((c) => c.vals.map(Math.abs)));
@@ -100,11 +102,12 @@ export default function Comparacao() {
   return (
     <>
       <h1>Comparação entre comunidades {ano}</h1>
-      <Frescura ano={ano} ate={mesesDecorridos(ano, hoje())} calculadoEm={resumos.dados?.[0]?.calculadoEm} resumos={resumos.dados ?? []} />
+      <Frescura ano={ano} ate={mesesDecorridos(ano, hoje())} calculadoEm={resumos.dados?.[0]?.calculadoEm} resumos={dadosModo} />
       <p className="muted">Entradas e saídas de cada comunidade, já com a parte dos custos e proveitos gerais (repartidos pela média de jovens e adultos dos últimos 12 meses). "Por pessoa" divide pelo número médio de jovens e adultos por registo de assistência no período.</p>
 
       <div className="card sec">
         <div className="filtros" style={{ alignItems: 'flex-end' }}>
+          <SeletorMeses modo={modoMeses} aoMudar={setModoMeses} resumos={resumos.dados ?? []} />
           <label className="campo">De
             <select value={de} onChange={(e) => { const v = Number(e.target.value); setDe(v); if (v > ate) setAte(v); }}>{MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
           </label>
@@ -144,7 +147,7 @@ export default function Comparacao() {
 
         <div className="card sec">
           <h2>Entradas e saídas por comunidade</h2>
-          <GraficoBarras dados={ordenadas.map((l) => ({ rotulo: l.nome, Entradas: l.entradas, Saídas: l.saidas }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas' }]} altura={260} />
+          <GraficoBarras dados={ordenadas.map((l) => ({ rotulo: l.nome, Entradas: l.entradas, Saídas: l.saidas }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas', saida: true }]} resultado altura={260} />
         </div>
 
         <div className="card sec">

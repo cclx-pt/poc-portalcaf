@@ -1,10 +1,10 @@
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros, Frescura } from '../components/ui';
+import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros, Frescura, SeletorMeses, useModoMeses } from '../components/ui';
 import { lerConfigAssistencia, listarComunidades, listarCustosFixos, listarExcecoes, listarLotes, listarResumos } from '../lib/db';
 import { contaParaMedia, domingosEmFalta } from '../lib/domingos';
 import { dec, eur, hoje, MESES, MESES_CURTOS, num, pct, r2 } from '../lib/format';
 import { mesesDoRelatorio, resumoAnual, type ResumoAnual } from '../lib/relatorio';
-import { estadoMeses, mesesDecorridos } from '../lib/resumos';
+import { estadoMeses, mesesDecorridos, resumosNoModo, MODOS_MESES } from '../lib/resumos';
 import type { Lote, Resumo } from '../lib/types';
 
 const BASE = import.meta.env.BASE_URL;
@@ -42,7 +42,8 @@ export default function Relatorio() {
   const cfgAss = useCarregar(lerConfigAssistencia, []);
   const tipo = cfgAss.dados?.eventoCelebracao ?? null;
 
-  const daqui = (rs: Resumo[] | null) => (rs ?? []).filter((r) => (comunidade === 'todas' ? r.comunidadeId !== 'bolsa-geral' : r.comunidadeId === comunidade));
+  const [modoMeses, setModoMeses] = useModoMeses();
+  const daqui = (rs: Resumo[] | null) => resumosNoModo(rs ?? [], modoMeses).filter((r) => (comunidade === 'todas' ? r.comunidadeId !== 'bolsa-geral' : r.comunidadeId === comunidade));
   const atual = daqui(rAtual.dados);
   const antes = daqui(rAntes.dados);
   const nomeCom = comunidade === 'todas' ? 'CCLX' : coms.dados?.find((c) => c.id === comunidade)?.nome ?? comunidade;
@@ -91,7 +92,8 @@ export default function Relatorio() {
 
   return (
     <div className="relatorio">
-      <div className="linha nao-imprimir" style={{ justifyContent: 'flex-end', marginBottom: 8 }}>
+      <div className="linha nao-imprimir" style={{ justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 }}>
+        <span className="linha" style={{ alignItems: 'flex-end' }}><SeletorMeses modo={modoMeses} aoMudar={setModoMeses} resumos={rAtual.dados ?? []} /></span>
         <button onClick={() => window.print()}>Imprimir / PDF</button>
       </div>
       <div className="so-imprimir" style={{ borderBottom: '2px solid #000', paddingBottom: 10, marginBottom: 14 }}>
@@ -99,6 +101,7 @@ export default function Relatorio() {
       </div>
       <div className="kicker" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.12em', color: 'var(--cinza)' }}>{`RELATÓRIO FINANCEIRO · ${nomeCom.toUpperCase()}`}</div>
       <h1>Custos x entradas e assistência {ano}</h1>
+      <p className="small muted">Valores: {MODOS_MESES.find((m) => m.valor === modoMeses)?.nome}.</p>
       <Frescura ano={ano} ate={ate} calculadoEm={rAtual.dados?.[0]?.calculadoEm} resumos={atual} />
 
       <Estado aCarregar={aCarregar} erro={rAtual.erro || ass.erro} vazio={!atual.length} />
@@ -123,7 +126,7 @@ export default function Relatorio() {
             <h2>Médias mensais por ano</h2>
             <GraficoBarras altura={220} dados={[P ? { r: P, a: ano - 1 } : null, { r: A, a: ano }].filter(Boolean).map((x) => ({
               rotulo: String(x!.a), Entradas: x!.r.meses ? r2(x!.r.entradas / x!.r.meses) : 0, Saídas: x!.r.meses ? r2(x!.r.saidas / x!.r.meses) : 0,
-            }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas' }]} />
+            }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas', saida: true }]} resultado />
           </div>
           <div className="card">
             <h2>Composição dos custos fixos ({ano})</h2>
@@ -133,7 +136,7 @@ export default function Relatorio() {
 
         <div className="card sec">
           <h2>Entradas e saídas por mês ({ano})</h2>
-          <GraficoBarras altura={230} dados={meses.map((m) => ({ rotulo: MESES_CURTOS[m.mes - 1], _previsao: abertosRel.has(m.mes), Entradas: m.entradas, Saídas: m.saidas }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas' }]} />
+          <GraficoBarras altura={230} dados={meses.map((m) => ({ rotulo: MESES_CURTOS[m.mes - 1], _previsao: abertosRel.has(m.mes), Entradas: m.entradas, Saídas: m.saidas }))} series={[{ key: 'Entradas', nome: 'Entradas', cor: 'entradas' }, { key: 'Saídas', nome: 'Saídas', cor: 'saidas', saida: true }]} resultado />
         </div>
 
         <div className="sec quebra-antes">
