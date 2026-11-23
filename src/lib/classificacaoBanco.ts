@@ -102,6 +102,9 @@ const TRANSFERENCIA = /transf|trf|mb ?way|sepa|oferta|dizimo|donativo/;
 /** Descritivos de transferências recebidas que contam sempre como oferta/dízimo da Geral. */
 const OFERTA_GERAL = /^\s*tfi\b|\btrf\.?\s*mb\s*way\b|\btrf\.?\s*imed\b/;
 const DIZIMO = /dizimo/;
+/** Descritivos de depósitos de numerário ou cheques (CGD e Santander). */
+const DEPOSITO = /\bdep(osito)?\b|\bdep\.|numerario|\bcheque/;
+export const DEPOSITO_SEM_JOTFORM = 'Depósito no banco sem registo no Jotform';
 const VENCIMENTO = /ordenado|salario|vencimento/;
 const SEG_SOCIAL = /\btsu\b|seg(uranca)?\.? ?social|^ss\b/;
 
@@ -158,10 +161,17 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
         return proposto({ categoria: cat('F3.02'), conciliadoCom: `despesas:${reg.id}`, comunidadeId: reg.comunidadeId, nota: `Reembolso ${codigo} (contado pelo Jotform)` });
       }
     } else {
-      const par = deps.find((x) => !x.usado && Math.abs(x.valor - v) < 0.005 && dias(x.data, m.data) >= 0 && dias(x.data, m.data) <= 3);
+      // Depósito do Registo de Depósitos: mesmo valor, até 7 dias antes ou depois (o registo pode ser feito depois do depósito).
+      const par = deps.filter((x) => !x.usado && Math.abs(x.valor - v) < 0.005 && Math.abs(dias(x.data, m.data)) <= 7)
+        .sort((a, b) => Math.abs(dias(a.data, m.data)) - Math.abs(dias(b.data, m.data)))[0];
       if (par) {
         par.usado = true;
         return proposto({ categoria: cat('F1.02'), conciliadoCom: `depositos:${par.id}`, comunidadeId: par.comunidadeId, nota: 'Depósito do Registo de Depósitos (contado pelo Jotform)' });
+      }
+      // Depósito no banco ainda sem registo no Jotform (decisão do CAF, 23/11/2026): conta como coleta,
+      // mas a comunidade tem de ser escolhida (ou o registo de depósito feito no Jotform e a proposta refeita).
+      if (DEPOSITO.test(d) && cat('R1.02')) {
+        return { ...m, categoria: cat('R1.02'), contabilizar: true, estado: 'rever', nota: `${DEPOSITO_SEM_JOTFORM}: escolha a comunidade, ou registe o depósito no Jotform e volte a propor` };
       }
     }
 
@@ -353,4 +363,39 @@ export function registosConciliados(m: MovBanco, ctx: { despesas: Lote[]; deposi
       .sort((a, b) => a.data.localeCompare(b.data));
   }
   return [];
+}
+
+// ---------- consolidação Jotform ↔ extratos (decisão do CAF, 23/11/2026) ----------
+/**
+ * O Contribuir e os reembolsos do Jotform são definitivos; o extrato só confirma:
+ * - Contribuir: o líquido do mês confere com os lotes IFTHENPAY recebidos no banco;
+ * - reembolsos: cada reembolso do Jotform tem uma saída na CGD ou no Santander (conciliada);
+ * - depósitos: os do Jotform aparecem no banco, e os do banco sem registo no Jotform ficam assinalados.
+ */
+export interface Consolidacao {
+  contribuir: { n: number; valor: number; liquido: number; ifthenpay: number; diferenca: number };
+  reembolsos: { n: number; valor: number; confirmados: number; porConfirmar: RegistoJotform[] };
+  depositos: { n: number; valor: number; confirmados: number; semExtrato: RegistoJotform[]; bancoSemJotform: MovBanco[] };
+}
+
+export function consolidacaoMes(ano: number, mes: number, ctx: { contribuir: Lote[]; despesas: Lote[]; depositos: Lote[]; banco: MovBanco[] }): Consolidacao {
+  const doMes = (data: string) => Number(data.slice(0, 4)) === ano && Number(data.slice(5, 7)) === mes;
+  const conciliados = new Set(ctx.banco.map((m) => m.conciliadoCom).filter((x): x is string => !!x));
+  const regs = (lotes: Lote[], origem: RegistoJotform['origem']): RegistoJotform[] => lotes
+    .flatMap((l) => l.registos.map((r) => ({ origem, id: r.id, data: r.data, valor: r.valor, comunidadeId: l.comunidadeId, categoria: r.categoria, descricao: r.descricao, codigo: String(r.extra?.codigo ?? '') || undefined })))
+    .filter((r) => doMes(r.data));
+  const contrib = ctx.contribuir.flatMap((l) => l.registos).filter((r) => doMes(r.data));
+  const liquido = r2(contrib.reduce((s, r) => s + (Number.isFinite(Number(r.extra?.liquido)) ? Number(r.extra?.liquido) : r.valor), 0));
+  const ifthenpay = r2(ctx.banco.filter((m) => doMes(m.data) && m.conciliadoCom === 'contribuir:ifthenpay').reduce((s, m) => s + m.valor, 0));
+  const reemb = regs(ctx.despesas, 'despesas');
+  const deps = regs(ctx.depositos, 'depositos');
+  const confirmado = (r: RegistoJotform) => conciliados.has(`${r.origem}:${r.id}`);
+  return {
+    contribuir: { n: contrib.length, valor: r2(contrib.reduce((s, r) => s + r.valor, 0)), liquido, ifthenpay, diferenca: r2(ifthenpay - liquido) },
+    reembolsos: { n: reemb.length, valor: r2(reemb.reduce((s, r) => s + r.valor, 0)), confirmados: reemb.filter(confirmado).length, porConfirmar: reemb.filter((r) => !confirmado(r)) },
+    depositos: {
+      n: deps.length, valor: r2(deps.reduce((s, r) => s + r.valor, 0)), confirmados: deps.filter(confirmado).length, semExtrato: deps.filter((r) => !confirmado(r)),
+      bancoSemJotform: ctx.banco.filter((m) => doMes(m.data) && m.valor > 0 && !m.conciliadoCom && (m.nota ?? '').startsWith(DEPOSITO_SEM_JOTFORM)),
+    },
+  };
 }
