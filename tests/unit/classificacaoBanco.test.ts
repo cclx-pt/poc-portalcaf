@@ -266,3 +266,35 @@ describe('divisões com valor fixo ou percentagem', () => {
     expect(m.partes).toEqual([{ comunidadeId: 'moita', valor: -20 }, { comunidadeId: 'almada', valor: -50, pct: 50 }, { comunidadeId: 'sede', valor: -50, pct: 50 }]);
   });
 });
+
+import { consolidacaoMes, DEPOSITO_SEM_JOTFORM } from '../../src/lib/classificacaoBanco';
+describe('consolidação Jotform ↔ extratos (decisão do CAF, 23/11/2026)', () => {
+  it('depósito registado no Jotform depois do depósito no banco também concilia (até 7 dias)', () => {
+    const [m] = proporClassificacao([mov('1', '2026-03-03', 135, 'DEPOSITO')], ctx({ depositos: [lote('depositos', 'moita', [{ id: 'd1', data: '2026-03-06', valor: 135 }])] }));
+    expect(m).toMatchObject({ conciliadoCom: 'depositos:d1', comunidadeId: 'moita' });
+  });
+  it('depósito no banco sem registo no Jotform: conta como oferta, fica para rever a comunidade', () => {
+    const [m] = proporClassificacao([mov('1', '2026-03-03', 80, 'DEP NUMERARIO ATM')], ctx());
+    expect(m).toMatchObject({ estado: 'rever', categoria: 'R1.02 Ofertas gerais', contabilizar: true });
+    expect(m.nota).toContain(DEPOSITO_SEM_JOTFORM);
+    expect(m.comunidadeId).toBeUndefined();
+  });
+  it('resumo do mês: Contribuir vs IFTHENPAY, reembolsos por confirmar, depósitos sem extrato e banco sem Jotform', () => {
+    const contribuir = [lote('contribuir', 'almada', [{ id: 'c1', data: '2026-03-02', valor: 100, extra: { liquido: '98.5' } }, { id: 'c2', data: '2026-03-10', valor: 50, extra: { liquido: '49' } }])];
+    const despesas = [lote('despesas', 'almada', [{ id: 's1', data: '2026-03-01', valor: 40 }, { id: 's2', data: '2026-03-08', valor: 25, extra: { codigo: 'R20260500' } }])];
+    const depositos = [lote('depositos', 'moita', [{ id: 'd1', data: '2026-03-02', valor: 135 }, { id: 'd2', data: '2026-03-20', valor: 60 }])];
+    const banco: MovBanco[] = [
+      mov('b1', '2026-03-09', 147.5, 'IFTHENPAY', { conciliadoCom: 'contribuir:ifthenpay' }),
+      mov('b2', '2026-03-05', -40, 'TRF R...', { conciliadoCom: 'despesas:s1' }),
+      mov('b3', '2026-03-03', 135, 'DEPOSITO', { conciliadoCom: 'depositos:d1' }),
+      mov('b4', '2026-03-15', 80, 'DEP', { nota: `${DEPOSITO_SEM_JOTFORM}: escolha a comunidade` }),
+    ];
+    const c = consolidacaoMes(2026, 3, { contribuir, despesas, depositos, banco });
+    expect(c.contribuir).toMatchObject({ n: 2, valor: 150, liquido: 147.5, ifthenpay: 147.5, diferenca: 0 });
+    expect(c.reembolsos).toMatchObject({ n: 2, valor: 65, confirmados: 1 });
+    expect(c.reembolsos.porConfirmar.map((r) => r.codigo)).toEqual(['R20260500']);
+    expect(c.depositos).toMatchObject({ n: 2, confirmados: 1 });
+    expect(c.depositos.semExtrato.map((r) => r.id)).toEqual(['d2']);
+    expect(c.depositos.bancoSemJotform.map((m) => m.id)).toEqual(['b4']);
+  });
+});

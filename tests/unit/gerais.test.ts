@@ -245,16 +245,18 @@ describe('comissão IFTHENPAY (Contribuir com líquido)', () => {
 });
 
 describe('meses fechados e previsão dos custos fixos', () => {
-  it('mês fechado: valores reais sem custos fixos; mês aberto: só a previsão dos custos fixos, marcada', () => {
+  it('mês fechado: valores reais sem custos fixos; mês aberto: Contribuir e reembolsos (definitivos) e a previsão dos custos fixos', () => {
     const cf: CustoFixo = { id: 'r', comunidadeId: 'almada', rubrica: 'Renda', valorMensal: 500, ano: 2026, inicio: '2026-01', fim: '2026-12', nivel: 'privado' };
     const rs = calcularResumos(base({
       regraFechados: true, mesesFechados: new Set(['2026-01']), custosFixos: [cf],
       contribuir: [lote('contribuir', 'almada', 2026, 1, [{ valor: 100 }]), lote('contribuir', 'almada', 2026, 2, [{ valor: 70 }])],
       despesas: [lote('despesas', 'almada', 2026, 2, [{ valor: 30, categoria: 'Material' }])],
+      depositos: [lote('depositos', 'almada', 2026, 2, [{ valor: 45 }])],
     }));
+    expect(mes(rs, 'almada', 2).coletas).toBe(45); // depósitos do Jotform também são definitivos
     const jan = mes(rs, 'almada', 1); const fev = mes(rs, 'almada', 2); const dez = mes(rs, 'almada', 12);
     expect([jan.previsao, jan.contribuir, jan.custosFixos]).toEqual([false, 100, 0]);
-    expect([fev.previsao, fev.contribuir, fev.despesas, fev.custosFixos]).toEqual([true, 0, 0, 500]);
+    expect([fev.previsao, fev.contribuir, fev.despesas, fev.custosFixos]).toEqual([true, 70, 30, 500]);
     expect([dez.previsao, dez.custosFixos]).toEqual([true, 500]); // a previsão cobre o ano todo
   });
 });
@@ -264,9 +266,9 @@ describe('texto dos meses fechados e da previsão', () => {
     const { estadoMeses, textoMeses } = await import('../../src/lib/resumos');
     const r = (fechados: number[]) => [{ id: 'x', ano: 2026, comunidadeId: 'a', calculadoEm: '', calculadoPor: '', meses: Array.from({ length: 12 }, (_, i) => ({ mes: i + 1, previsao: !fechados.includes(i + 1) })) }] as unknown as Resumo[];
     expect(estadoMeses(r([1, 2, 3]))).toEqual({ regra: true, fechados: [1, 2, 3], abertos: [4, 5, 6, 7, 8, 9, 10, 11, 12] });
-    expect(textoMeses(2026, estadoMeses(r([1, 2, 3])))).toBe('Valores reais: meses fechados (janeiro a março de 2026). Abril a dezembro (meses abertos): só a previsão dos custos fixos.');
-    expect(textoMeses(2026, estadoMeses(r([])))).toBe('Ainda não há meses fechados em 2026: os valores são só a previsão dos custos fixos.');
-    expect(textoMeses(2026, estadoMeses(r([1, 3])))).toBe('Valores reais: meses fechados (janeiro e março de 2026). Fevereiro e abril a dezembro (meses abertos): só a previsão dos custos fixos.');
+    expect(textoMeses(2026, estadoMeses(r([1, 2, 3])))).toBe('Valores reais: meses fechados (janeiro a março de 2026). Abril a dezembro (meses abertos): Contribuir, depósitos, reembolsos e a previsão dos custos fixos; os restantes movimentos do banco entram quando o mês fechar.');
+    expect(textoMeses(2026, estadoMeses(r([])))).toMatch(/^Ainda não há meses fechados em 2026: além do Contribuir, dos depósitos e dos reembolsos, os valores são a previsão dos custos fixos\./);
+    expect(textoMeses(2026, estadoMeses(r([1, 3])))).toBe('Valores reais: meses fechados (janeiro e março de 2026). Fevereiro e abril a dezembro (meses abertos): Contribuir, depósitos, reembolsos e a previsão dos custos fixos; os restantes movimentos do banco entram quando o mês fechar.');
     expect(estadoMeses([{ meses: [{ mes: 1 }] }] as unknown as Resumo[]).regra).toBe(false);
   });
 });
@@ -355,7 +357,7 @@ describe('Painel: valores reais até hoje (mesesReais)', () => {
       despesas: [lote('despesas', 'almada', 2026, 2, [{ valor: 30, categoria: 'Material' }])],
     }));
     const r = rs.find((x) => x.comunidadeId === 'almada')!;
-    expect([r.meses[1].contribuir, r.meses[1].custosFixos]).toEqual([0, 500]);
+    expect([r.meses[1].contribuir, r.meses[1].custosFixos]).toEqual([70, 500]); // Contribuir é definitivo
     expect([r.mesesReais![1].contribuir, r.mesesReais![1].despesas, r.mesesReais![1].custosFixos]).toEqual([70, 30, 500]);
     expect(r.mesesReais![5].custosFixos).toBe(0); // custos fixos só até ao mês corrente
   });

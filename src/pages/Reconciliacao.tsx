@@ -5,9 +5,9 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia } from '../lib/db';
-import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, resolverPartes, sugerirPadrao, candidatosReembolso, registosConciliados, type RegistoJotform, temPalavra, validar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
+import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, resolverPartes, sugerirPadrao, candidatosReembolso, registosConciliados, consolidacaoMes, type RegistoJotform, temPalavra, validar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
 import { bancoDaConta } from '../lib/banco';
-import { eur, MESES, r2 } from '../lib/format';
+import { dataPT, eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Categoria, Comunidade, Dimensao, EstadoMov, MovBanco, ParteMov } from '../lib/types';
 import { comunidadeAtiva, destinoFusao, pesos12m } from '../lib/resumos';
 
@@ -256,6 +256,44 @@ export default function Reconciliacao() {
       </div>
 
       </>}
+
+      {vista === 'mes' && jot.dados && (() => {
+        // Contribuir, depósitos e reembolsos do Jotform são definitivos; o extrato consolida (decisão do CAF, 23/11/2026).
+        const bancoAno = (banco.dados ?? []).map((l) => alterados[l.id] ?? l).flatMap((l) => l.registos);
+        const c = consolidacaoMes(ano, mes, { ...jot.dados, banco: bancoAno });
+        const nomeCom = (id: string) => (coms.dados ?? []).find((x) => x.id === id)?.nome ?? id;
+        const estado = (ok: boolean) => <span className={ok ? 'etiqueta' : 'etiqueta neg'}>{ok ? 'Confere' : 'Por confirmar'}</span>;
+        return (
+          <div className="sec card">
+            <h2>{`Consolidação Jotform e extratos · ${MESES[mes - 1]} ${ano}`}</h2>
+            <p className="muted small">O Contribuir, os depósitos e os reembolsos do Jotform são definitivos e já contam nos resultados; o extrato consolida e deteta diferenças. Os depósitos que só estão no banco ficam para escolher a comunidade (ou registar no Jotform).</p>
+            <div className="tabela"><table>
+              <thead><tr><th>Origem</th><th className="num">Registos</th><th className="num">Jotform (€)</th><th className="num">Banco (€)</th><th>Estado</th></tr></thead>
+              <tbody>
+                <tr><td>Contribuir (líquido) ↔ lotes IFTHENPAY</td><td className="num">{c.contribuir.n}</td><td className="num">{eur(c.contribuir.liquido)}</td><td className="num">{eur(c.contribuir.ifthenpay)}</td>
+                  <td>{estado(Math.abs(c.contribuir.diferenca) < 0.005)}{Math.abs(c.contribuir.diferenca) >= 0.005 && <span className="small"> diferença {eur(c.contribuir.diferenca)} (lotes de fim de mês podem cair no mês seguinte)</span>}</td></tr>
+                <tr><td>Reembolsos ↔ saídas CGD/Santander</td><td className="num">{`${c.reembolsos.confirmados}/${c.reembolsos.n}`}</td><td className="num">{eur(c.reembolsos.valor)}</td><td className="num">{eur(r2(c.reembolsos.valor - c.reembolsos.porConfirmar.reduce((t, x) => t + x.valor, 0)))}</td>
+                  <td>{estado(!c.reembolsos.porConfirmar.length)}{c.reembolsos.porConfirmar.length > 0 && <span className="small"> {c.reembolsos.porConfirmar.length} sem saída no banco</span>}</td></tr>
+                <tr><td>Depósitos ↔ banco</td><td className="num">{`${c.depositos.confirmados}/${c.depositos.n}`}</td><td className="num">{eur(c.depositos.valor)}</td><td className="num">{eur(r2(c.depositos.valor - c.depositos.semExtrato.reduce((t, x) => t + x.valor, 0)))}</td>
+                  <td>{estado(!c.depositos.semExtrato.length && !c.depositos.bancoSemJotform.length)}{c.depositos.bancoSemJotform.length > 0 && <span className="small"> {c.depositos.bancoSemJotform.length} no banco sem registo no Jotform</span>}</td></tr>
+              </tbody>
+            </table></div>
+            {(c.reembolsos.porConfirmar.length > 0 || c.depositos.semExtrato.length > 0 || c.depositos.bancoSemJotform.length > 0) && (
+              <details style={{ marginTop: 10 }}>
+                <summary>Ver os registos por confirmar</summary>
+                <div className="tabela" style={{ marginTop: 8 }}><table>
+                  <thead><tr><th>Tipo</th><th>Data</th><th>Referência</th><th>Comunidade</th><th className="num">Valor (€)</th></tr></thead>
+                  <tbody>
+                    {c.reembolsos.porConfirmar.map((x) => <tr key={`r${x.id}`}><td>Reembolso sem saída no banco</td><td>{dataPT(x.data)}</td><td>{x.codigo ?? x.descricao ?? '—'}</td><td>{nomeCom(x.comunidadeId)}</td><td className="num">{eur(x.valor)}</td></tr>)}
+                    {c.depositos.semExtrato.map((x) => <tr key={`d${x.id}`}><td>Depósito do Jotform sem movimento no banco</td><td>{dataPT(x.data)}</td><td>{x.descricao ?? '—'}</td><td>{nomeCom(x.comunidadeId)}</td><td className="num">{eur(x.valor)}</td></tr>)}
+                    {c.depositos.bancoSemJotform.map((x) => <tr key={`b${x.id}`}><td>Depósito no banco sem registo no Jotform</td><td>{dataPT(x.data)}</td><td>{x.descricao}</td><td>{x.comunidadeId ? nomeCom(x.comunidadeId) : '— (escolher)'}</td><td className="num">{eur(x.valor)}</td></tr>)}
+                  </tbody>
+                </table></div>
+              </details>
+            )}
+          </div>
+        );
+      })()}
 
       {vista === 'mes' && (() => {
         const dist = relatorioExtratos(movs, cats.dados ?? [], 'comunidade', mes, mes);
