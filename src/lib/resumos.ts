@@ -17,8 +17,8 @@ export interface DadosCalculo {
   /**
    * Regra dos meses fechados (decisão do CAF, 18/11/2026; ativa por omissão): nos meses fechados contam os valores
    * reais (Jotform e banco) e não os custos fixos; nos meses abertos conta a previsão dos custos fixos (previsao = true).
-   * O Contribuir e os reembolsos do Jotform são definitivos (decisão do CAF, 23/11/2026): contam em todos os meses,
-   * abertos ou fechados; o extrato só confirma (lotes IFTHENPAY e saídas dos reembolsos).
+   * O Contribuir, os depósitos e os reembolsos do Jotform são definitivos (decisão do CAF, 23/11/2026): contam em todos
+   * os meses, abertos ou fechados; o extrato só consolida e deteta diferenças (lotes IFTHENPAY, depósitos, saídas dos reembolsos).
    * false: comportamento antigo (tudo, com custos fixos até ao mês corrente).
    */
   regraFechados?: boolean;
@@ -254,8 +254,8 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
       registar(l.comunidadeId, l.mes, 'saida', nomeComissao, com);
     }
   }
+  // Depósitos do Jotform: definitivos, contam em todos os meses (o extrato só consolida e deteta diferenças).
   for (const l of d.depositos) for (const r of l.registos) {
-    if (!fechado(l.mes)) continue;
     const x = m(l.comunidadeId, l.mes); x.coletas = r2(x.coletas + r.valor); x.n.coletas++; soma(x.entradasPorCategoria, 'Coletas em dinheiro', r.valor);
     registar(l.comunidadeId, l.mes, 'entrada', 'Coletas em dinheiro', r.valor);
   }
@@ -488,12 +488,12 @@ function intervalos(meses: number[]): string {
 /** Frase clara para os gráficos: até onde há valores reais e o que é previsão. */
 export function textoMeses(ano: number, e: ReturnType<typeof estadoMeses>): string {
   if (!e.regra) return '';
-  const def = 'O Contribuir e os reembolsos do Jotform contam em todos os meses (são definitivos).';
-  if (!e.fechados.length) return `Ainda não há meses fechados em ${ano}: além do Contribuir e dos reembolsos, os valores são a previsão dos custos fixos. ${def}`;
+  const def = 'O Contribuir, os depósitos e os reembolsos do Jotform contam em todos os meses (são definitivos).';
+  if (!e.fechados.length) return `Ainda não há meses fechados em ${ano}: além do Contribuir, dos depósitos e dos reembolsos, os valores são a previsão dos custos fixos. ${def}`;
   const reais = `Valores reais: meses fechados (${intervalos(e.fechados)} de ${ano}).`;
   if (!e.abertos.length) return `${reais} ${def}`;
   const ab = intervalos(e.abertos);
-  return `${reais} ${ab.charAt(0).toUpperCase()}${ab.slice(1)} (meses abertos): Contribuir, reembolsos e a previsão dos custos fixos; depósitos e movimentos do banco entram quando o mês fechar.`;
+  return `${reais} ${ab.charAt(0).toUpperCase()}${ab.slice(1)} (meses abertos): Contribuir, depósitos, reembolsos e a previsão dos custos fixos; os restantes movimentos do banco entram quando o mês fechar.`;
 }
 
 /** Componentes que o Painel pode ligar e desligar. */

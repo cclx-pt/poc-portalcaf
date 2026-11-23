@@ -367,7 +367,7 @@ export function registosConciliados(m: MovBanco, ctx: { despesas: Lote[]; deposi
 
 // ---------- consolidação Jotform ↔ extratos (decisão do CAF, 23/11/2026) ----------
 /**
- * O Contribuir e os reembolsos do Jotform são definitivos; o extrato só confirma:
+ * O Contribuir, os depósitos e os reembolsos do Jotform são definitivos; o extrato só consolida e deteta diferenças:
  * - Contribuir: o líquido do mês confere com os lotes IFTHENPAY recebidos no banco;
  * - reembolsos: cada reembolso do Jotform tem uma saída na CGD ou no Santander (conciliada);
  * - depósitos: os do Jotform aparecem no banco, e os do banco sem registo no Jotform ficam assinalados.

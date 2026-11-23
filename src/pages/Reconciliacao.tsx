@@ -258,7 +258,7 @@ export default function Reconciliacao() {
       </>}
 
       {vista === 'mes' && jot.dados && (() => {
-        // Contribuir e reembolsos do Jotform são definitivos; o extrato só confirma (decisão do CAF, 23/11/2026).
+        // Contribuir, depósitos e reembolsos do Jotform são definitivos; o extrato consolida (decisão do CAF, 23/11/2026).
         const bancoAno = (banco.dados ?? []).map((l) => alterados[l.id] ?? l).flatMap((l) => l.registos);
         const c = consolidacaoMes(ano, mes, { ...jot.dados, banco: bancoAno });
         const nomeCom = (id: string) => (coms.dados ?? []).find((x) => x.id === id)?.nome ?? id;
@@ -266,7 +266,7 @@ export default function Reconciliacao() {
         return (
           <div className="sec card">
             <h2>{`Consolidação Jotform e extratos · ${MESES[mes - 1]} ${ano}`}</h2>
-            <p className="muted small">O Contribuir e os reembolsos do Jotform são definitivos e já contam nos resultados; o extrato confirma. Os depósitos do Jotform confirmam-se com o banco, e os depósitos que só estão no banco ficam para escolher a comunidade (ou registar no Jotform).</p>
+            <p className="muted small">O Contribuir, os depósitos e os reembolsos do Jotform são definitivos e já contam nos resultados; o extrato consolida e deteta diferenças. Os depósitos que só estão no banco ficam para escolher a comunidade (ou registar no Jotform).</p>
             <div className="tabela"><table>
               <thead><tr><th>Origem</th><th className="num">Registos</th><th className="num">Jotform (€)</th><th className="num">Banco (€)</th><th>Estado</th></tr></thead>
               <tbody>
