@@ -58,6 +58,8 @@ export interface Conta {
   /** Colunas do extrato desta conta (aplicadas sozinhas ao importar). */
   mapa?: { data?: string; descricao?: string; valor?: string; debito?: string; credito?: string; saldo?: string; estorno?: string };
   mapaColunas?: string[];
+  /** O extrato desta conta tem linha de cabeçalho? Sem valor: o portal deteta sozinho. */
+  extratoCabecalho?: 'sim' | 'nao';
 }
 
 export interface Categoria {

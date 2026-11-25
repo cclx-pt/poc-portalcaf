@@ -6,8 +6,8 @@ import SaldosBancos from './SaldosBancos';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros, useMarcarAba } from '../components/ui';
 import { apagarBancoLote, auditar, gravar, gravarBancoLote, listarBanco, listarComunidades, listarContas, listarFechos } from '../lib/db';
-import { AmostraExtrato, CamposExtrato, limparMapa } from '../components/MapaExtratoEditor';
-import { lerFicheiro } from '../lib/ficheiros';
+import { AmostraExtrato, CampoCabecalho, CamposExtrato, limparMapa } from '../components/MapaExtratoEditor';
+import { lerFicheiro, type ModoCabecalho } from '../lib/ficheiros';
 import { NOME_BANCO, bancoDaConta, maioresMovimentos, detetarBanco, dividirPorMes, escolherMapa, melhorColunaData, verificarExtratos, mesesParaLimpar, mapaCompleto, mapaDoBanco, mapasDasContas, mapearExtrato, resumoMes, sugerirMapaBanco, type Banco, type MapaBanco } from '../lib/banco';
 import { eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Conta, EstadoMov, MovBanco } from '../lib/types';
@@ -189,6 +189,8 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
   const [ocupado, setOcupado] = useState(false);
   const [ajustar, setAjustar] = useState(false);
   const [daConta, setDaConta] = useState(false);
+  const [cabecalho, setCabecalho] = useState<ModoCabecalho>('auto');
+  const [ficheiro, setFicheiro] = useState<File | null>(null);
   const res = useMemo(() => (linhas.length && mapaCompleto(mapa) ? mapearExtrato(linhas, mapa) : null), [linhas, mapa]);
   const anos = useMemo(() => [...new Set((res?.movimentos ?? []).map((m) => Number(m.data.slice(0, 4))))].sort(), [res]);
   useEffect(() => {
@@ -208,12 +210,20 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
   const avisosPrevia = previa ? verificarExtratos([...(existentes ?? []).filter((e) => e.contaId === contaId && !previa.lotes.some((l) => l.id === e.id)), ...previa.lotes], [contaId]) : [];
   const opcoesConta = bancoFicheiro ? contas.filter((c) => bancoDaConta(c) === bancoFicheiro) : contas;
 
-  async function ler(f: File) {
-    setMsg(null); setExistentes(null);
+  async function ler(f: File, modo: ModoCabecalho = cabecalho) {
+    setMsg(null); setExistentes(null); setFicheiro(f);
     try {
-      const t = await lerFicheiro(f);
+      let t = await lerFicheiro(f, modo);
       // 1.º o mapeamento de uma conta (Configuração); 2.º os formatos conhecidos (CGD, Santander); 3.º indicar as colunas.
-      const g = escolherMapa(t.colunas, mapasDasContas(contas));
+      let g = escolherMapa(t.colunas, mapasDasContas(contas));
+      // Em automático, tenta também como as contas que indicam se o extrato tem (ou não) cabeçalho.
+      if (!g && modo === 'auto') {
+        for (const m of [...new Set(contas.map((c) => c.extratoCabecalho).filter(Boolean))] as ModoCabecalho[]) {
+          const t2 = await lerFicheiro(f, m);
+          const g2 = escolherMapa(t2.colunas, mapasDasContas(contas.filter((c) => c.extratoCabecalho === m)));
+          if (g2) { t = t2; g = g2; break; }
+        }
+      }
       const contaG = g ? contas.find((c) => c.id === g.contaId) : undefined;
       const b = contaG ? bancoDaConta(contaG) : detetarBanco(t.colunas);
       setNome(f.name); setColunas(t.colunas); setLinhas(t.linhas); setBancoFicheiro(contaG ? null : b); setDaConta(!!g); setMesesSel(null);
@@ -237,7 +247,7 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
     const c = contas.find((x) => x.id === contaId);
     if (!c || !mapaCompleto(mapa)) return;
     try {
-      await gravar('contas', { ...c, mapa: limparMapa(mapa), mapaColunas: colunas });
+      await gravar('contas', { ...c, mapa: limparMapa(mapa), mapaColunas: colunas, ...(cabecalho !== 'auto' ? { extratoCabecalho: cabecalho } : {}) });
       await auditar(acesso!.email, 'conta: extrato e logótipo', `${c.nome}: mapeamento guardado ao importar`);
       setDaConta(true); setAjustar(false);
       setMsg(`Colunas guardadas na conta ${c.nome}: da próxima vez são aplicadas sozinhas. Pode alterá-las em Configuração.`);
@@ -261,6 +271,7 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
   return (
     <Modal titulo="Importar extrato" onFechar={onFechar}>
       <div className="nota">Exporte o extrato do homebanking da CGD ou do Santander (CSV ou Excel), tal como sai. O portal reconhece o banco, divide os movimentos por mês e <b>substitui</b> esses meses da conta, mantendo as classificações já feitas.</div>
+      <CampoCabecalho valor={cabecalho} onChange={(v) => { setCabecalho(v); if (ficheiro) void ler(ficheiro, v); }} />
       <input type="file" accept=".csv,.xlsx,.xls,.txt" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void ler(f); }} />
       {msg && <p className="small" style={{ marginTop: 8 }}>{contaId ? <LogoConta conta={contas.find((c) => c.id === contaId)} tamanho={16} /> : bancoFicheiro && <LogoBanco banco={bancoFicheiro} tamanho={16} />} {msg}</p>}
       {!!colunas.length && (
