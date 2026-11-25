@@ -69,6 +69,8 @@ export const FONTES: Record<Origem, FonteDef> = {
       { key: 'reembolso', label: 'Reembolso necessário?', padroes: ['reembolso do valor necessaro', 'reembolso do valor', 'reembolso'] },
       { key: 'codigo', label: 'Código do reembolso (R…)', padroes: ['unique id', 'codigo do reembolso', 'codigo'] },
       { key: 'submetido', label: 'Data de submissão (para corrigir faturas com data errada)', padroes: DATA_SUB },
+      { key: 'forma', label: 'Forma de Reembolso (MbWay ou transferência)', padroes: ['forma de reembolso'] },
+      { key: 'estado', label: 'Manual Control (estado)', padroes: ['manual control'] },
       { key: 'descricao', label: 'Descrição/Notas', padroes: ['descricao notas', 'descricao'], pessoal: true },
       { key: 'pessoa', label: 'Nome', padroes: ['nome'], pessoal: true },
       { key: 'email', label: 'E-mail', padroes: ['e mail', 'email'], pessoal: true },
@@ -171,7 +173,9 @@ export function mapearLinhas(origem: Origem, linhas: Linha[], mapa: Record<strin
     const com = resolverComunidade(get(l, 'comunidade'), data);
     const extra: Record<string, string | number> = {};
     if (com.original) extra.comunidadeOriginal = com.original;
-    for (const k of ['conta', 'caixa', 'reembolso', 'codigo']) { const v = get(l, k); if (v != null && v !== '') extra[k] = String(v); }
+    for (const k of ['conta', 'caixa', 'reembolso', 'codigo', 'forma', 'estado']) { const v = get(l, k); if (v != null && v !== '') extra[k] = String(v); }
+    // Reembolsos: a data de submissão conta para a janela da reconciliação com o extrato.
+    if (submetido) extra.submetido = submetido;
     if (Number.isFinite(liquido)) extra.liquido = r2(liquido);
     if (dataFaturaOriginal) extra.dataFaturaOriginal = dataFaturaOriginal;
     for (const k of ['jump', 'criancas', 'connects']) { const v = parseNumero(get(l, k)); if (Number.isFinite(v)) extra[k] = v; }
