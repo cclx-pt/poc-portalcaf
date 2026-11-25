@@ -58,6 +58,19 @@ describe('configuração da assistência', () => {
   });
 });
 
+describe('pessoas (dados de referência confidenciais)', () => {
+  it('só Master e CAF leem e gravam', async () => {
+    const p = { nome: 'Ana', telefones: ['912345678'], emails: [], manual: true, fontes: [] };
+    await assertFails(getDoc(doc(as(LEITOR), 'pessoas', 'p1')));
+    await assertFails(getDoc(doc(as(TES_CDR), 'pessoas', 'p1')));
+    await assertFails(setDoc(doc(as(TES_CDR), 'pessoas', 'p1'), p));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'pessoas', 'p1')));
+    await assertSucceeds(setDoc(doc(as(CAF), 'pessoas', 'p1'), p));
+    await assertSucceeds(getDoc(doc(as(CAF), 'pessoas', 'p1')));
+    await assertSucceeds(setDoc(doc(as(MASTER), 'pessoas', 'p2'), p));
+  });
+});
+
 describe('peso das comunidades', () => {
   it('lê quem está ativo; grava só master e CAF', async () => {
     await assertSucceeds(getDoc(doc(as(LEITOR), 'pesos', '2026-03')));
