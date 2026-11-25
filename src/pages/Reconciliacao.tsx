@@ -7,7 +7,7 @@ import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../compone
 import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia, lerConfigReembolsos } from '../lib/db';
 import { submissoesDeLotes } from '../lib/reconciliacaoReembolsos';
-import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, resolverPartes, sugerirPadrao, candidatosReembolso, registosConciliados, consolidacaoMes, type RegistoJotform, temPalavra, validar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
+import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, resolverPartes, sugerirPadrao, candidatosReembolso, registosConciliados, consolidacaoMes, type RegistoJotform, temPalavra, validar, podeValidar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
 import { bancoDaConta } from '../lib/banco';
 import { dataPT, eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Categoria, Comunidade, Dimensao, EstadoMov, MovBanco, ParteMov } from '../lib/types';
@@ -236,7 +236,7 @@ export default function Reconciliacao() {
           <input type="search" value={texto} placeholder="Ex.: EDP, MB WAY, R2026" onChange={(e) => setTexto(e.target.value)} />
         </label>
         <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={!movs.length || !(cats.dados ?? []).some((c) => c.codigo)} onClick={() => void propor()} title="Conciliação com o Jotform, vencimentos previstos, memória, regras e transferências para a Geral">Propor classificação</button>
-        <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={!contagem('proposto')} onClick={aceitar} title="Valida as propostas completas (com categoria e comunidade)">Aceitar propostas</button>
+        <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={!movs.some(podeValidar)} onClick={aceitar} title="Valida as propostas completas (com categoria e comunidade)">{`Aceitar propostas (${movs.filter(podeValidar).length})`}</button>
       </div>
       {!(cats.dados ?? []).some((c) => c.codigo) && <div className="aviso">O plano financeiro ainda não está carregado (Configuração → Carregar plano financeiro).</div>}
       <div className="tabela sec">
@@ -265,7 +265,12 @@ export default function Reconciliacao() {
                       {(coms.dados ?? []).filter((c) => c.ativo !== false || c.id === m.comunidadeId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                     </select>)}
                 </td>
-                <td><button className="link" onClick={() => setDetalhe(m)}>{m.conciliadoCom ? 'Detalhe' : 'Detalhe ou dividir'}</button></td>
+                <td>
+                  <div className="acoes" style={{ margin: 0, flexWrap: 'nowrap' }}>
+                    {podeValidar(m) && <button className="sec" title="Valida esta proposta (categoria e comunidade preenchidas)" onClick={() => { const { loteId: _l, contaId: _c, ...limpo } = m; void _l; void _c; alterar(m.loteId, m.id, validar(limpo, cats.dados ?? [])); }}>Validar</button>}
+                    <button className="link" onClick={() => setDetalhe(m)}>{m.conciliadoCom ? 'Detalhe' : 'Detalhe ou dividir'}</button>
+                  </div>
+                </td>
               </tr>
             ))}
             {!mostrar.length && <tr><td colSpan={9} className="muted">{lotesMes.length ? 'Sem movimentos neste filtro ou nos bancos visíveis.' : `Sem extratos de ${MESES[mes - 1]} ${ano}. Importe-os em Bancos.`}</td></tr>}
