@@ -36,6 +36,8 @@ const maisFrequente = (xs: string[]) => {
 };
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+export const SEM_NOME = 'Sem nome';
+
 interface Registo { fonte: string; nome?: string; nif?: string; emails: string[]; telefones: string[]; comunidadeId: string }
 
 /** Pessoas propostas a partir dos lotes confidenciais (Contribuir e Despesas): a mesma pessoa junta pelo NIF, e-mail ou telefone. */
@@ -65,7 +67,7 @@ export function pessoasDoJotform(lotes: Lote[]): Omit<Pessoa, 'atualizadoEm' | '
   return [...grupos.values()].map((g) => {
     const nomes = g.map((r) => r.nome).filter(Boolean) as string[];
     const nomeNorm = maisFrequente(nomes.map(normNome));
-    const nome = maisFrequente(nomes.filter((n) => normNome(n) === nomeNorm)) ?? 'Sem nome';
+    const nome = maisFrequente(nomes.filter((n) => normNome(n) === nomeNorm)) ?? SEM_NOME;
     const nif = maisFrequente(g.map((r) => r.nif ?? '').filter(Boolean));
     const emails = unicos(g.flatMap((r) => r.emails));
     const telefones = unicos(g.flatMap((r) => r.telefones));
@@ -75,7 +77,10 @@ export function pessoasDoJotform(lotes: Lote[]): Omit<Pessoa, 'atualizadoEm' | '
       comunidadeId: maisFrequente(g.map((r) => r.comunidadeId)),
       manual: false, fontes: unicos(g.map((r) => r.fonte)),
     };
-  }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+  })
+    // Sem nome ou da comunidade Geral não entram na base (decisão do CAF, 25/11/2026).
+    .filter((p) => p.nome !== SEM_NOME && p.comunidadeId !== 'bolsa-geral')
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
 }
 
 const chaves = (p: Pick<Pessoa, 'nif' | 'emails' | 'telefones'>) => [p.nif && `nif:${p.nif}`, ...p.emails.map((e) => `email:${e}`), ...p.telefones.map((t) => `tel:${t}`)].filter(Boolean) as string[];

@@ -13,6 +13,14 @@ export async function listarPessoas(): Promise<Pessoa[]> {
 }
 export const gravarPessoa = (p: Pessoa) => setDoc(doc(db, 'pessoas', p.id), limpo(p));
 export const apagarPessoa = (id: string) => deleteDoc(doc(db, 'pessoas', id));
+/** Apaga várias, em blocos de 400. */
+export async function apagarPessoas(ids: string[]) {
+  for (let i = 0; i < ids.length; i += 400) {
+    const b = writeBatch(db);
+    ids.slice(i, i + 400).forEach((id) => b.delete(doc(db, 'pessoas', id)));
+    await b.commit();
+  }
+}
 /** Grava várias, em blocos de 400. */
 export async function gravarPessoas(ps: Pessoa[]) {
   for (let i = 0; i < ps.length; i += 400) {

@@ -79,3 +79,13 @@ describe('pesquisa', () => {
     expect(procurarPessoas(ps, '')).toHaveLength(2);
   });
 });
+
+describe('proposta do Jotform: sem nome e Geral ficam de fora', () => {
+  it('não propõe pessoas sem nome nem da comunidade Geral', () => {
+    const ps = pessoasDoJotform([
+      lote('contribuir', 'almada', [{ nif: '111111111', telefone: '912000000' }, { pessoa: 'Ana', nif: '222222222' }]),
+      lote('contribuir', 'bolsa-geral', [{ pessoa: 'Rui', email: 'rui@x.pt' }]),
+    ]);
+    expect(ps.map((p) => p.nome)).toEqual(['Ana']);
+  });
+});

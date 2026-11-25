@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, listarComunidades, listarLotes } from '../lib/db';
 import {
-  apagarPessoa, fundirComJotform, gravarPessoa, gravarPessoas, listarPessoas, normEmail, normNif, pessoasDoJotform, procurarPessoas, type Pessoa,
+  apagarPessoa, apagarPessoas, fundirComJotform, gravarPessoa, gravarPessoas, listarPessoas, normEmail, normNif, pessoasDoJotform, procurarPessoas, type Pessoa,
 } from '../lib/pessoas';
 import { normalizarTelefones } from '../lib/reconciliacaoReembolsos';
 
@@ -69,6 +69,19 @@ export default function Pessoas() {
     } catch (e) { setErro(mensagemErro(e)); }
   }
 
+  /** Apaga de uma vez as pessoas da lista filtrada (pesquisa e/ou comunidade). */
+  async function apagarLista() {
+    const filtro = [q.trim() && `pesquisa "${q.trim()}"`, com && `comunidade ${nomeCom(com)}`].filter(Boolean).join(' e ');
+    if (!confirm(`Apagar definitivamente as ${lista.length} pessoas desta lista (${filtro})? Esta ação não se pode desfazer.`)) return;
+    setErro(null); setMsg(null); setOcupado(true);
+    try {
+      await apagarPessoas(lista.map((p) => p.id));
+      await auditar(acesso!.email, 'pessoas', `Apagadas ${lista.length} pessoas da lista (${filtro})`);
+      await pessoas.recarregar();
+      setMsg(`${lista.length} pessoas apagadas (${filtro}).`);
+    } catch (e) { setErro(mensagemErro(e)); } finally { setOcupado(false); }
+  }
+
   async function apagar(p: Pessoa) {
     if (!confirm(`Apagar ${p.nome} da base de pessoas? Esta ação não se pode desfazer.`)) return;
     try {
@@ -83,7 +96,7 @@ export default function Pessoas() {
       <div className="linha" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <h1>Pessoas (dados de referência)</h1>
-          <p className="muted">Base confidencial de nome, telefone, contribuinte, e-mail e comunidade, para futuras consolidações e registos. Só o Master e o CAF a veem. A proposta vem do Jotform (Contribuir e Registo de Despesas) e junta a mesma pessoa pelo NIF, e-mail ou telefone; as pessoas editadas à mão não são substituídas. Todas as alterações ficam na auditoria.</p>
+          <p className="muted">Base confidencial de nome, telefone, contribuinte, e-mail e comunidade, para futuras consolidações e registos. Só o Master e o CAF a veem. A proposta vem do Jotform (Contribuir e Registo de Despesas), junta a mesma pessoa pelo NIF, e-mail ou telefone e deixa de fora quem não tem nome ou é da comunidade Geral; as pessoas editadas à mão não são substituídas. Todas as alterações ficam na auditoria.</p>
         </div>
         <div className="acoes">
           <button className="sec" disabled={ocupado || !pessoas.dados} onClick={() => void atualizarDoJotform()}>{ocupado ? 'A ler o Jotform…' : `Atualizar a partir do Jotform (${ano - 1} e ${ano})`}</button>
@@ -102,6 +115,7 @@ export default function Pessoas() {
           </select>
         </label>
         <span className="small muted" style={{ alignSelf: 'flex-end' }}>{`${lista.length} de ${(pessoas.dados ?? []).length} pessoas`}</span>
+        {(q.trim() || com) && lista.length > 0 && <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={ocupado} onClick={() => void apagarLista()}>{`Apagar as ${lista.length} da lista`}</button>}
       </div>
 
       <Estado aCarregar={pessoas.aCarregar} erro={pessoas.erro} vazio={!pessoas.dados?.length} />
