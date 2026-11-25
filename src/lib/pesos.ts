@@ -40,6 +40,15 @@ export function textoPeso(g: Pick<PesosMes, 'metodo' | 'pesos' | 'proposta'> | u
   return vista === 'pct' ? `${n}%` : n;
 }
 
+/** Texto de uma célula pela proposta de um método (média ou mediana), sem decimais; null sem valor. */
+export function textoProposta(prop: PesosMes['proposta'] | null | undefined, metodo: MetodoPeso, c: string, vista: VistaPesos): string | null {
+  const x = prop?.[metodo]?.[c];
+  const v = vista === 'pct' ? x?.pct : x?.valor;
+  if (v == null || !Number.isFinite(v)) return null;
+  const n = Math.round(v).toLocaleString('pt-PT');
+  return vista === 'pct' ? `${n}%` : n;
+}
+
 /** Soma dos pesos (para validar 100 %). */
 export const somaPesos = (p: Record<string, number>) => Math.round(Object.values(p).reduce((t, v) => t + (Number(v) || 0), 0) * 100) / 100;
 /** Os pesos de um mês são válidos quando somam 100 % (com tolerância de arredondamento) e nenhum é negativo. */

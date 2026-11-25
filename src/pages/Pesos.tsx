@@ -4,7 +4,7 @@ import { Estado, mensagemErro, useCarregar, useFiltros, useFocarErro } from '../
 import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { auditar, lerConfigAssistencia, listarComunidades, listarLotes } from '../lib/db';
 import { MESES, MESES_CURTOS, num } from '../lib/format';
-import { fecharEm100, gravarPesosMes, gravarPesosVarios, listarPesos, NOME_METODO, pesosValidos, somaPesos, textoPeso, type MetodoPeso, type PesosMes, type VistaPesos } from '../lib/pesos';
+import { fecharEm100, gravarPesosMes, gravarPesosVarios, listarPesos, NOME_METODO, pesosValidos, somaPesos, textoPeso, textoProposta, type MetodoPeso, type PesosMes, type VistaPesos } from '../lib/pesos';
 import { recalcularAno } from '../lib/recalcular';
 import { comunidadeAtiva, destinoFusao, propostaPesos } from '../lib/resumos';
 import type { Comunidade } from '../lib/types';
@@ -28,6 +28,8 @@ export default function Pesos() {
   const gravados = useCarregar(() => listarPesos(ano), [ano]);
   const [metodo, setMetodo] = useState<MetodoPeso>('media');
   const [vista, setVista] = useState<VistaPesos>('pct');
+  // Valores da tabela anual: os gravados ou a proposta pela média ou pela mediana (calculadas sempre, para todos os meses).
+  const [fonteTabela, setFonteTabela] = useState<'gravado' | MetodoPeso>('gravado');
   const [mes, setMes] = useState<number>(() => (ano === new Date().getFullYear() ? new Date().getMonth() + 1 : 12));
   const [edicao, setEdicao] = useState<Record<string, string> | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -49,6 +51,9 @@ export default function Pesos() {
   const porMes = new Map((gravados.dados ?? []).map((g) => [g.mes, g]));
   const gravadoMes = porMes.get(mes);
   const proposta = ass.dados ? propostaDe(mes) : null;
+  const propostasAno = useMemo(() => Array.from({ length: 12 }, (_, i) => (ass.dados ? propostaDe(i + 1) : null)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ass.dados, coms.dados, ano, destino]);
   const elegiveis = elegiveisDe(mes);
 
   // Valores no editor: o que está a ser editado, senão o gravado, senão a proposta do método escolhido.
@@ -142,10 +147,17 @@ export default function Pesos() {
         <div className="sec">
           <div className="linha" style={{ justifyContent: 'space-between' }}>
             <h2>Pesos gravados por mês</h2>
-            <div className="abas" role="tablist" aria-label="Mostrar em">
-              {([['pct', '%'], ['pessoas', 'Pessoas']] as const).map(([k, rot]) => (
-                <button key={k} role="tab" aria-selected={vista === k} className={vista === k ? 'ativa' : ''} onClick={() => setVista(k)}>{rot}</button>
-              ))}
+            <div className="linha" style={{ gap: 8 }}>
+              <div className="abas" role="tablist" aria-label="Valores">
+                {([['gravado', 'Gravado'], ['media', 'Média'], ['mediana', 'Mediana']] as const).map(([k, rot]) => (
+                  <button key={k} role="tab" aria-selected={fonteTabela === k} className={fonteTabela === k ? 'ativa' : ''} onClick={() => setFonteTabela(k)}>{rot}</button>
+                ))}
+              </div>
+              <div className="abas" role="tablist" aria-label="Mostrar em">
+                {([['pct', '%'], ['pessoas', 'Pessoas']] as const).map(([k, rot]) => (
+                  <button key={k} role="tab" aria-selected={vista === k} className={vista === k ? 'ativa' : ''} onClick={() => setVista(k)}>{rot}</button>
+                ))}
+              </div>
             </div>
           </div>
           <div className="tabela"><table>
@@ -153,13 +165,15 @@ export default function Pesos() {
             <tbody>{comunidades.map((c) => (
               <tr key={c.id}><td>{c.nome}</td>{MESES_CURTOS.map((m, i) => {
                 const g = porMes.get(i + 1);
-                const t = textoPeso(g, c.id, vista);
-                return <td key={m} className={`num${i + 1 === mes ? ' mes-escolhido' : ''}`}>{t != null ? <>{t}{g?.manual && vista === 'pct' ? <sup title="Alterado à mão"> ✎</sup> : null}</> : <span className="muted">—</span>}</td>;
+                const t = fonteTabela === 'gravado' ? textoPeso(g, c.id, vista) : textoProposta(propostasAno[i], fonteTabela, c.id, vista);
+                return <td key={m} className={`num${i + 1 === mes ? ' mes-escolhido' : ''}`}>{t != null ? <>{t}{fonteTabela === 'gravado' && g?.manual && vista === 'pct' ? <sup title="Alterado à mão"> ✎</sup> : null}</> : <span className="muted">—</span>}</td>;
               })}</tr>
             ))}</tbody>
-            <tfoot><tr><td>Método</td>{MESES_CURTOS.map((m, i) => { const g = porMes.get(i + 1); return <td key={m} className="num small">{g ? (g.manual ? 'À mão' : NOME_METODO[g.metodo]) : 'Auto'}</td>; })}</tr></tfoot>
+            {fonteTabela === 'gravado' && <tfoot><tr><td>Método</td>{MESES_CURTOS.map((m, i) => { const g = porMes.get(i + 1); return <td key={m} className="num small">{g ? (g.manual ? 'À mão' : NOME_METODO[g.metodo]) : 'Auto'}</td>; })}</tr></tfoot>}
           </table></div>
-          <p className="muted small">{vista === 'pct' ? '% do peso de cada comunidade.' : 'Pessoas: jovens e adultos por celebração nos últimos 12 meses, pelo método do mês (média ou mediana).'} Valores sem decimais. "—": sem pesos gravados (usa a média automática dos 12 meses). ✎: alterado à mão. Clique num mês para ver a simulação e editar.</p>
+          <p className="muted small">{fonteTabela === 'gravado'
+            ? `${vista === 'pct' ? '% do peso gravado de cada comunidade.' : 'Pessoas: jovens e adultos por celebração nos últimos 12 meses, pelo método do mês.'} "—": sem pesos gravados (usa a média automática dos 12 meses). ✎: alterado à mão.`
+            : `${vista === 'pct' ? '% do peso' : 'Pessoas (jovens e adultos por celebração)'} pela ${fonteTabela === 'media' ? 'média' : 'mediana'} dos últimos 12 meses, calculada para todos os meses.`} Todos os valores sem decimais. Clique num mês para ver a simulação e editar.</p>
         </div>
 
         <div className="sec card">

@@ -28,3 +28,15 @@ describe('tabela dos pesos gravados: pessoas ou %, sem decimais', () => {
     expect(textoPeso(undefined, 'almada', 'pct')).toBeNull();
   });
 });
+
+describe('tabela anual pela média ou pela mediana (sempre calculadas)', () => {
+  it('mostra a % ou as pessoas da proposta do método, sem decimais', async () => {
+    const { textoProposta } = await import('../../src/lib/pesos');
+    const prop = { media: { a: { valor: 12.6, pct: 40.37 } }, mediana: { a: { valor: 11.2, pct: 38.5 } } };
+    expect(textoProposta(prop, 'media', 'a', 'pct')).toBe('40%');
+    expect(textoProposta(prop, 'mediana', 'a', 'pct')).toBe('39%');
+    expect(textoProposta(prop, 'mediana', 'a', 'pessoas')).toBe('11');
+    expect(textoProposta(prop, 'media', 'b', 'pct')).toBeNull();
+    expect(textoProposta(null, 'media', 'a', 'pct')).toBeNull();
+  });
+});
