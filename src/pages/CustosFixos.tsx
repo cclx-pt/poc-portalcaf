@@ -54,7 +54,15 @@ export default function CustosFixos() {
   const ate = mesesDecorridos(ano, hoje());
   const noAno = (c: CustoFixo) => r2(Array.from({ length: 12 }, (_, i) => (custoAtivo(c, periodo(ano, i + 1)) ? valorImputadoNoMes(c, periodo(ano, i + 1)) : 0)).reduce((s, v) => s + v, 0));
   const ateHoje = (c: CustoFixo) => r2(Array.from({ length: ate }, (_, i) => (custoAtivo(c, periodo(ano, i + 1)) ? valorImputadoNoMes(c, periodo(ano, i + 1)) : 0)).reduce((s, v) => s + v, 0));
-  const grafico = totaisPorRubrica(linhas, noAno, 12);
+  // Vista anual (total imputado no ano) ou mensal (imputado num mês), por rubrica: gráfico à esquerda, tabela à direita.
+  const [vista, setVista] = useState<'anual' | 'mensal'>('anual');
+  const [mesVista, setMesVista] = useState(() => (ano === Number(hoje().slice(0, 4)) ? Number(hoje().slice(5, 7)) : 12));
+  const noMes = (c: CustoFixo) => (custoAtivo(c, periodo(ano, mesVista)) ? r2(valorImputadoNoMes(c, periodo(ano, mesVista))) : 0);
+  const valorVista = vista === 'anual' ? noAno : noMes;
+  const grafico = totaisPorRubrica(linhas, valorVista, 12);
+  const porRubrica = totaisPorRubrica(linhas, valorVista, Number.MAX_SAFE_INTEGER);
+  const totalVista = r2(porRubrica.reduce((s, x) => s + x.valor, 0));
+  const rotuloVista = vista === 'anual' ? `Imputado em ${ano}` : `Imputado em ${MESES[mesVista - 1]} de ${ano}`;
   const ficheiro = useRef<HTMLInputElement>(null);
   const [imp, setImp] = useState<(ResultadoImportacao & { nome: string; substituir: boolean }) | null>(null);
   const [aImportar, setAImportar] = useState(false);
@@ -158,21 +166,53 @@ export default function CustosFixos() {
       </div>
       {msg && <div className="aviso">{msg}</div>}
       <Estado aCarregar={cf.aCarregar} erro={cf.erro} vazio={!linhas.length} />
-      {grafico.length > 0 && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <h2 style={{ marginTop: 0 }}>{`Por rubrica · total imputado em ${ano}${comunidade === 'todas' ? '' : ` · ${nomes.get(comunidade) ?? comunidade}`}`}</h2>
-          <ResponsiveContainer width="100%" height={grafico.length * 30 + 40}>
-            <BarChart data={grafico} layout="vertical" margin={{ top: 4, right: 24, bottom: 4, left: 8 }}>
-              <CartesianGrid stroke={CORES.grelha} horizontal={false} />
-              <XAxis type="number" tickFormatter={(v) => eurK(Number(v))} tick={{ fontSize: 12, fill: CORES.eixo }} />
-              <YAxis type="category" dataKey="rubrica" width={230} interval={0} tick={{ fontSize: 12, fill: CORES.texto }} tickFormatter={(t: string) => (t.length > 34 ? `${t.slice(0, 33)}…` : t)} />
-              <Tooltip cursor={{ fill: CORES.grelha }} formatter={(v: number) => [eur(v), `Imputado em ${ano}`]} />
-              <Bar dataKey="valor" fill={CORES.saidas} barSize={16} radius={[0, 4, 4, 0]} isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
+      {!!linhas.length && (
+        <div className="acoes" style={{ alignItems: 'flex-end' }}>
+          <div className="abas" role="tablist" aria-label="Vista" style={{ marginBottom: 0 }}>
+            {([['anual', 'Anual'], ['mensal', 'Mensal']] as const).map(([k, rot]) => (
+              <button key={k} role="tab" aria-selected={vista === k} className={vista === k ? 'ativa' : ''} onClick={() => setVista(k)}>{rot}</button>
+            ))}
+          </div>
+          {vista === 'mensal' && (
+            <label className="campo">Mês
+              <select value={mesVista} onChange={(e) => setMesVista(Number(e.target.value))}>
+                {MESES.map((m, i) => <option key={m} value={i + 1}>{`${m.charAt(0).toUpperCase()}${m.slice(1)} ${ano}`}</option>)}
+              </select>
+            </label>
+          )}
         </div>
       )}
       {!!linhas.length && (
+        <div className="grafico-tabela">
+          <div className="card">
+            <h2 style={{ marginTop: 0 }}>{`Por rubrica · ${rotuloVista.toLowerCase()}${comunidade === 'todas' ? '' : ` · ${nomes.get(comunidade) ?? comunidade}`}`}</h2>
+            {grafico.length ? (
+              <ResponsiveContainer width="100%" height={grafico.length * 30 + 40}>
+                <BarChart data={grafico} layout="vertical" margin={{ top: 4, right: 24, bottom: 4, left: 8 }}>
+                  <CartesianGrid stroke={CORES.grelha} horizontal={false} />
+                  <XAxis type="number" tickFormatter={(v) => eurK(Number(v))} tick={{ fontSize: 12, fill: CORES.eixo }} />
+                  <YAxis type="category" dataKey="rubrica" width={180} interval={0} tick={{ fontSize: 12, fill: CORES.texto }} tickFormatter={(t: string) => (t.length > 26 ? `${t.slice(0, 25)}…` : t)} />
+                  <Tooltip cursor={{ fill: CORES.grelha }} formatter={(v: number) => [eur(v), rotuloVista]} />
+                  <Bar dataKey="valor" fill={CORES.saidas} barSize={16} radius={[0, 4, 4, 0]} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <p className="muted">Sem custos neste período.</p>}
+          </div>
+          <div className="card">
+            <h2 style={{ marginTop: 0 }}>{rotuloVista}</h2>
+            <div className="tabela"><table>
+              <thead><tr><th>Rubrica</th><th className="num">Valor (€)</th><th className="num">%</th></tr></thead>
+              <tbody>{porRubrica.map((x) => (
+                <tr key={x.rubrica}><td>{x.rubrica}</td><td className="num">{eur(x.valor)}</td><td className="num">{totalVista ? `${((x.valor / totalVista) * 100).toLocaleString('pt-PT', { maximumFractionDigits: 1 })}%` : '—'}</td></tr>
+              ))}</tbody>
+              <tfoot><tr><td>Total</td><td className="num">{eur(totalVista)}</td><td className="num">100%</td></tr></tfoot>
+            </table></div>
+          </div>
+        </div>
+      )}
+      {!!linhas.length && (
+        <details className="sec card registos-falta">
+          <summary><h2>{`Dados · ${linhas.length} linha${linhas.length === 1 ? '' : 's'} de ${ano}`}</h2></summary>
         <div className="tabela"><table>
           <thead><tr><th>Ano</th><th>Comunidade</th><th>Rubrica</th><th>Nível</th><th className="num">Mensal (total)</th><th className="num">Incidência</th><th className="num">Imputado</th><th>Âmbito</th><th>Início</th><th>Fim</th><th className="num">{ano} (até hoje)</th><th className="num">{ano} (ano)</th><th /></tr></thead>
           <tbody>{linhas.map((c) => (
@@ -191,6 +231,7 @@ export default function CustosFixos() {
           ))}</tbody>
           <tfoot><tr><td colSpan={4}>Total</td><td className="num">{eur(r2(linhas.reduce((s, c) => s + c.valorMensal, 0)))}</td><td /><td className="num">{eur(r2(linhas.reduce((s, c) => s + valorImputado(c), 0)))}</td><td colSpan={3} /><td className="num">{eur(r2(linhas.reduce((s, c) => s + ateHoje(c), 0)))}</td><td className="num">{eur(r2(linhas.reduce((s, c) => s + noAno(c), 0)))}</td><td /></tr></tfoot>
         </table></div>
+        </details>
       )}
       {imp && (
         <Modal titulo={`Importar custos fixos: ${imp.nome}`} onFechar={() => setImp(null)}>
