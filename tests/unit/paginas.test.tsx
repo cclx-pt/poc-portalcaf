@@ -295,6 +295,11 @@ describe('páginas', () => {
     const { default: CustosFixos } = await import('../../src/pages/CustosFixos');
     const html = renderToString(<CustosFixos />);
     for (const t of ['Incidência', 'Imputado', 'Importar do Excel', '01/2026']) expect(html).toContain(t);
+    // Vista anual/mensal, gráfico à esquerda e tabela à direita; os dados numa secção que abre e fecha.
+    expect(html).toMatch(/role="tab"[^>]*>Anual<\/button>/);
+    expect(html).toMatch(/role="tab"[^>]*>Mensal<\/button>/);
+    expect(html).toContain('class="grafico-tabela"');
+    expect(html).toMatch(/<details class="sec card registos-falta"><summary><h2>Dados · 1 linha de 2026<\/h2>/);
   });
 
   it('Bancos: vista conjunta do mês com logótipo por linha, filtros por banco e totais', async () => {

@@ -406,3 +406,7 @@ td.mes-escolhido { background: #f2f2f1 !important; font-weight: 700; }
 /* Subsecção dentro de um grupo do menu (ex.: Administração › Integrações). */
 .side .secao-menu { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--cinza); margin: 10px 0 2px 10px; }
 @media (min-width: 821px) { .side.recolhido .secao-menu { display: none; } }
+
+/* Gráfico à esquerda e tabela à direita (ex.: Custos Fixos); um por baixo do outro em ecrãs estreitos. */
+.grafico-tabela { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; margin-bottom: 16px; align-items: start; }
+@media (max-width: 1100px) { .grafico-tabela { grid-template-columns: minmax(0, 1fr); } }
