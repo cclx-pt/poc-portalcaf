@@ -181,6 +181,11 @@ service cloud.firestore {
       allow delete: if hasRole(['master', 'caf']);
     }
 
+    // ---------- pessoas: dados de referência confidenciais (nome, telefone, NIF, e-mail, comunidade) ----------
+    match /pessoas/{id} {
+      allow read, write: if hasRole(['master', 'caf']);
+    }
+
     // ---------- peso de cada comunidade (repartição dos gerais e da bolsa geral), por mês ----------
     match /pesos/{periodo} {
       allow read: if isActive();

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Bug, Building2, Percent, CalendarCheck, CalendarX, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, ListChecks, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Bug, Building2, Percent, Contact, CalendarCheck, CalendarX, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, ListChecks, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { useCarregar, useFiltros, Rodape } from './ui';
 import { BotaoReportar } from './Reportar';
@@ -46,6 +46,7 @@ const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
     { to: '/utilizadores', nome: 'Utilizadores', Icone: Users, ver: (p) => p.pode('utilizadores') },
     { to: '/auditoria', nome: 'Auditoria', Icone: ShieldCheck, ver: (p) => p.pode('auditoria') },
     { to: '/pesos', nome: 'Peso das comunidades', Icone: Percent, ver: (p) => p.pode('configurar') },
+    { to: '/pessoas', nome: 'Pessoas (dados de referência)', Icone: Contact, ver: (p) => p.pode('configurar') },
     { to: '/pedidos', nome: 'Bugs e melhorias', Icone: Bug, ver: (p) => p.pode('configurar') },
   ] },
 ];
