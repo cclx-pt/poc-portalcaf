@@ -240,11 +240,11 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
 }
 
 /** Valida as propostas completas (com categoria e comunidade, repartição ou conciliação). Os financeiros e os conciliados não se contabilizam. */
+/** Proposta completa, pronta a validar: categoria e comunidade (ou repartida pelas comunidades, ou conciliada com o Jotform). */
+export const podeValidar = (m: MovBanco) => m.estado === 'proposto' && !!m.categoria && !!(m.comunidadeId || m.partes?.length || m.conciliadoCom);
+
 export function aceitarPropostas(movs: MovBanco[], categorias: Categoria[]): MovBanco[] {
-  return movs.map((m) => {
-    if (m.estado !== 'proposto' || !m.categoria || !(m.comunidadeId || m.partes?.length || m.conciliadoCom)) return m;
-    return validar(m, categorias);
-  });
+  return movs.map((m) => (podeValidar(m) ? validar(m, categorias) : m));
 }
 
 /** Marca um movimento como validado (classificação manual). Num movimento itemizado, cada linha financeira fica fora dos resultados. */
