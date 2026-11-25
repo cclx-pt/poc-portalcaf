@@ -187,3 +187,25 @@ describe('sincronização do Registo de Despesas', () => {
     expect(s).toMatchObject({ forma: 'mbway', estado: 'Fechado', submetido: '2026-11-02', codigo: 'R20260040', telefone: '+351 924 123 727' });
   });
 });
+
+describe('revisão: aplicar a decisão ao movimento', () => {
+  const cats = [{ id: 'f302', nome: 'Reembolsos (contados pelo Jotform)', codigo: 'F3.02', tipo: 'financeiro' }] as never;
+  it('conciliar: F3.02, comunidade da submissão, Unique ID no Nº doc, revisor e data na nota, validado', async () => {
+    const { conciliarComSubmissoes } = await import('../../src/lib/reconciliacaoReembolsos');
+    const m = conciliarComSubmissoes(mov('m1', '2026-11-03', 'Trf Mbway 924XXX727', -45), [sub('R20260040', '2026-11-01', 45)], cats,
+      { estado: 'Provável', regra: 2, score: 78 }, 'caf@cclx.pt', '2026-11-25');
+    expect(m).toMatchObject({ conciliadoCom: 'despesas:R20260040', categoria: 'Reembolsos (contados pelo Jotform)', comunidadeId: 'almada', documento: 'R20260040', estado: 'validado', contabilizar: false });
+    expect(m.nota).toMatch(/Reembolso R20260040 \(regra 2, Provável, score 78\); revisto por caf@cclx\.pt em 25\/11\/2026/);
+  });
+  it('pendentes: saídas por conciliar, sem as validadas nem as rejeitadas na revisão', async () => {
+    const { pendentesDeRevisao, NOTA_REJEITADO } = await import('../../src/lib/reconciliacaoReembolsos');
+    const ms = [
+      mov('a', '2026-11-03', 'Trf Mbway 924XXX727', -45),
+      { ...mov('b', '2026-11-03', 'Trf Mbway 924XXX727', -45), conciliadoCom: 'despesas:x' },
+      { ...mov('c', '2026-11-03', 'Trf Mbway 924XXX727', -45), estado: 'validado' as const },
+      { ...mov('d', '2026-11-03', 'Trf Mbway 924XXX727', -45), nota: `${NOTA_REJEITADO} por x` },
+      mov('e', '2026-11-03', 'Trf Mbway 924XXX727', 45),
+    ];
+    expect(pendentesDeRevisao(ms).map((x) => x.id)).toEqual(['a']);
+  });
+});

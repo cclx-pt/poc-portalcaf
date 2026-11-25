@@ -7,7 +7,7 @@
  * Funções puras: não lê nem grava nada.
  */
 import { norm } from './format';
-import type { Lote, MovBanco } from './types';
+import type { Categoria, Lote, MovBanco } from './types';
 
 export type FormaReembolso = 'mbway' | 'transferencia';
 export type EstadoMatch = 'Confirmado' | 'Provável' | 'Ambíguo' | 'Agregado' | 'Sem submissão';
@@ -300,4 +300,34 @@ export function relatorioInverso(subs: SubmissaoReembolso[], resultados: Resulta
   const associadas = new Set([...usados, ...resultados.flatMap((r) => r.submissoes)]);
   return subs.filter((s) => norm(s.estado ?? '').trim() === 'fechado' && s.forma !== 'transferencia' && s.submetido >= periodo.de && s.submetido <= periodo.ate && !associadas.has(s.id))
     .sort((a, b) => a.submetido.localeCompare(b.submetido));
+}
+
+// ---------- revisão (Tesouraria › Reconciliação bancária) ----------
+/** Início da nota de um movimento rejeitado na revisão: deixa de aparecer na lista de reembolsos. */
+export const NOTA_REJEITADO = 'Revisão de reembolsos: sem submissão (rejeitado)';
+
+/** Saídas que entram na revisão: por conciliar, não validadas e não rejeitadas antes. */
+export function pendentesDeRevisao<T extends MovBanco>(movs: T[]): T[] {
+  return movs.filter((m) => m.valor < 0 && !m.conciliadoCom && m.estado !== 'validado' && !(m.nota ?? '').startsWith(NOTA_REJEITADO));
+}
+
+/**
+ * Concilia o movimento com as submissões escolhidas (F3.02, contado pelo Jotform): o Unique ID vai para o Nº doc
+ * e a nota guarda a regra, o score, o revisor e a data.
+ */
+export function conciliarComSubmissoes(m: MovBanco, subs: SubmissaoReembolso[], categorias: Categoria[], r: Pick<ResultadoReembolso, 'estado' | 'regra' | 'score'>, revisor: string, hoje: string): MovBanco {
+  const cat = categorias.find((c) => c.codigo === 'F3.02')?.nome ?? m.categoria;
+  const coms = [...new Set(subs.map((s) => s.comunidadeId))];
+  const codigos = subs.map((s) => s.codigo ?? s.id);
+  return {
+    ...m,
+    conciliadoCom: `despesas:${subs.map((s) => s.id).join(',')}`,
+    categoria: cat,
+    comunidadeId: coms.length === 1 ? coms[0] : undefined,
+    partes: undefined,
+    documento: codigos.join(', '),
+    estado: 'validado',
+    contabilizar: false, // conciliado: já conta pelo Jotform
+    nota: `Reembolso ${codigos.join(' + ')} (regra ${r.regra ?? '—'}, ${r.estado}, score ${r.score}); revisto por ${revisor} em ${hoje.split('-').reverse().join('/')} (contado pelo Jotform)`,
+  };
 }

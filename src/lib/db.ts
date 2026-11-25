@@ -8,6 +8,7 @@ import type {
 } from './types';
 import { NIVEIS, nivelNum } from './types';
 import type { RegraBanco } from './classificacaoBanco';
+import { PARAMETROS_REEMBOLSOS, type ParametrosReembolsos } from './reconciliacaoReembolsos';
 
 export interface Acesso {
   email: string;
@@ -130,6 +131,14 @@ export async function lerConfigAssistencia(): Promise<ConfigAssistencia> {
   return s.exists() ? (s.data() as ConfigAssistencia) : { eventoCelebracao: null };
 }
 export const gravarConfigAssistencia = (c: ConfigAssistencia) => setDoc(doc(db, 'config', 'assistencia'), c);
+
+// ---------- reconciliação dos reembolsos MB Way (janela de datas) ----------
+export async function lerConfigReembolsos(): Promise<ParametrosReembolsos> {
+  const s = await getDoc(doc(db, 'config', 'reembolsos'));
+  const d = s.exists() ? (s.data() as Partial<ParametrosReembolsos>) : {};
+  return { diasAntes: Number(d.diasAntes ?? PARAMETROS_REEMBOLSOS.diasAntes), diasDepois: Number(d.diasDepois ?? PARAMETROS_REEMBOLSOS.diasDepois) };
+}
+export const gravarConfigReembolsos = (p: ParametrosReembolsos) => setDoc(doc(db, 'config', 'reembolsos'), p);
 
 // ---------- lotes individuais (registo de presenças no portal) ----------
 export async function lerLote(id: string): Promise<Lote | null> {
