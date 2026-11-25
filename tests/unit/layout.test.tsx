@@ -29,6 +29,13 @@ describe('layout em telemóvel e tablet', () => {
     expect(html).toContain('title="Demonstração de resultados"');
   });
 
+  it('menu Dados: "Contribuir" (não "Contribuições")', async () => {
+    const { default: Layout } = await import('../../src/components/Layout');
+    const html = renderToString(<MemoryRouter initialEntries={['/entradas']}><Routes><Route element={<Layout />}><Route path="entradas" element={<p>x</p>} /></Route></Routes></MemoryRouter>).replace(/<!-- -->/g, '');
+    expect(html).toContain('title="Contribuir"');
+    expect(html).not.toContain('title="Contribuições"');
+  });
+
   it('rodapé com o código do ecrã e o botão para reportar bugs e melhorias', async () => {
     const { default: Layout } = await import('../../src/components/Layout');
     const html = renderToString(<MemoryRouter initialEntries={['/reconciliacao']}><Routes><Route element={<Layout />}><Route path="reconciliacao" element={<p>x</p>} /></Route></Routes></MemoryRouter>).replace(/<!-- -->/g, '');

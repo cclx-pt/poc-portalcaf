@@ -17,7 +17,7 @@ const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
   { id: 'inicio', itens: [{ to: '/', nome: 'Painel', Icone: LayoutDashboard, ver: () => true, end: true }] },
   { id: 'dados', titulo: 'Dados (Jotform)', itens: [
     { to: '/entradas-conjunto', nome: 'Entradas: contribuições e depósitos', Icone: Wallet, ver: privado },
-    { to: '/entradas', nome: 'Contribuições', Icone: HandCoins, ver: privado },
+    { to: '/entradas', nome: 'Contribuir', Icone: HandCoins, ver: privado },
     { to: '/depositos', nome: 'Depósitos de coletas', Icone: Banknote, ver: privado },
     { to: '/reembolsos', nome: 'Reembolsos e despesas', Icone: Receipt, ver: privado },
   ] },

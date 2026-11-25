@@ -14,7 +14,7 @@ export interface Ecra { codigo: string; nome: string }
 export const ECRAS: Record<string, Ecra> = {
   '/': { codigo: 'PAI-01', nome: 'Painel' },
   '/entradas-conjunto': { codigo: 'DAD-01', nome: 'Entradas: contribuições e depósitos' },
-  '/entradas': { codigo: 'DAD-02', nome: 'Contribuições' },
+  '/entradas': { codigo: 'DAD-02', nome: 'Contribuir' },
   '/depositos': { codigo: 'DAD-03', nome: 'Depósitos de coletas' },
   '/reembolsos': { codigo: 'DAD-04', nome: 'Reembolsos e despesas' },
   '/registos/presencas': { codigo: 'REG-01', nome: 'Presenças por evento' },
