@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { SyncEstado } from '../components/SyncEstado';
+import { ImportacaoManualJotform } from '../components/ImportacaoManualJotform';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar, useMarcarAba } from '../components/ui';
 import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarDimensoes, listarRegrasBanco, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
@@ -34,7 +36,7 @@ const colecao = (t: Edicao['tipo']) => (t === 'comunidade' ? 'comunidades' : t =
 const ativoTxt = (a?: boolean) => (a === false ? <span className="etiqueta">Inativa</span> : null);
 
 export default function Configuracao() {
-  const { acesso } = useAuth();
+  const { acesso, pode } = useAuth();
   const coms = useCarregar(listarComunidades, []);
   const contas = useCarregar(listarContas, []);
   const cats = useCarregar(listarCategorias, []);
@@ -104,7 +106,8 @@ export default function Configuracao() {
     } catch (e) { setMsgTipo(mensagemErro(e)); }
   }
   // Separadores por área, para a página não ficar toda junta.
-  const [area, setArea] = useState<'estrutura' | 'assistencia' | 'jotform'>('estrutura');
+  const local = useLocation();
+  const [area, setArea] = useState<'estrutura' | 'assistencia' | 'jotform'>(() => ((local.state as { aba?: string } | null)?.aba === 'jotform' ? 'jotform' : 'estrutura'));
   useMarcarAba(['estrutura', 'assistencia', 'jotform'].indexOf(area) + 1);
   // Exceções de assistência (domingos sem culto esperado).
   const excecoes = useCarregar(listarExcecoes, []);
@@ -549,6 +552,7 @@ export default function Configuracao() {
           )}
         </>}
       </div>
+      {pode('importar') && <ImportacaoManualJotform onFeito={() => setSyncVersao((v) => v + 1)} />}
 
       </>}
 

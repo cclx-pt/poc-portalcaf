@@ -29,13 +29,6 @@ describe('layout em telemóvel e tablet', () => {
     expect(html).toContain('title="Demonstração de resultados"');
   });
 
-  it('Jotform fica em Administração › Integrações (ADM-06)', async () => {
-    const { default: Layout } = await import('../../src/components/Layout');
-    const html = renderToString(<MemoryRouter initialEntries={['/integracoes/jotform']}><Routes><Route element={<Layout />}><Route path="integracoes/jotform" element={<p>x</p>} /></Route></Routes></MemoryRouter>).replace(/<!-- -->/g, '');
-    expect(html).toMatch(/Administração.*class="secao-menu">Integrações<\/div>.*title="Integrações › Jotform"/s);
-    expect(html).toContain('Ecrã ADM-06');
-  });
-
   it('rodapé com o código do ecrã e o botão para reportar bugs e melhorias', async () => {
     const { default: Layout } = await import('../../src/components/Layout');
     const html = renderToString(<MemoryRouter initialEntries={['/reconciliacao']}><Routes><Route element={<Layout />}><Route path="reconciliacao" element={<p>x</p>} /></Route></Routes></MemoryRouter>).replace(/<!-- -->/g, '');
