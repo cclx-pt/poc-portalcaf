@@ -1,0 +1,185 @@
+import { useMemo, useRef, useState } from 'react';
+import { useAuth } from '../auth/AuthProvider';
+import { Estado, mensagemErro, useCarregar, useFiltros, useFocarErro } from '../components/ui';
+import { useAvisoSaida } from '../components/SaidaSemGravar';
+import { auditar, lerConfigAssistencia, listarComunidades, listarLotes } from '../lib/db';
+import { MESES, MESES_CURTOS, num } from '../lib/format';
+import { fecharEm100, gravarPesosMes, gravarPesosVarios, listarPesos, NOME_METODO, pesosValidos, somaPesos, type MetodoPeso, type PesosMes } from '../lib/pesos';
+import { recalcularAno } from '../lib/recalcular';
+import { comunidadeAtiva, destinoFusao, propostaPesos } from '../lib/resumos';
+import type { Comunidade } from '../lib/types';
+
+const pctTxt = (v: number | undefined) => (v == null ? '—' : `${num(v, 2)}%`);
+const periodoDe = (ano: number, mes: number) => `${ano}-${String(mes).padStart(2, '0')}`;
+
+/**
+ * Administração › Peso das comunidades (ADM-05): o peso de cada comunidade na repartição dos gerais e da bolsa geral,
+ * gravado por mês. Proposta pela média ou pela mediana de jovens e adultos por celebração nos últimos 12 meses;
+ * o administrador pode alterar e gravar; a proposta original e o método ficam guardados.
+ */
+export default function Pesos() {
+  const { acesso } = useAuth();
+  const { ano } = useFiltros();
+  const coms = useCarregar(listarComunidades, []);
+  const ass = useCarregar(async () => {
+    const [atual, antes, cfg] = await Promise.all([listarLotes(acesso!, 'assistencia', ano), listarLotes(acesso!, 'assistencia', ano - 1), lerConfigAssistencia()]);
+    return { atual, antes, evento: cfg.eventoCelebracao ?? null };
+  }, [ano, acesso?.email]);
+  const gravados = useCarregar(() => listarPesos(ano), [ano]);
+  const [metodo, setMetodo] = useState<MetodoPeso>('media');
+  const [mes, setMes] = useState<number>(() => (ano === new Date().getFullYear() ? new Date().getMonth() + 1 : 12));
+  const [edicao, setEdicao] = useState<Record<string, string> | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+  const raiz = useRef<HTMLDivElement>(null);
+  useFocarErro(erro, raiz);
+
+  const comunidades = (coms.dados ?? []).filter((c) => !c.especial);
+  const nomes = new Map(comunidades.map((c) => [c.id, c.nome]));
+  const destino = useMemo(() => destinoFusao(coms.dados ?? []), [coms.dados]);
+  const elegiveisDe = (m: number) => comunidades.filter((c: Comunidade) => comunidadeAtiva(c, periodoDe(ano, m))).map((c) => c.id);
+
+  /** Proposta (média e mediana) de um mês, com as fusões aplicadas. */
+  const propostaDe = (m: number) => {
+    const p = periodoDe(ano, m);
+    return propostaPesos(ass.dados?.atual ?? [], ass.dados?.antes ?? [], ano, m, elegiveisDe(m), ass.dados?.evento, (c) => destino(c, p));
+  };
+  const porMes = new Map((gravados.dados ?? []).map((g) => [g.mes, g]));
+  const gravadoMes = porMes.get(mes);
+  const proposta = ass.dados ? propostaDe(mes) : null;
+  const elegiveis = elegiveisDe(mes);
+
+  // Valores no editor: o que está a ser editado, senão o gravado, senão a proposta do método escolhido.
+  const base: Record<string, number> = gravadoMes?.pesos ?? Object.fromEntries(elegiveis.map((c) => [c, proposta?.[metodo][c]?.pct ?? 0]));
+  const valores: Record<string, number> = edicao ? Object.fromEntries(Object.entries(edicao).map(([c, v]) => [c, Number(v.replace(',', '.')) || 0])) : base;
+  const sujo = !!edicao;
+  const soma = somaPesos(Object.fromEntries(elegiveis.map((c) => [c, valores[c] ?? 0])));
+
+  function usar(m: MetodoPeso) {
+    if (!proposta) return;
+    setMetodo(m);
+    setEdicao(Object.fromEntries(elegiveis.map((c) => [c, String(proposta[m][c]?.pct ?? 0)])));
+  }
+
+  function novoRegisto(m: number, pesos: Record<string, number>, met: MetodoPeso, manual: boolean, prop = propostaDe(m)): PesosMes {
+    const agora = new Date().toISOString();
+    return { id: periodoDe(ano, m), ano, mes: m, metodo: met, pesos, proposta: prop, manual, calculadoEm: agora, gravadoPor: acesso!.email, gravadoEm: agora };
+  }
+
+  async function gravarMes(): Promise<boolean> {
+    setErro(null); setMsg(null);
+    const pesos = Object.fromEntries(elegiveis.map((c) => [c, Math.round((valores[c] ?? 0) * 100) / 100]));
+    if (!pesosValidos(pesos)) { setErro(`Os pesos de ${MESES[mes - 1]} somam ${num(somaPesos(pesos), 2)}%: têm de somar 100%.`); return false; }
+    const prop = propostaDe(mes);
+    const igualProposta = elegiveis.every((c) => Math.abs((prop[metodo][c]?.pct ?? 0) - pesos[c]) < 0.005);
+    setOcupado(true);
+    try {
+      await gravarPesosMes(novoRegisto(mes, pesos, metodo, !igualProposta, prop));
+      await auditar(acesso!.email, 'Peso das comunidades', `${periodoDe(ano, mes)}: ${igualProposta ? `proposta (${NOME_METODO[metodo]})` : 'alterado à mão'}: ${elegiveis.map((c) => `${nomes.get(c) ?? c} ${num(pesos[c], 2)}%`).join(', ')}`);
+      setEdicao(null);
+      await gravados.recarregar();
+      setMsg(`Pesos de ${MESES[mes - 1]} gravados. Carregue em "Recalcular dados e distribuições" para os aplicar nos resumos.`);
+      return true;
+    } catch (e) { setErro(mensagemErro(e)); return false; } finally { setOcupado(false); }
+  }
+  useAvisoSaida(sujo, gravarMes);
+
+  /** Gera e grava a proposta de todos os meses do ano com o método escolhido; os meses alterados à mão mantêm o peso. */
+  async function recalcularPesos() {
+    if (!ass.dados) return;
+    if (!confirm(`Recalcular os pesos de ${ano} pela ${NOME_METODO[metodo].toLowerCase()}? Os meses alterados à mão mantêm o peso (só a proposta é atualizada).`)) return;
+    setErro(null); setMsg(null); setOcupado(true);
+    try {
+      const novos = Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
+        const prop = propostaDe(m);
+        const antigo = porMes.get(m);
+        if (antigo?.manual) return { ...antigo, proposta: prop, calculadoEm: new Date().toISOString() };
+        const pesos = fecharEm100(Object.fromEntries(elegiveisDe(m).map((c) => [c, prop[metodo][c]?.pct ?? 0])));
+        return novoRegisto(m, pesos, metodo, false, prop);
+      }).filter((x) => somaPesos(x.pesos) > 0);
+      await gravarPesosVarios(novos);
+      await auditar(acesso!.email, 'Peso das comunidades', `Recalculados os pesos de ${ano} (${NOME_METODO[metodo]}); ${novos.filter((x) => x.manual).length} meses alterados à mão mantidos`);
+      setEdicao(null);
+      await gravados.recarregar();
+      setMsg(`Pesos de ${ano} recalculados pela ${NOME_METODO[metodo].toLowerCase()} (${novos.length} meses com assistência). Carregue em "Recalcular dados e distribuições" para os aplicar.`);
+    } catch (e) { setErro(mensagemErro(e)); } finally { setOcupado(false); }
+  }
+
+  async function recalcularDados() {
+    setErro(null); setMsg(null); setOcupado(true);
+    try { await recalcularAno(acesso!, ano); setMsg(`Resumos e distribuições de ${ano} recalculados com os pesos gravados.`); }
+    catch (e) { setErro(mensagemErro(e)); } finally { setOcupado(false); }
+  }
+
+  const aCarregar = coms.aCarregar || ass.aCarregar || gravados.aCarregar;
+  return (
+    <div ref={raiz}>
+      <h1>Peso das comunidades {ano}</h1>
+      <p className="muted">Peso de cada comunidade na repartição dos custos e proveitos gerais e da bolsa geral, gravado por mês. A proposta usa os jovens e adultos por celebração nos últimos 12 meses, pela média ou pela mediana; pode alterar e gravar. Meses sem pesos gravados usam a média automática. A proposta original e o método ficam guardados com o mês.</p>
+      {erro && <div className="aviso">{erro}</div>}
+      {msg && <div className="nota">{msg}</div>}
+
+      <div className="acoes" style={{ alignItems: 'flex-end' }}>
+        <label className="campo">Método da proposta
+          <select value={metodo} onChange={(e) => setMetodo(e.target.value as MetodoPeso)}>
+            <option value="media">Média</option>
+            <option value="mediana">Mediana</option>
+          </select>
+        </label>
+        <button disabled={ocupado || !ass.dados} onClick={() => void recalcularPesos()}>Recalcular pesos de assistência</button>
+        <button className="sec" disabled={ocupado} onClick={() => void recalcularDados()}>Recalcular dados e distribuições</button>
+      </div>
+
+      <Estado aCarregar={aCarregar} erro={coms.erro || ass.erro || gravados.erro} />
+      {!aCarregar && <>
+        <div className="sec">
+          <h2>Pesos gravados por mês</h2>
+          <div className="tabela"><table>
+            <thead><tr><th>Comunidade</th>{MESES_CURTOS.map((m, i) => <th key={m} className="num"><button className="link" onClick={() => { if (!sujo || confirm('Há alterações por gravar neste mês. Mudar de mês e perdê-las?')) { setEdicao(null); setMes(i + 1); } }}>{m}</button></th>)}</tr></thead>
+            <tbody>{comunidades.map((c) => (
+              <tr key={c.id}><td>{c.nome}</td>{MESES_CURTOS.map((m, i) => {
+                const g = porMes.get(i + 1);
+                return <td key={m} className={`num${i + 1 === mes ? ' mes-escolhido' : ''}`}>{g?.pesos[c.id] != null ? <>{num(g.pesos[c.id], 1)}%{g.manual ? <sup title="Alterado à mão"> ✎</sup> : null}</> : <span className="muted">—</span>}</td>;
+              })}</tr>
+            ))}</tbody>
+            <tfoot><tr><td>Método</td>{MESES_CURTOS.map((m, i) => { const g = porMes.get(i + 1); return <td key={m} className="num small">{g ? (g.manual ? 'À mão' : NOME_METODO[g.metodo]) : 'Auto'}</td>; })}</tr></tfoot>
+          </table></div>
+          <p className="muted small">"—": sem pesos gravados (usa a média automática dos 12 meses). ✎: alterado à mão. Clique num mês para ver a simulação e editar.</p>
+        </div>
+
+        <div className="sec card">
+          <h2>{`${MESES[mes - 1]} ${ano}: simulação e pesos`}</h2>
+          <p className="small muted" style={{ marginTop: 0 }}>
+            {gravadoMes ? `Gravado por ${gravadoMes.gravadoPor} em ${new Date(gravadoMes.gravadoEm).toLocaleString('pt-PT')} · proposta original pela ${NOME_METODO[gravadoMes.metodo].toLowerCase()}${gravadoMes.manual ? ' · alterado à mão' : ''}.` : 'Sem pesos gravados neste mês: os valores abaixo são a proposta pelo método escolhido.'}
+          </p>
+          <div className="tabela"><table>
+            <thead><tr><th>Comunidade</th><th className="num">Média 12m (pessoas)</th><th className="num">% média</th><th className="num">Mediana 12m (pessoas)</th><th className="num">% mediana</th><th className="num">Peso a usar (%)</th><th className="num">Diferença da proposta</th></tr></thead>
+            <tbody>{elegiveis.map((c) => {
+              const pm = proposta?.media[c]; const pd = proposta?.mediana[c];
+              const prop = (gravadoMes ? gravadoMes.proposta[gravadoMes.metodo]?.[c]?.pct : proposta?.[metodo][c]?.pct) ?? 0;
+              const v = valores[c] ?? 0;
+              return (
+                <tr key={c}>
+                  <td>{nomes.get(c) ?? c}</td>
+                  <td className="num">{pm ? num(pm.valor, 1) : '—'}</td><td className="num">{pctTxt(pm?.pct)}</td>
+                  <td className="num">{pd ? num(pd.valor, 1) : '—'}</td><td className="num">{pctTxt(pd?.pct)}</td>
+                  <td className="num"><input inputMode="decimal" style={{ width: 90 }} aria-label={`Peso de ${nomes.get(c) ?? c}`} aria-invalid={!!erro && Math.abs(soma - 100) > 0.05}
+                    value={edicao ? edicao[c] ?? '' : String(v)} onChange={(e) => setEdicao({ ...Object.fromEntries(elegiveis.map((x) => [x, String(valores[x] ?? 0)])), [c]: e.target.value })} /></td>
+                  <td className="num">{Math.abs(v - prop) < 0.005 ? '—' : `${v - prop > 0 ? '+' : ''}${num(v - prop, 2)} p.p.`}</td>
+                </tr>
+              );
+            })}</tbody>
+            <tfoot><tr className="total-geral"><td>Total</td><td /><td className="num">100%</td><td /><td className="num">100%</td><td className={`num${Math.abs(soma - 100) > 0.05 ? ' neg' : ''}`}>{num(soma, 2)}%</td><td /></tr></tfoot>
+          </table></div>
+          <div className="acoes" style={{ marginTop: 12 }}>
+            <button className="sec" disabled={!proposta} onClick={() => usar('media')}>Usar a média</button>
+            <button className="sec" disabled={!proposta} onClick={() => usar('mediana')}>Usar a mediana</button>
+            <button disabled={ocupado} onClick={() => void gravarMes()}>{`Gravar pesos de ${MESES[mes - 1]}`}</button>
+            {sujo && <button className="sec" onClick={() => setEdicao(null)}>Cancelar alterações</button>}
+          </div>
+        </div>
+      </>}
+    </div>
+  );
+}

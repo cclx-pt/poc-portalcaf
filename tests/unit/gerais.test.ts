@@ -362,3 +362,32 @@ describe('Painel: valores reais até hoje (mesesReais)', () => {
     expect(r.mesesReais![5].custosFixos).toBe(0); // custos fixos só até ao mês corrente
   });
 });
+
+import { pesos12m, propostaPesos } from '../../src/lib/resumos';
+describe('Peso das comunidades (ADM-05): média, mediana e pesos gravados', () => {
+  // Almada: 3 domingos com 100, 100 e 400 (média 200, mediana 100); Porto: 100, 100, 100.
+  const ass = (c: string, vs: number[]) => vs.map((v, i) => ({ ...lote('assistencia', c, 2026, 1 + i, [{ valor: v }]) }));
+  const assistencia = [...ass('almada', [100, 100, 400]), ...ass('porto', [100, 100, 100])];
+  it('média e mediana de jovens e adultos por celebração nos 12 meses', () => {
+    expect(pesos12m(assistencia, [], 2026, 3).get('almada')).toBe(200);
+    expect(pesos12m(assistencia, [], 2026, 3, null, (c) => c, 'mediana').get('almada')).toBe(100);
+  });
+  it('proposta em percentagem pelos dois métodos', () => {
+    const p = propostaPesos(assistencia, [], 2026, 3, ['almada', 'porto']);
+    expect(p.media.almada.pct).toBeCloseTo(66.67, 2);
+    expect(p.mediana.almada.pct).toBe(50);
+    expect(p.mediana.porto).toEqual({ valor: 100, pct: 50 });
+  });
+  it('os pesos gravados do mês substituem a média na repartição dos gerais e da bolsa', () => {
+    const rs = calcularResumos(base({
+      despesas: [lote('despesas', 'sede', 2026, 3, [{ valor: 300, categoria: 'Renda' }])],
+      contribuir: [lote('contribuir', 'bolsa-geral', 2026, 3, [{ valor: 100 }])],
+      assistencia,
+      pesosGravados: { '2026-03': { almada: 25, porto: 75 } },
+    }));
+    expect(mes(rs, 'almada', 3).geralSaidas).toBe(75);
+    expect(mes(rs, 'porto', 3).geralSaidas).toBe(225);
+    expect(mes(rs, 'almada', 3).quotaBolsa).toBe(25);
+    expect(mes(rs, 'almada', 3).adultosMedia12m).toBe(200); // a média continua a ser mostrada
+  });
+});

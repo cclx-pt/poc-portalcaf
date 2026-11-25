@@ -58,6 +58,17 @@ describe('configuração da assistência', () => {
   });
 });
 
+describe('peso das comunidades', () => {
+  it('lê quem está ativo; grava só master e CAF', async () => {
+    await assertSucceeds(getDoc(doc(as(LEITOR), 'pesos', '2026-03')));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'pesos', '2026-03')));
+    await assertFails(setDoc(doc(as(LEITOR), 'pesos', '2026-03'), { ano: 2026, mes: 3, pesos: {} }));
+    await assertFails(setDoc(doc(as(TES_CDR), 'pesos', '2026-03'), { ano: 2026, mes: 3, pesos: {} }));
+    await assertSucceeds(setDoc(doc(as(CAF), 'pesos', '2026-03'), { ano: 2026, mes: 3, pesos: { almada: 100 } }));
+    await assertSucceeds(setDoc(doc(as(MASTER), 'pesos', '2026-04'), { ano: 2026, mes: 4, pesos: { almada: 100 } }));
+  });
+});
+
 describe('exceções de assistência', () => {
   it('qualquer utilizador ativo lê; só Master e CAF escrevem', async () => {
     await assertSucceeds(getDoc(doc(as(LEITOR), 'assistencia_excecoes', '2026-12-27_cclx')));
