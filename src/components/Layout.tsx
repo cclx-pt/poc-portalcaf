@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Bug, Building2, Percent, CalendarCheck, CalendarX, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, ListChecks, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Bug, Building2, Percent, Plug, CalendarCheck, CalendarX, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, ListChecks, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { useCarregar, useFiltros, Rodape } from './ui';
 import { BotaoReportar } from './Reportar';
@@ -10,7 +10,7 @@ import { NIVEL_LABEL, PAPEL_LABEL } from '../lib/types';
 const BASE = import.meta.env.BASE_URL;
 
 type Perm = { pode: (a: Parameters<ReturnType<typeof useAuth>['pode']>[0]) => boolean; temNivel: (n: 'privado' | 'confidencial') => boolean };
-interface Item { to: string; nome: string; Icone: LucideIcon; ver: (p: Perm) => boolean; end?: boolean; etiqueta?: string }
+interface Item { to: string; nome: string; Icone: LucideIcon; ver: (p: Perm) => boolean; end?: boolean; etiqueta?: string; secao?: string }
 const privado = (p: Perm) => p.temNivel('privado');
 /** Menu lateral, por grupos. Cada grupo abre e fecha; o da página atual fica sempre aberto. */
 const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
@@ -47,6 +47,7 @@ const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
     { to: '/auditoria', nome: 'Auditoria', Icone: ShieldCheck, ver: (p) => p.pode('auditoria') },
     { to: '/pesos', nome: 'Peso das comunidades', Icone: Percent, ver: (p) => p.pode('configurar') },
     { to: '/pedidos', nome: 'Bugs e melhorias', Icone: Bug, ver: (p) => p.pode('configurar') },
+    { to: '/integracoes/jotform', nome: 'Jotform', Icone: Plug, ver: (p) => p.pode('importar'), secao: 'Integrações' },
   ] },
 ];
 
@@ -125,11 +126,14 @@ export default function Layout() {
                 )}
                 {aberto && (
                   <div id={`grupo-${g.id}`} className="grupo-itens">
-                    {itens.map((it) => (
-                      <NavLink key={it.to} to={it.to} end={it.end} title={it.nome}>
-                        <it.Icone className="ico" size={18} aria-hidden /><span className="texto">{it.nome}</span>
-                        {it.etiqueta && <span className="etiqueta-menu">{it.etiqueta}</span>}
-                      </NavLink>
+                    {itens.map((it, i) => (
+                      <div key={it.to} className="item-menu">
+                        {it.secao && it.secao !== itens[i - 1]?.secao && <div className="secao-menu">{it.secao}</div>}
+                        <NavLink to={it.to} end={it.end} title={it.secao ? `${it.secao} › ${it.nome}` : it.nome}>
+                          <it.Icone className="ico" size={18} aria-hidden /><span className="texto">{it.nome}</span>
+                          {it.etiqueta && <span className="etiqueta-menu">{it.etiqueta}</span>}
+                        </NavLink>
+                      </div>
                     ))}
                   </div>
                 )}

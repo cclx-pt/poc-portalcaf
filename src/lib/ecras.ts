@@ -36,6 +36,7 @@ export const ECRAS: Record<string, Ecra> = {
   '/auditoria': { codigo: 'ADM-03', nome: 'Auditoria' },
   '/pedidos': { codigo: 'ADM-04', nome: 'Bugs e melhorias' },
   '/pesos': { codigo: 'ADM-05', nome: 'Peso das comunidades' },
+  '/integracoes/jotform': { codigo: 'ADM-06', nome: 'Integrações › Jotform' },
   '/publico': { codigo: 'EXT-02', nome: 'Página pública' },
   '/registar': { codigo: 'EXT-03', nome: 'Registo de presenças (link direto)' },
 };
