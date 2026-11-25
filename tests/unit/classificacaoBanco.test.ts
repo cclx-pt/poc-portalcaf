@@ -298,3 +298,48 @@ describe('consolidação Jotform ↔ extratos (decisão do CAF, 23/11/2026)', ()
     expect(c.depositos.bancoSemJotform.map((m) => m.id)).toEqual(['b4']);
   });
 });
+
+describe('ordem da proposta: regras primeiro, custos fixos em fallback', () => {
+  const cf = (id: string, com: string, v = 750): CustoFixo => ({ id, comunidadeId: com, rubrica: 'Vencimento Pastoral', categoria: '01.01 Remunerações e subsídios', valorMensal: v, ano: 2026, inicio: '2026-01', fim: '2026-12', nivel: 'confidencial' });
+  const venc = '01.01 Remunerações e subsídios';
+
+  it('uma regra com comunidade aplica-se antes do match com os custos fixos', () => {
+    const regras = [{ id: 'v', padrao: 'ORDENADO PR VACILIUS', categoria: venc, comunidadeId: 'coruche', centroCusto: 'CC03', ativo: true }];
+    const [m] = proporClassificacao([mov('1', '2026-11-02', -750, 'ORDENADO PR VACILIUS 6745186582')], ctx({ custosFixos: [cf('ca', 'caldas')], regras }));
+    expect(m).toMatchObject({ estado: 'proposto', comunidadeId: 'coruche', categoria: venc, centroCusto: 'CC03' });
+    expect(m.nota).toBe('Regra "ORDENADO PR VACILIUS"');
+  });
+
+  it('regra sem comunidade: os custos fixos completam (fallback)', () => {
+    const regras = [{ id: 'o', padrao: 'ORDENADO', categoria: venc, centroCusto: 'CC02', ativo: true }];
+    const [m] = proporClassificacao([mov('1', '2026-11-02', -800, 'ORDENADO PR RUBEN 1')], ctx({ custosFixos: [cf('s', 'sede', 800)], regras }));
+    expect(m).toMatchObject({ estado: 'proposto', comunidadeId: 'sede', categoria: venc });
+    expect(m.nota).toMatch(/Previsto nos custos fixos/);
+  });
+
+  it('regra sem comunidade e sem custo fixo correspondente: aplica-se a regra', () => {
+    const regras = [{ id: 'e', padrao: 'EDP', categoria: '02.02 Energia e água', ativo: true }];
+    const [m] = proporClassificacao([mov('1', '2026-11-02', -70, 'EDP COMERCIAL')], ctx({ regras }));
+    expect(m).toMatchObject({ estado: 'proposto', categoria: '02.02 Energia e água', nota: 'Regra "EDP"' });
+  });
+
+  it('a regra mais específica (texto mais comprido) ganha à genérica', () => {
+    const regras = [
+      { id: 'r', padrao: 'RENDA', categoria: '02.01 Rendas e condomínios', ativo: true },
+      { id: 'c', padrao: 'RENDA CDR', categoria: '02.01 Rendas e condomínios', comunidadeId: 'caldas-da-rainha', ativo: true },
+    ];
+    const [m] = proporClassificacao([mov('1', '2026-11-02', -629, 'RENDA CDR 6745186667')], ctx({ regras }));
+    expect(m).toMatchObject({ comunidadeId: 'caldas-da-rainha', nota: 'Regra "RENDA CDR"' });
+  });
+
+  it('volta a propor os "para rever" automáticos; mantém os validados e os marcados à mão', () => {
+    const regras = [{ id: 'v', padrao: 'ORDENADO PR VACILIUS', categoria: venc, comunidadeId: 'coruche', ativo: true }];
+    const auto = mov('1', '2026-11-02', -750, 'ORDENADO PR VACILIUS 1', { estado: 'rever', nota: 'REVER - 750.00 € corresponde a mais de um vencimento previsto (caldas, coruche): escolha…' });
+    const mao = mov('2', '2026-11-02', -750, 'ORDENADO PR VACILIUS 2', { estado: 'rever', nota: 'Confirmar com o pastor' });
+    const val = mov('3', '2026-11-02', -750, 'ORDENADO PR VACILIUS 3', { estado: 'validado', categoria: venc, comunidadeId: 'caldas' });
+    const [a, b, c] = proporClassificacao([auto, mao, val], ctx({ custosFixos: [cf('ca', 'caldas'), cf('co', 'coruche')], regras }));
+    expect(a).toMatchObject({ estado: 'proposto', comunidadeId: 'coruche' });
+    expect(b).toEqual(mao);
+    expect(c).toEqual(val);
+  });
+});
