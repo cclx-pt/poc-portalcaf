@@ -11,7 +11,7 @@ import Publico from './Publico';
 export default function Painel() {
   const { acesso, pode, temNivel } = useAuth();
   if (!temNivel('privado')) return <Publico embutido />;
-  return <PainelPrivado podeRecalcular={pode('publicar')} acessoEmail={acesso!.email} />;
+  return <PainelPrivado podeRecalcular={pode('recalcular')} acessoEmail={acesso!.email} />;
 }
 
 function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmail: string }) {
@@ -57,7 +57,7 @@ function PainelPrivado({ podeRecalcular }: { podeRecalcular: boolean; acessoEmai
 
   async function recalcular() {
     setOcupado(true); setMsg(null);
-    try { await recalcularAno(acesso!, ano); await r.recarregar(); setMsg('Resumos recalculados.'); }
+    try { await recalcularAno(acesso!, ano, 'Painel (PAI-01) › Recalcular resumos'); await r.recarregar(); setMsg('Resumos recalculados.'); }
     catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
 

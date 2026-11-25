@@ -8,7 +8,7 @@ import { MESES, periodo } from '../lib/format';
 const BASE = import.meta.env.BASE_URL;
 
 export default function Fecho() {
-  const { acesso } = useAuth();
+  const { acesso, pode } = useAuth();
   const { ano } = useFiltros();
   const fechos = useCarregar(listarFechos, []);
   const [msg, setMsg] = useState<string | null>(null);
@@ -26,7 +26,7 @@ export default function Fecho() {
   }
   async function publicar() {
     setOcupado(true); setMsg(null);
-    try { const { publico } = await recalcularAno(acesso!, ano); setMsg(`Resumos recalculados. Página pública de ${ano} com ${publico.mesesFechados.length} meses fechados.`); }
+    try { const { publico } = await recalcularAno(acesso!, ano, 'Fecho (TES-05) › Recalcular resumos e publicar'); setMsg(`Resumos recalculados. Página pública de ${ano} com ${publico.mesesFechados.length} meses fechados.`); }
     catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
 
@@ -36,7 +36,7 @@ export default function Fecho() {
       <p className="muted">Depois de reconciliado, o CAF fecha o mês: deixa de poder ser alterado (só o Master pode) e passa a aparecer na página pública. Reabrir fica registado na auditoria.</p>
       {msg && <div className="nota">{msg}</div>}
       <div className="acoes">
-        <button disabled={ocupado} onClick={publicar}>Recalcular resumos e publicar</button>
+        {pode('recalcular') && <button disabled={ocupado} onClick={publicar}>Recalcular resumos e publicar</button>}
         <a className="btn sec" href={`${BASE}#/publico`} target="_blank" rel="noreferrer">Ver página pública ↗</a>
       </div>
       <Estado aCarregar={fechos.aCarregar} erro={fechos.erro} />
