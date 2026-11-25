@@ -1,7 +1,9 @@
 /**
- * Pessoas (dados de referência, confidenciais: só Master e CAF). Nome, telefones, contribuinte (NIF), e-mails e
- * comunidade, para futuras consolidações e registos. Proposta a partir do Jotform (Contribuir e Registo de Despesas,
- * nível confidencial) e editável à mão; as pessoas editadas à mão não são substituídas pela proposta automática.
+ * Pessoas (dados de referência, confidenciais: só Master e CAF): nome, telemóvel, contribuinte (NIF), e-mail e
+ * comunidade, para futuras consolidações e registos. Regras (decisão do CAF, 25/11/2026):
+ * - um só telemóvel e um só e-mail por linha; não se agrupa: a mesma pessoa com dois telemóveis tem duas linhas;
+ * - não se grava sem nome nem sem telemóvel; a comunidade Geral fica de fora da proposta do Jotform;
+ * - as linhas editadas à mão não são alteradas pela proposta automática.
  * Funções puras (o acesso ao Firestore está em pessoas.ts).
  */
 import { norm } from './format';
@@ -11,12 +13,14 @@ import type { Lote } from './types';
 export interface Pessoa {
   id: string;
   nome: string;
-  telefones: string[];
+  /** Um só telemóvel (9 dígitos começados por 9). */
+  telefone: string;
+  /** Um só e-mail. */
+  email?: string;
   nif?: string;
-  emails: string[];
   comunidadeId?: string;
   notas?: string;
-  /** true depois de editada à mão: a atualização a partir do Jotform só acrescenta telefones e e-mails. */
+  /** true depois de editada à mão: a proposta do Jotform não a altera. */
   manual: boolean;
   /** Submissões do Jotform de onde veio (origem:id). */
   fontes: string[];
@@ -34,81 +38,83 @@ const maisFrequente = (xs: string[]) => {
   xs.forEach((x) => n.set(x, (n.get(x) ?? 0) + 1));
   return [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
 };
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-export const SEM_NOME = 'Sem nome';
+/** Chave de uma linha: nome + telemóvel + e-mail (iguais = a mesma linha; qualquer diferença = outra linha). */
+export const chavePessoa = (p: Pick<Pessoa, 'nome' | 'telefone' | 'email'>) => `${normNome(p.nome)}|${p.telefone}|${p.email ?? ''}`;
+/** Id estável de uma linha (o mesmo nome + telemóvel + e-mail dá sempre o mesmo id). */
+export const idNovaPessoa = (p: Pick<Pessoa, 'nome' | 'telefone' | 'email'>) => `p-${p.telefone}-${slug(p.nome).slice(0, 40)}${p.email ? `-${slug(p.email).slice(0, 40)}` : ''}`;
 
-interface Registo { fonte: string; nome?: string; nif?: string; emails: string[]; telefones: string[]; comunidadeId: string }
-
-/** Pessoas propostas a partir dos lotes confidenciais (Contribuir e Despesas): a mesma pessoa junta pelo NIF, e-mail ou telefone. */
-export function pessoasDoJotform(lotes: Lote[]): Omit<Pessoa, 'atualizadoEm' | 'atualizadoPor'>[] {
-  const regs: Registo[] = lotes.flatMap((l) => l.registos.map((r) => ({
-    fonte: `${l.origem}:${r.id}`,
-    nome: r.pessoa?.replace(/\s+/g, ' ').trim() || undefined,
-    nif: normNif(r.nif),
-    emails: unicos([normEmail(r.email) ?? '']),
-    telefones: normalizarTelefones(r.telefone),
-    comunidadeId: l.comunidadeId,
-  }))).filter((r) => r.nome || r.nif || r.emails.length || r.telefones.length);
-
-  // União pelas chaves (NIF, e-mail, telefone); só com o nome não se junta (há nomes iguais).
-  const pai = regs.map((_, i) => i);
-  const raiz = (i: number): number => (pai[i] === i ? i : (pai[i] = raiz(pai[i])));
-  const dono = new Map<string, number>();
-  regs.forEach((r, i) => {
-    for (const k of [r.nif && `nif:${r.nif}`, ...r.emails.map((e) => `email:${e}`), ...r.telefones.map((t) => `tel:${t}`)].filter(Boolean) as string[]) {
-      const j = dono.get(k);
-      if (j == null) dono.set(k, i); else pai[raiz(i)] = raiz(j);
-    }
-  });
-  const grupos = new Map<number, Registo[]>();
-  regs.forEach((r, i) => grupos.set(raiz(i), [...(grupos.get(raiz(i)) ?? []), r]));
-
-  return [...grupos.values()].map((g) => {
-    const nomes = g.map((r) => r.nome).filter(Boolean) as string[];
-    const nomeNorm = maisFrequente(nomes.map(normNome));
-    const nome = maisFrequente(nomes.filter((n) => normNome(n) === nomeNorm)) ?? SEM_NOME;
-    const nif = maisFrequente(g.map((r) => r.nif ?? '').filter(Boolean));
-    const emails = unicos(g.flatMap((r) => r.emails));
-    const telefones = unicos(g.flatMap((r) => r.telefones));
-    const id = nif ? `nif-${nif}` : emails[0] ? `email-${slug(emails[0])}` : telefones[0] ? `tel-${telefones[0]}` : `nome-${slug(normNome(nome))}-${slug(g[0].fonte)}`;
-    return {
-      id, nome, telefones, emails, ...(nif ? { nif } : {}),
-      comunidadeId: maisFrequente(g.map((r) => r.comunidadeId)),
-      manual: false, fontes: unicos(g.map((r) => r.fonte)),
-    };
-  })
-    // Sem nome ou da comunidade Geral não entram na base (decisão do CAF, 25/11/2026).
-    .filter((p) => p.nome !== SEM_NOME && p.comunidadeId !== 'bolsa-geral')
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
-}
-
-const chaves = (p: Pick<Pessoa, 'nif' | 'emails' | 'telefones'>) => [p.nif && `nif:${p.nif}`, ...p.emails.map((e) => `email:${e}`), ...p.telefones.map((t) => `tel:${t}`)].filter(Boolean) as string[];
-const igual = (a: Pessoa, b: Pessoa) => JSON.stringify([a.nome, a.nif ?? '', [...a.telefones].sort(), [...a.emails].sort(), a.comunidadeId ?? '', [...a.fontes].sort()])
-  === JSON.stringify([b.nome, b.nif ?? '', [...b.telefones].sort(), [...b.emails].sort(), b.comunidadeId ?? '', [...b.fontes].sort()]);
+type Proposta = Omit<Pessoa, 'atualizadoEm' | 'atualizadoPor'>;
 
 /**
- * Junta a proposta do Jotform à base: cria as pessoas novas; nas automáticas atualiza tudo; nas editadas à mão
- * só acrescenta telefones, e-mails, fontes e o NIF em falta.
+ * Linhas propostas a partir dos lotes confidenciais (Contribuir e Despesas): uma por nome + telemóvel + e-mail.
+ * Submissões iguais juntam as fontes; sem nome, sem telemóvel ou da Geral não entram.
  */
-export function fundirComJotform(existentes: Pessoa[], jot: Omit<Pessoa, 'atualizadoEm' | 'atualizadoPor'>[], quem: string, agora: string) {
-  const porChave = new Map<string, Pessoa>();
-  existentes.forEach((p) => chaves(p).forEach((k) => porChave.set(k, p)));
+export function pessoasDoJotform(lotes: Lote[]): Proposta[] {
+  const linhas = new Map<string, { nome: string; telefone: string; email?: string; nifs: string[]; coms: string[]; fontes: string[] }>();
+  for (const l of lotes) {
+    if (l.comunidadeId === 'bolsa-geral') continue;
+    for (const r of l.registos) {
+      const nome = r.pessoa?.replace(/\s+/g, ' ').trim();
+      if (!nome) continue;
+      const email = normEmail(r.email);
+      for (const telefone of normalizarTelefones(r.telefone)) {
+        const k = chavePessoa({ nome, telefone, email });
+        const x = linhas.get(k) ?? { nome, telefone, email, nifs: [], coms: [], fontes: [] };
+        const nif = normNif(r.nif);
+        if (nif) x.nifs.push(nif);
+        x.coms.push(l.comunidadeId);
+        x.fontes.push(`${l.origem}:${r.id}`);
+        linhas.set(k, x);
+      }
+    }
+  }
+  return [...linhas.values()].map((x) => {
+    const nif = maisFrequente(x.nifs);
+    return {
+      id: idNovaPessoa(x), nome: x.nome, telefone: x.telefone, ...(x.email ? { email: x.email } : {}), ...(nif ? { nif } : {}),
+      comunidadeId: maisFrequente(x.coms), manual: false, fontes: unicos(x.fontes),
+    };
+  }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt') || a.telefone.localeCompare(b.telefone));
+}
+
+const igual = (a: Pessoa, b: Pessoa) => JSON.stringify([a.nif ?? '', a.comunidadeId ?? '', [...a.fontes].sort()]) === JSON.stringify([b.nif ?? '', b.comunidadeId ?? '', [...b.fontes].sort()]);
+
+/**
+ * Junta a proposta do Jotform à base: cria as linhas novas (nome + telemóvel + e-mail que ainda não existem);
+ * numa linha automática igual atualiza o NIF, a comunidade e as fontes; as editadas à mão ficam como estão.
+ */
+export function fundirComJotform(existentes: Pessoa[], jot: Proposta[], quem: string, agora: string) {
+  const porChave = new Map(existentes.map((p) => [chavePessoa(p), p]));
   const novas: Pessoa[] = [];
-  const mudadas = new Map<string, Pessoa>();
+  const atualizadas: Pessoa[] = [];
   let semAlteracao = 0;
   for (const j of jot) {
-    const ex = chaves(j).map((k) => porChave.get(k)).find(Boolean);
+    const ex = porChave.get(chavePessoa(j));
     if (!ex) { novas.push({ ...j, criadoEm: agora, atualizadoEm: agora, atualizadoPor: quem }); continue; }
-    const base = mudadas.get(ex.id) ?? ex;
-    const junto: Pessoa = ex.manual
-      ? { ...base, nif: base.nif ?? j.nif, telefones: unicos([...base.telefones, ...j.telefones]), emails: unicos([...base.emails, ...j.emails]), fontes: unicos([...base.fontes, ...j.fontes]) }
-      : { ...base, nome: j.nome, nif: j.nif ?? base.nif, comunidadeId: j.comunidadeId ?? base.comunidadeId, telefones: unicos([...base.telefones, ...j.telefones]), emails: unicos([...base.emails, ...j.emails]), fontes: unicos([...base.fontes, ...j.fontes]) };
+    if (ex.manual) { semAlteracao++; continue; }
+    const junto: Pessoa = { ...ex, nif: j.nif ?? ex.nif, comunidadeId: j.comunidadeId ?? ex.comunidadeId, fontes: unicos([...ex.fontes, ...j.fontes]) };
     if (!junto.nif) delete junto.nif;
     if (igual(junto, ex)) { semAlteracao++; continue; }
-    mudadas.set(ex.id, { ...junto, atualizadoEm: agora, atualizadoPor: quem });
+    atualizadas.push({ ...junto, atualizadoEm: agora, atualizadoPor: quem });
   }
-  return { novas, atualizadas: [...mudadas.values()], semAlteracao };
+  return { novas, atualizadas, semAlteracao };
+}
+
+/** Validação ao gravar à mão: nome e telemóvel obrigatórios; um só telemóvel e um só e-mail. Devolve o erro ou null. */
+export function validarPessoa(v: { nome: string; telefone: string; email?: string; nif?: string }): string | null {
+  if (!v.nome.trim()) return 'Indique o nome.';
+  if (!v.telefone.trim()) return 'Indique o telemóvel.';
+  const tels = normalizarTelefones(v.telefone);
+  if (/[,;/]/.test(v.telefone) || tels.length > 1) return 'Indique um só telemóvel por linha (para outro número, crie outra linha).';
+  if (tels.length !== 1) return 'O telemóvel tem de ter 9 dígitos começados por 9.';
+  if (v.email?.trim()) {
+    if (/[,;\s]/.test(v.email.trim())) return 'Indique um só e-mail por linha (para outro, crie outra linha).';
+    if (!normEmail(v.email)) return 'E-mail inválido.';
+  }
+  if (v.nif?.trim() && !normNif(v.nif)) return 'O contribuinte (NIF) tem de ter 9 dígitos.';
+  return null;
 }
 
 /** Pesquisa por nome (sem acentos), telefone, NIF ou e-mail. */
@@ -117,6 +123,6 @@ export function procurarPessoas(ps: Pessoa[], q: string): Pessoa[] {
   if (!t) return ps;
   const dig = q.replace(/\D/g, '');
   const e = q.trim().toLowerCase();
-  return ps.filter((p) => normNome(p.nome).includes(t) || p.emails.some((x) => x.includes(e))
-    || (dig.length >= 3 && (p.telefones.some((x) => x.includes(dig)) || (p.nif ?? '').includes(dig))));
+  return ps.filter((p) => normNome(p.nome).includes(t) || (p.email ?? '').includes(e)
+    || (dig.length >= 3 && ((p.telefone ?? '').includes(dig) || (p.nif ?? '').includes(dig))));
 }

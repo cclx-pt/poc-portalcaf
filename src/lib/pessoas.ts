@@ -9,7 +9,18 @@ const limpo = (p: Pessoa) => Object.fromEntries(Object.entries(p).filter(([, v])
 
 export async function listarPessoas(): Promise<Pessoa[]> {
   const s = await getDocs(collection(db, 'pessoas'));
-  return s.docs.map((d) => ({ ...(d.data() as Pessoa), id: d.id })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+  return s.docs.map((d) => {
+    // Linhas antigas (antes de 25/11/2026) tinham listas de telefones e e-mails: mostra o primeiro de cada.
+    const x = d.data() as Pessoa & { telefones?: string[]; emails?: string[] };
+    return { ...x, id: d.id, nome: x.nome ?? '', telefone: x.telefone ?? x.telefones?.[0] ?? '', email: x.email ?? x.emails?.[0], fontes: x.fontes ?? [] };
+  }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+}
+/** Apaga todas as pessoas da base. */
+export async function apagarTodasPessoas(): Promise<number> {
+  const s = await getDocs(collection(db, 'pessoas'));
+  const ids = s.docs.map((d) => d.id);
+  await apagarPessoas(ids);
+  return ids.length;
 }
 export const gravarPessoa = (p: Pessoa) => setDoc(doc(db, 'pessoas', p.id), limpo(p));
 export const apagarPessoa = (id: string) => deleteDoc(doc(db, 'pessoas', id));
