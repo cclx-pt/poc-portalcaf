@@ -43,6 +43,8 @@ vi.mock('../../src/lib/db', () => ({
   listarResumos: (_a: unknown, ano: number) => sync(ano === 2026 ? RESUMOS : []),
   listarCustosFixos: () => sync([{ id: 'ss', comunidadeId: 'almada', rubrica: 'Segurança Social', valorMensal: 1, inicio: '2026-01', fim: null, nivel: 'privado', notas: 'Valor pendente de confirmação.' }]),
   lerConfigAssistencia: () => sync(CONFIG_ASS.atual),
+  lerConfigReembolsos: () => sync({ diasAntes: 2, diasDepois: 45 }),
+  gravarConfigReembolsos: async () => {},
   lerLote: () => sync(null), gravarLote: vi.fn(),
   gravarConfigAssistencia: vi.fn(),
   listarExcecoes: () => sync([{ id: '2026-03-22_cclx', data: '2026-03-22', ambito: 'cclx', motivo: 'Culto conjunto', criadoPor: 'caf@x.pt', criadoEm: '' }]),
