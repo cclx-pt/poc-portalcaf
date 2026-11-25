@@ -181,6 +181,12 @@ service cloud.firestore {
       allow delete: if hasRole(['master', 'caf']);
     }
 
+    // ---------- peso de cada comunidade (repartição dos gerais e da bolsa geral), por mês ----------
+    match /pesos/{periodo} {
+      allow read: if isActive();
+      allow write: if hasRole(['master', 'caf']);
+    }
+
     // ---------- exceções de assistência (domingos sem assistência esperada) ----------
     match /assistencia_excecoes/{id} {
       allow read: if isActive();

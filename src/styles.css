@@ -399,3 +399,6 @@ button.sec, .btn.sec { margin-bottom: 0; }
 .registos-falta > summary::before { content: '▸'; font-size: 16px; }
 .registos-falta[open] > summary::before { content: '▾'; }
 .registos-falta > summary h2 { margin: 0; font-size: 18px; }
+
+/* Peso das comunidades: mês escolhido na tabela do ano. */
+td.mes-escolhido { background: #f2f2f1 !important; font-weight: 700; }

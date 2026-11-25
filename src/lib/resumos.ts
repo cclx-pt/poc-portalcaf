@@ -29,6 +29,8 @@ export interface DadosCalculo {
   assistenciaAnterior?: Lote[];
   /** Tipo de evento que conta para as médias (ex.: "Celebração de Domingo"). Sem ele, contam os domingos. */
   eventoCelebracao?: string | null;
+  /** Pesos gravados no ecrã "Peso das comunidades", por mês (AAAA-MM → comunidade → %). Sem eles, a média dos 12 meses. */
+  pesosGravados?: Record<string, Record<string, number>>;
 }
 
 /** Comunidade especial onde ficam os gerais quando nenhuma comunidade tem assistência. */
@@ -49,7 +51,8 @@ export function repartir(valor: number, pesos: number[]): number[] {
  * Média de jovens e adultos por domingo (celebração), por comunidade, nos 12 meses que terminam em (ano, mes).
  * `juntar` indica a comunidade em que cada uma conta (fusões): as comunidades juntas somam-se por data.
  */
-export function pesos12m(assistencia: Lote[], assistenciaAnterior: Lote[], ano: number, mes: number, eventoCelebracao?: string | null, juntar: (comunidadeId: string) => string = (c) => c): Map<string, number> {
+/** Valores de jovens e adultos por data (celebração) de cada comunidade de destino, nos 12 meses até ao mês. */
+function assistencia12mPorData(assistencia: Lote[], assistenciaAnterior: Lote[], ano: number, mes: number, eventoCelebracao?: string | null, juntar: (comunidadeId: string) => string = (c) => c): Map<string, number[]> {
   const fim = ano * 12 + mes;
   // Média de cada comunidade de origem em cada data (normalmente um registo por domingo).
   const porData = new Map<string, { soma: number; n: number }>();
@@ -63,20 +66,38 @@ export function pesos12m(assistencia: Lote[], assistenciaAnterior: Lote[], ano: 
       a.soma += r.valor; a.n++; porData.set(chave, a);
     }
   }
-  // Soma por comunidade de destino e data; depois a média pelas datas.
+  // Soma por comunidade de destino e data (fusões).
   const destino = new Map<string, number>();
   for (const [chave, a] of porData) {
     const [c, data] = chave.split('|');
     const k = `${juntar(c)}|${data}`;
     destino.set(k, (destino.get(k) ?? 0) + a.soma / a.n);
   }
-  const acc = new Map<string, { soma: number; n: number }>();
-  for (const [k, v] of destino) {
-    const c = k.split('|')[0];
-    const a = acc.get(c) ?? { soma: 0, n: 0 };
-    a.soma += v; a.n++; acc.set(c, a);
-  }
-  return new Map([...acc].filter(([, a]) => a.n).map(([c, a]) => [c, r2(a.soma / a.n)]));
+  const out = new Map<string, number[]>();
+  for (const [k, v] of destino) { const c = k.split('|')[0]; out.set(c, [...(out.get(c) ?? []), v]); }
+  return out;
+}
+
+export type MetodoPeso = 'media' | 'mediana';
+const mediana = (xs: number[]) => {
+  const o = [...xs].sort((a, b) => a - b); const n = o.length;
+  return n % 2 ? o[(n - 1) / 2] : (o[n / 2 - 1] + o[n / 2]) / 2;
+};
+
+/** Média (ou mediana) de jovens e adultos por celebração de cada comunidade nos 12 meses até ao mês. */
+export function pesos12m(assistencia: Lote[], assistenciaAnterior: Lote[], ano: number, mes: number, eventoCelebracao?: string | null, juntar: (comunidadeId: string) => string = (c) => c, metodo: MetodoPeso = 'media'): Map<string, number> {
+  const por = assistencia12mPorData(assistencia, assistenciaAnterior, ano, mes, eventoCelebracao, juntar);
+  return new Map([...por].filter(([, v]) => v.length).map(([c, v]) => [c, r2(metodo === 'mediana' ? mediana(v) : v.reduce((t, x) => t + x, 0) / v.length)]));
+}
+
+/** Proposta de pesos de um mês, pelos dois métodos: valor (pessoas) e percentagem (0 a 100) de cada comunidade elegível. */
+export function propostaPesos(assistencia: Lote[], assistenciaAnterior: Lote[], ano: number, mes: number, elegiveis: string[], eventoCelebracao?: string | null, juntar: (comunidadeId: string) => string = (c) => c) {
+  const por = (metodo: MetodoPeso) => {
+    const w = pesos12m(assistencia, assistenciaAnterior, ano, mes, eventoCelebracao, juntar, metodo);
+    const soma = elegiveis.reduce((t, c) => t + (w.get(c) ?? 0), 0);
+    return Object.fromEntries(elegiveis.map((c) => [c, { valor: w.get(c) ?? 0, pct: soma ? Math.round(((w.get(c) ?? 0) / soma) * 10000) / 100 : 0 }]));
+  };
+  return { media: por('media'), mediana: por('mediana') };
 }
 
 /**
@@ -311,6 +332,18 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
     registar(comCf, mes, 'saida', cf.categoria || cf.rubrica, valor, cf.nivel === 'confidencial', true, cf.ambito === 'geral' || comCf === 'bolsa-geral');
   }
 
+  // Peso de cada comunidade no mês: o gravado no ecrã "Peso das comunidades" (decisão do CAF, 25/11/2026), com as
+  // fusões aplicadas; sem pesos gravados, a média de jovens e adultos dos últimos 12 meses.
+  const pesoDoMes = (p: string, mes: number): Map<string, number> => {
+    const g = d.pesosGravados?.[p];
+    if (g && Object.values(g).some((v) => v > 0)) {
+      const out = new Map<string, number>();
+      for (const [c, v] of Object.entries(g)) { const k = destino(c, p); out.set(k, (out.get(k) ?? 0) + (Number(v) || 0)); }
+      return out;
+    }
+    return pesos12m(d0.assistencia, d.assistenciaAnterior ?? [], d.ano, mes, d.eventoCelebracao, (c) => destino(c, p));
+  };
+
   // Distribuição da bolsa geral: cada mês, pela percentagem da média de jovens e adultos de cada comunidade
   // nos últimos 12 meses (decisão do CAF, 19/11/2026), também por rubrica.
   for (let mes = 1; mes <= 12; mes++) {
@@ -318,7 +351,7 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
     const total = r2(bolsa.contribuir + bolsa.coletas + bolsa.transferencias);
     if (!total) continue;
     const p = periodo(d.ano, mes);
-    const w12 = pesos12m(d0.assistencia, d.assistenciaAnterior ?? [], d.ano, mes, d.eventoCelebracao, (c) => destino(c, p));
+    const w12 = pesoDoMes(p, mes);
     const elegiveis = d.comunidades.filter((c) => !c.especial && comunidadeAtiva(c, p));
     const pesos = elegiveis.map((c) => w12.get(c.id) ?? 0);
     if (!pesos.reduce((s0, w) => s0 + w, 0)) {
@@ -335,8 +368,9 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
   // Repartição dos gerais pela média de jovens e adultos dos últimos 12 meses.
   for (let mes = 1; mes <= 12; mes++) {
     const p = periodo(d.ano, mes);
-    const w12 = pesos12m(d0.assistencia, d.assistenciaAnterior ?? [], d.ano, mes, d.eventoCelebracao, (c) => destino(c, p));
-    for (const [c, w] of w12) if (mapa.has(c)) m(c, mes).adultosMedia12m = w;
+    const media12 = pesos12m(d0.assistencia, d.assistenciaAnterior ?? [], d.ano, mes, d.eventoCelebracao, (c) => destino(c, p));
+    for (const [c, w] of media12) if (mapa.has(c)) m(c, mes).adultosMedia12m = w;
+    const w12 = pesoDoMes(p, mes);
     const elegiveis = d.comunidades.filter((c) => !c.especial && comunidadeAtiva(c, p) && (w12.get(c.id) ?? 0) > 0);
     const pesos = elegiveis.map((c) => w12.get(c.id)!);
     const somaW = pesos.reduce((s0, w) => s0 + w, 0);
