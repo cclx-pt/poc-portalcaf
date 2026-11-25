@@ -94,3 +94,14 @@ describe('pesquisa', () => {
     expect(procurarPessoas(ps, '')).toHaveLength(2);
   });
 });
+
+describe('máscara MB Way (como aparece no extrato)', () => {
+  it('mostra os 3 primeiros e os 3 últimos dígitos; a pesquisa aceita a máscara', async () => {
+    const { mascaraMbway } = await import('../../src/lib/pessoasBase');
+    expect(mascaraMbway('966123014')).toBe('966XXX014');
+    expect(mascaraMbway('')).toBe('');
+    const ps = [pessoa({ id: '1', nome: 'Ana', telefone: '966123014' }), pessoa({ id: '2', nome: 'Rui', telefone: '966555015' })];
+    expect(procurarPessoas(ps, '966XXX014').map((p) => p.id)).toEqual(['1']);
+    expect(procurarPessoas(ps, 'Trf Mbway 966xxx015').map((p) => p.id)).toEqual(['2']);
+  });
+});

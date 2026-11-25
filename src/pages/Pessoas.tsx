@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, listarComunidades, listarLotes } from '../lib/db';
 import {
-  apagarPessoa, apagarPessoas, apagarTodasPessoas, chavePessoa, fundirComJotform, gravarPessoa, gravarPessoas, idNovaPessoa, listarPessoas, normEmail, normNif, pessoasDoJotform, procurarPessoas, validarPessoa, type Pessoa,
+  apagarPessoa, apagarPessoas, apagarTodasPessoas, chavePessoa, fundirComJotform, gravarPessoa, gravarPessoas, idNovaPessoa, listarPessoas, mascaraMbway, normEmail, normNif, pessoasDoJotform, procurarPessoas, validarPessoa, type Pessoa,
 } from '../lib/pessoas';
 import { normalizarTelefones } from '../lib/reconciliacaoReembolsos';
 
@@ -121,7 +121,7 @@ export default function Pessoas() {
       {erro && !edit && <div className="aviso">{erro}</div>}
 
       <div className="acoes">
-        <label className="campo">Procurar<input type="search" value={q} placeholder="Nome, telefone, NIF ou e-mail" onChange={(e) => setQ(e.target.value)} /></label>
+        <label className="campo">Procurar<input type="search" value={q} placeholder="Nome, telemóvel, 966XXX014, NIF ou e-mail" onChange={(e) => setQ(e.target.value)} /></label>
         <label className="campo">Comunidade
           <select value={com} onChange={(e) => setCom(e.target.value)}>
             <option value="">Todas</option>
@@ -135,12 +135,13 @@ export default function Pessoas() {
       <Estado aCarregar={pessoas.aCarregar} erro={pessoas.erro} vazio={!pessoas.dados?.length} />
       {!!pessoas.dados?.length && (
         <div className="tabela"><table>
-          <thead><tr><th>Nome</th><th>Telemóvel</th><th>Contribuinte</th><th>E-mail</th><th>Comunidade</th><th>Origem</th><th /></tr></thead>
+          <thead><tr><th>Nome</th><th>Telemóvel</th><th title="Como aparece no extrato: Trf Mbway 966XXX014">MB Way</th><th>Contribuinte</th><th>E-mail</th><th>Comunidade</th><th>Origem</th><th /></tr></thead>
           <tbody>
             {lista.slice(0, 500).map((p) => (
               <tr key={p.id}>
                 <td>{p.nome}{p.notas && <div className="small muted">{p.notas}</div>}</td>
                 <td className="small">{p.telefone ? telTxt(p.telefone) : '—'}</td>
+                <td className="small">{mascaraMbway(p.telefone) || '—'}</td>
                 <td>{p.nif ?? '—'}</td>
                 <td className="small">{p.email ?? '—'}</td>
                 <td>{nomeCom(p.comunidadeId)}</td>
@@ -153,7 +154,7 @@ export default function Pessoas() {
                 </td>
               </tr>
             ))}
-            {!lista.length && <tr><td colSpan={7} className="muted">Nenhuma pessoa com este filtro.</td></tr>}
+            {!lista.length && <tr><td colSpan={8} className="muted">Nenhuma pessoa com este filtro.</td></tr>}
           </tbody>
         </table></div>
       )}
