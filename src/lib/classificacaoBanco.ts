@@ -112,6 +112,28 @@ const SEG_SOCIAL = /\btsu\b|seg(uranca)?\.? ?social|^ss\b/;
 /** Código do reembolso sem espaços nem hífenes, em maiúsculas (R20260031). */
 export const normCodigo = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
+/** "Para rever" criado pela proposta (pode voltar a ser proposto); os outros foram marcados por alguém. */
+const reverAutomatico = (m: MovBanco) => (m.nota ?? '').startsWith('REVER -') || (m.nota ?? '').startsWith(DEPOSITO_SEM_JOTFORM);
+
+/** A regra ativa que se aplica ao descritivo: a mais específica (texto mais comprido) ganha à genérica. */
+export function regraDoMovimento(descricao: string, regras: RegraBanco[], existe: (categoria: string) => boolean = () => true): RegraBanco | undefined {
+  return regras.filter((x) => x.ativo !== false && existe(x.categoria) && temPalavra(descricao, x.padrao))
+    .sort((a, b) => norm(b.padrao).length - norm(a.padrao).length)[0];
+}
+
+function aplicarRegra(m: MovBanco, regra: RegraBanco, proposto: (patch: Partial<MovBanco>) => MovBanco): MovBanco {
+  if (regra.partes?.length) {
+    // Regra com divisões: valores fixos e percentagens do que sobra.
+    const valores = resolverPartes(m.valor, regra.partes);
+    const partes = regra.partes.map((x, i) => ({
+      comunidadeId: x.comunidadeId, valor: valores[i],
+      ...(x.categoria ? { categoria: x.categoria } : {}), ...(x.centroCusto ? { centroCusto: x.centroCusto } : {}), ...(x.descricao ? { descricao: x.descricao } : {}), ...(x.pct != null ? { pct: x.pct } : {}),
+    }));
+    return proposto({ categoria: regra.categoria, fornecedor: regra.fornecedor, centroCusto: regra.centroCusto, comunidadeId: undefined, partes, nota: `Regra "${regra.padrao}" (dividida em ${partes.length} linhas)` });
+  }
+  return proposto({ categoria: regra.categoria, fornecedor: regra.fornecedor, centroCusto: regra.centroCusto, comunidadeId: regra.comunidadeId ?? m.comunidadeId, nota: `Regra "${regra.padrao}"` });
+}
+
 export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[] {
   const cat = (codigo: string) => ctx.categorias.find((c) => c.codigo === codigo)?.nome;
   const existe = (nome: string) => ctx.categorias.some((c) => c.nome === nome && c.ativo !== false);
@@ -122,7 +144,9 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
   for (const h of [...ctx.historico].sort((a, b) => a.data.localeCompare(b.data))) if (h.estado === 'validado' && h.categoria && !h.conciliadoCom) memoria.set(`${h.valor > 0 ? '+' : '-'}${chaveDescricao(h.descricao)}`, h);
 
   return movs.map((m0) => {
-    if (m0.estado === 'validado' || m0.estado === 'rever' || m0.conciliadoCom) return m0;
+    // Os "para rever" criados pela proposta (nota "REVER - …" ou depósito sem Jotform) voltam a ser propostos;
+    // os validados, os conciliados e os marcados à mão ficam como estão.
+    if (m0.estado === 'validado' || m0.conciliadoCom || (m0.estado === 'rever' && !reverAutomatico(m0))) return m0;
     const m: MovBanco = { ...m0, contabilizar: false };
     const d = norm(m.descricao);
     const v = Math.abs(m.valor);
@@ -175,7 +199,12 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
       }
     }
 
-    // 3. Vencimentos e Segurança Social pela previsão dos custos fixos.
+    // 3. Regras por texto do banco (a mais específica: o texto mais comprido). Uma regra completa (com comunidade
+    //    ou dividida) aplica-se já; sem comunidade, os custos fixos e a memória completam e a regra fica em último caso.
+    const regra = regraDoMovimento(m.descricao, ctx.regras, existe);
+    if (regra && (regra.comunidadeId || regra.partes?.length)) return aplicarRegra(m, regra, proposto);
+
+    // 4. Fallback: vencimentos e Segurança Social pela previsão dos custos fixos.
     if (m.valor < 0 && SEG_SOCIAL.test(d) && cat('01.02')) {
       const partes = repartirPorPrevisao(m.valor, ctx.custosFixos, '01.02', p);
       return proposto({ categoria: cat('01.02'), centroCusto: 'CC03', ...(partes.length > 1 ? { partes } : partes.length ? { comunidadeId: partes[0].comunidadeId } : {}), nota: partes.length ? 'Repartida pela previsão dos custos fixos' : 'Sem previsão nos custos fixos' });
@@ -212,25 +241,15 @@ export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[]
       if (VENCIMENTO.test(d) && ativos.length) return { ...m, categoria: cat('01.01'), centroCusto: 'CC03', estado: 'rever', nota: `REVER - Dados inconsistentes: ${v.toFixed(2)} € não corresponde a nenhum vencimento previsto` };
     }
 
-    // 4. Memória: o mesmo descritivo já validado.
+    // 5. Memória: o mesmo descritivo já validado.
     const mem = memoria.get(`${m.valor > 0 ? '+' : '-'}${chaveDescricao(m.descricao)}`);
     if (mem && !(m.valor > 0 && TRANSFERENCIA.test(d))) {
       const { categoria, comunidadeId, centroCusto, fornecedor, contaAnalitica, projeto } = mem;
       return proposto({ categoria, comunidadeId, centroCusto, fornecedor, contaAnalitica, projeto, nota: 'Igual a um movimento já classificado' });
     }
 
-    // 5. Regras por texto do banco.
-    const regra = ctx.regras.find((x) => x.ativo !== false && existe(x.categoria) && temPalavra(m.descricao, x.padrao));
-    if (regra?.partes?.length) {
-      // Regra com divisões: valores fixos e percentagens do que sobra.
-      const valores = resolverPartes(m.valor, regra.partes);
-      const partes = regra.partes.map((x, i) => ({
-        comunidadeId: x.comunidadeId, valor: valores[i],
-        ...(x.categoria ? { categoria: x.categoria } : {}), ...(x.centroCusto ? { centroCusto: x.centroCusto } : {}), ...(x.descricao ? { descricao: x.descricao } : {}), ...(x.pct != null ? { pct: x.pct } : {}),
-      }));
-      return proposto({ categoria: regra.categoria, fornecedor: regra.fornecedor, centroCusto: regra.centroCusto, comunidadeId: undefined, partes, nota: `Regra "${regra.padrao}" (dividida em ${partes.length} linhas)` });
-    }
-    if (regra) return proposto({ categoria: regra.categoria, fornecedor: regra.fornecedor, centroCusto: regra.centroCusto, comunidadeId: regra.comunidadeId ?? m.comunidadeId, nota: `Regra "${regra.padrao}"` });
+    // 6. A regra sem comunidade, quando os custos fixos e a memória não resolveram.
+    if (regra) return aplicarRegra(m, regra, proposto);
 
     // 6. Transferências e MB WAY diretos (entradas): ofertas da comunidade Geral (decisão do CAF).
     if (m.valor > 0 && TRANSFERENCIA.test(d) && cat('R1.02')) return proposto({ ...ofertaOuDizimo(), nota: 'Transferência ou MB WAY direto: Geral' });
