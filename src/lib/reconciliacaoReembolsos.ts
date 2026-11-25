@@ -121,7 +121,7 @@ interface Par { mov: MovBanco; sub: SubmissaoReembolso; regra: RegraMatch; bruto
  * Reconcilia as saídas de reembolso com as submissões. `usados`: submissões já associadas noutra execução
  * (não voltam a ser escolhidas, mas os telefones delas servem para inferir os de outras submissões da mesma pessoa).
  */
-export function reconciliarReembolsos(movs: MovBanco[], todas: SubmissaoReembolso[], usados: Set<string> = new Set(), p: ParametrosReembolsos = PARAMETROS_REEMBOLSOS): ResultadoReembolso[] {
+export function reconciliarReembolsos(movs: MovBanco[], todas: SubmissaoReembolso[], usados: Set<string> = new Set(), p: ParametrosReembolsos = PARAMETROS_REEMBOLSOS, pessoasRef: { nome: string; telefone?: string }[] = []): ResultadoReembolso[] {
   const alvo = movs.map((m) => ({ m, tipo: tipoMovimento(m) })).filter((x): x is { m: MovBanco; tipo: TipoMov } => !!x.tipo);
   const telReg = new Map(todas.map((s) => [s.id, normalizarTelefones(s.telefone)]));
   // Telefones já usados por cada pessoa (nome normalizado), para inferir o de submissões sem telefone.
@@ -131,6 +131,14 @@ export function reconciliarReembolsos(movs: MovBanco[], todas: SubmissaoReembols
     if (!n) continue;
     const set = telPessoa.get(n) ?? new Set<string>();
     telReg.get(s.id)!.forEach((t) => set.add(t));
+    telPessoa.set(n, set);
+  }
+  // A base de Pessoas (nome + telemóvel) também serve para inferir o telefone de quem submeteu sem ele.
+  for (const x of pessoasRef) {
+    const n = normNome(x.nome);
+    if (!n || !x.telefone) continue;
+    const set = telPessoa.get(n) ?? new Set<string>();
+    normalizarTelefones(x.telefone).forEach((t) => set.add(t));
     telPessoa.set(n, set);
   }
   const elegiveis = todas.filter((s) => !CANCELADO(s.estado) && !usados.has(s.id));

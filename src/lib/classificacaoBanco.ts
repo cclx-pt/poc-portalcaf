@@ -5,6 +5,7 @@
  */
 import { norm, periodo as periodoDe, r2 } from './format';
 import { custoAtivo, repartir, valorImputadoNoMes } from './resumos';
+import { comunidadePorMbway, type Pessoa } from './pessoasBase';
 import type { Categoria, CustoFixo, Lote, MovBanco, ParteMov } from './types';
 
 /** Divisão guardada numa regra: valor fixo (positivo) ou percentagem do que sobra depois dos valores fixos. */
@@ -85,6 +86,8 @@ export interface Contexto {
   custosFixos: CustoFixo[];
   /** Contribuições do Contribuir (com o líquido), para conferir os lotes IFTHENPAY. */
   contribuir?: Lote[];
+  /** Base de Pessoas (só Master e CAF): o MB Way mascarado de uma saída identifica a comunidade. */
+  pessoas?: Pessoa[];
 }
 
 /** Reparte um valor pela previsão dos custos fixos de uma categoria (código) no mês, na proporção do valor imputado. */
@@ -135,6 +138,20 @@ function aplicarRegra(m: MovBanco, regra: RegraBanco, proposto: (patch: Partial<
 }
 
 export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[] {
+  const propostos = proporSemPessoas(movs, ctx);
+  if (!ctx.pessoas?.length) return propostos;
+  // Saídas MB Way ainda sem comunidade: a base de Pessoas identifica-a pelo telemóvel mascarado (decisão do CAF, 25/11/2026).
+  return propostos.map((r, i) => {
+    if (r === movs[i] || r.valor >= 0 || r.conciliadoCom || r.partes?.length || r.comunidadeId) return r;
+    const x = comunidadePorMbway(ctx.pessoas!, r.descricao);
+    if (!x) return r;
+    const texto = x.comunidadeId ? `MB Way ${x.mascara}: ${x.nomes.join(', ')} (Pessoas)` : `MB Way ${x.mascara}: ${x.nomes.join(', ')} (comunidades diferentes; escolha)`;
+    const nota = r.estado === 'por-classificar' || !r.nota ? texto : `${r.nota} · ${texto}`;
+    return { ...r, ...(x.comunidadeId ? { comunidadeId: x.comunidadeId } : {}), nota };
+  });
+}
+
+function proporSemPessoas(movs: MovBanco[], ctx: Contexto): MovBanco[] {
   const cat = (codigo: string) => ctx.categorias.find((c) => c.codigo === codigo)?.nome;
   const existe = (nome: string) => ctx.categorias.some((c) => c.nome === nome && c.ativo !== false);
   const deps = ctx.depositos.flatMap((l) => l.registos.map((x) => ({ ...x, comunidadeId: l.comunidadeId, usado: false })));

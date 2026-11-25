@@ -343,3 +343,22 @@ describe('ordem da proposta: regras primeiro, custos fixos em fallback', () => {
     expect(c).toEqual(val);
   });
 });
+
+describe('comunidade pelo MB Way (base de Pessoas)', () => {
+  const p = (nome: string, telefone: string, comunidadeId: string) => ({ id: nome, nome, telefone, comunidadeId, manual: false, fontes: [], atualizadoEm: '', atualizadoPor: '' });
+  it('saída MB Way sem outra classificação: fica com a comunidade da pessoa e a nota', () => {
+    const [m] = proporClassificacao([mov('1', '2026-11-05', -25, 'Trf Mbway 966XXX014')], ctx({ pessoas: [p('Ana Silva', '966123014', 'almada')] }));
+    expect(m).toMatchObject({ estado: 'por-classificar', comunidadeId: 'almada' });
+    expect(m.nota).toBe('MB Way 966XXX014: Ana Silva (Pessoas)');
+  });
+  it('proposta sem comunidade (regra genérica) fica completa com a comunidade da pessoa', () => {
+    const regras = [{ id: 'm', padrao: 'MBWAY', categoria: '09.03 Outros gastos identificados', ativo: true }];
+    const [m] = proporClassificacao([mov('1', '2026-11-05', -25, 'Trf Mbway 966XXX014')], ctx({ regras, pessoas: [p('Ana', '966123014', 'almada')] }));
+    expect(m).toMatchObject({ estado: 'proposto', comunidadeId: 'almada', categoria: '09.03 Outros gastos identificados' });
+  });
+  it('pessoas de comunidades diferentes: não escolhe, só indica os nomes', () => {
+    const [m] = proporClassificacao([mov('1', '2026-11-05', -25, 'Trf Mbway 912XXX345')], ctx({ pessoas: [p('Rui', '912000345', 'moita'), p('Eva', '912777345', 'porto')] }));
+    expect(m.comunidadeId).toBeUndefined();
+    expect(m.nota).toBe('MB Way 912XXX345: Eva, Rui (comunidades diferentes; escolha)');
+  });
+});

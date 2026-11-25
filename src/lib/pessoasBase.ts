@@ -120,6 +120,19 @@ export function validarPessoa(v: { nome: string; telefone: string; email?: strin
 /** Telemóvel como aparece no descritivo MB Way do extrato: 3 primeiros + XXX + 3 últimos (966XXX014). */
 export const mascaraMbway = (tel?: string) => (tel && /^\d{9}$/.test(tel) ? `${tel.slice(0, 3)}XXX${tel.slice(6)}` : '');
 
+/**
+ * Pessoas cujo telemóvel encaixa no MB Way mascarado de um descritivo do extrato ("Trf Mbway 966XXX014").
+ * `comunidadeId` só vem preenchida quando todas são da mesma comunidade. null = sem MB Way ou sem ninguém.
+ */
+export function comunidadePorMbway(ps: Pessoa[], descricao: string): { mascara: string; nomes: string[]; comunidadeId?: string } | null {
+  const m = extrairTelefoneMascarado(descricao);
+  if (!m) return null;
+  const achadas = ps.filter((p) => (p.telefone ?? '').startsWith(m.prefixo) && (p.telefone ?? '').endsWith(m.sufixo));
+  if (!achadas.length) return null;
+  const coms = [...new Set(achadas.map((p) => p.comunidadeId).filter(Boolean))] as string[];
+  return { mascara: `${m.prefixo}XXX${m.sufixo}`, nomes: [...new Set(achadas.map((p) => p.nome))].sort((a, b) => a.localeCompare(b, 'pt')), comunidadeId: coms.length === 1 ? coms[0] : undefined };
+}
+
 /** Pesquisa por nome (sem acentos), telefone, máscara MB Way (966XXX014), NIF ou e-mail. */
 export function procurarPessoas(ps: Pessoa[], q: string): Pessoa[] {
   const t = normNome(q);
