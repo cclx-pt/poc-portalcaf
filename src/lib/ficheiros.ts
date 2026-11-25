@@ -24,12 +24,15 @@ const pareceDados = (r: unknown[]) => {
   return cs.some((c) => /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$|^\d{4}-\d{2}-\d{2}/.test(c)) && cs.some((c) => /^-?[\d.\s]*\d,\d{1,2}$|^-?\d+(\.\d+)?$/.test(c.replace(/€/g, '').trim()));
 };
 
-export function paraTabela(rows: unknown[][]): Tabela {
+/** Linha de cabeçalho: 'auto' deteta; 'sim' usa a do cabeçalho (ou a 1.ª); 'nao' trata todas as linhas como dados. */
+export type ModoCabecalho = 'auto' | 'sim' | 'nao';
+
+export function paraTabela(rows: unknown[][], cabecalho: ModoCabecalho = 'auto'): Tabela {
   const limpas = rows.filter((r) => r.some((c) => c != null && String(c).trim() !== ''));
   if (!limpas.length) return { colunas: [], linhas: [] };
   const h = encontrarCabecalho(limpas);
   // Ficheiro sem linha de cabeçalho (ex.: extrato preparado à mão): colunas "Coluna 1…" e nenhuma linha se perde.
-  if (h === 0 && pareceDados(limpas[0])) {
+  if (cabecalho === 'nao' || (cabecalho === 'auto' && h === 0 && pareceDados(limpas[0]))) {
     const n = Math.max(...limpas.map((r) => r.length));
     const colunas = Array.from({ length: n }, (_, i) => `Coluna ${i + 1}`);
     return { colunas, linhas: limpas.map((r) => Object.fromEntries(colunas.map((c, i) => [c, r[i] ?? ''])) as Linha) };
@@ -50,7 +53,7 @@ export function paraTabela(rows: unknown[][]): Tabela {
   return { colunas, linhas };
 }
 
-async function lerXlsx(file: File): Promise<Tabela> {
+async function lerXlsx(file: File, cabecalho: ModoCabecalho): Promise<Tabela> {
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(await file.arrayBuffer());
@@ -68,21 +71,21 @@ async function lerXlsx(file: File): Promise<Tabela> {
     });
     rows.push(vals);
   });
-  return paraTabela(rows);
+  return paraTabela(rows, cabecalho);
 }
 
-async function lerCsv(file: File): Promise<Tabela> {
+async function lerCsv(file: File, cabecalho: ModoCabecalho): Promise<Tabela> {
   let texto = await file.text();
   // Extratos bancários portugueses vêm muitas vezes em Windows-1252.
   if (texto.includes('�')) texto = new TextDecoder('windows-1252').decode(await file.arrayBuffer());
   const res = Papa.parse<unknown[]>(texto, { skipEmptyLines: true });
-  return paraTabela(res.data as unknown[][]);
+  return paraTabela(res.data as unknown[][], cabecalho);
 }
 
 /** Lê um ficheiro CSV ou Excel exportado do Jotform ou do homebanking. */
-export async function lerFicheiro(file: File): Promise<Tabela> {
+export async function lerFicheiro(file: File, cabecalho: ModoCabecalho = 'auto'): Promise<Tabela> {
   const nome = file.name.toLowerCase();
-  if (nome.endsWith('.xlsx') || nome.endsWith('.xlsm')) return lerXlsx(file);
+  if (nome.endsWith('.xlsx') || nome.endsWith('.xlsm')) return lerXlsx(file, cabecalho);
   if (nome.endsWith('.xls')) throw new Error('Formato .xls antigo: abra no Excel e guarde como .xlsx ou .csv.');
-  return lerCsv(file);
+  return lerCsv(file, cabecalho);
 }

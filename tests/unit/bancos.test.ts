@@ -167,3 +167,23 @@ describe('amostra do extrato', () => {
     expect(html).toContain('→ Montante (com sinal)');
   });
 });
+
+describe('extrato com ou sem linha de cabeçalho (indicado na conta ou ao importar)', () => {
+  it('"não": todas as linhas são movimentos, colunas "Coluna 1…", mesmo quando a 1.ª linha parece um cabeçalho', async () => {
+    const { paraTabela } = await import('../../src/lib/ficheiros');
+    const t = paraTabela([['Data', 'Descrição', 'Valor'], ['18/11/2026', 'X', '1,00']], 'nao');
+    expect(t.colunas).toEqual(['Coluna 1', 'Coluna 2', 'Coluna 3']);
+    expect(t.linhas).toHaveLength(2);
+  });
+  it('"sim": a 1.ª linha é o cabeçalho, mesmo quando parece um movimento', async () => {
+    const { paraTabela } = await import('../../src/lib/ficheiros');
+    const t = paraTabela([['18/11/2026', 'Fundo X', '1.000,00'], ['19/11/2026', 'Fundo X', '1.010,00']], 'sim');
+    expect(t.colunas).toEqual(['18/11/2026', 'Fundo X', '1.000,00']);
+    expect(t.linhas).toHaveLength(1);
+  });
+  it('"auto" mantém a deteção de hoje', async () => {
+    const { paraTabela } = await import('../../src/lib/ficheiros');
+    expect(paraTabela([['18/11/2026', 'X', '-0,37']]).colunas[0]).toBe('Coluna 1');
+    expect(paraTabela([['Data mov.', 'Descrição', 'Montante'], ['18/11/2026', 'X', '1,00']]).colunas[0]).toBe('Data mov.');
+  });
+});

@@ -3,7 +3,7 @@ import { Modal, mensagemErro } from './ui';
 import { LogoConta } from './LogoBanco';
 import { auditar, gravar } from '../lib/db';
 import { detetarBanco, mapaCompleto, mapaDoBanco, mapearExtrato, sugerirMapaBanco, type MapaBanco } from '../lib/banco';
-import { lerFicheiro } from '../lib/ficheiros';
+import { lerFicheiro, type ModoCabecalho } from '../lib/ficheiros';
 import { reduzirImagem } from '../lib/imagem';
 import type { Linha } from '../lib/fontes';
 import type { Conta } from '../lib/types';
@@ -47,6 +47,19 @@ export function AmostraExtrato({ colunas, linhas, mapa, n = 3 }: { colunas: stri
   );
 }
 
+/** Pergunta se o extrato tem linha de cabeçalho (automático, sim ou não). */
+export function CampoCabecalho({ valor, onChange }: { valor: ModoCabecalho; onChange: (v: ModoCabecalho) => void }) {
+  return (
+    <label className="campo" style={{ maxWidth: 320 }}>O extrato tem linha de cabeçalho?
+      <select value={valor} onChange={(e) => onChange(e.target.value as ModoCabecalho)}>
+        <option value="auto">Automático (o portal deteta)</option>
+        <option value="sim">Sim: a 1.ª linha tem os nomes das colunas</option>
+        <option value="nao">Não: todas as linhas são movimentos</option>
+      </select>
+    </label>
+  );
+}
+
 export const limparMapa = (m: MapaBanco) => Object.fromEntries(Object.entries(m).filter(([, v]) => v)) as MapaBanco;
 
 /** Resumo do mapeamento de uma conta, para a tabela das contas. */
@@ -63,12 +76,15 @@ export function EditorConta({ conta, email, onFechar, onGuardado }: { conta: Con
   const [logo, setLogo] = useState<string | undefined>(conta.logo);
   const [msg, setMsg] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [cabecalho, setCabecalho] = useState<ModoCabecalho>(conta.extratoCabecalho ?? 'auto');
+  const [exemplo, setExemplo] = useState<File | null>(null);
   const teste = linhas.length && mapaCompleto(mapa) ? mapearExtrato(linhas, mapa) : null;
 
-  async function lerExemplo(f: File) {
+  async function lerExemplo(f: File, modo: ModoCabecalho = cabecalho) {
     setMsg(null);
     try {
-      const t = await lerFicheiro(f);
+      setExemplo(f);
+      const t = await lerFicheiro(f, modo);
       const b = detetarBanco(t.colunas);
       setColunas(t.colunas); setLinhas(t.linhas);
       const atuais = Object.values(mapa).filter((v): v is string => !!v);
@@ -84,9 +100,12 @@ export function EditorConta({ conta, email, onFechar, onGuardado }: { conta: Con
     setOcupado(true); setMsg(null);
     try {
       const temMapa = mapaCompleto(mapa);
-      const nova: Conta = { ...conta, logo, mapa: temMapa ? limparMapa(mapa) : undefined, mapaColunas: temMapa ? colunas : undefined };
+      const nova: Conta = { ...conta, logo, mapa: temMapa ? limparMapa(mapa) : undefined, mapaColunas: temMapa ? colunas : undefined, extratoCabecalho: cabecalho === 'auto' ? undefined : cabecalho };
+      if (!nova.extratoCabecalho) delete nova.extratoCabecalho;
+      if (!nova.mapa) { delete nova.mapa; delete nova.mapaColunas; }
+      if (!nova.logo) delete nova.logo;
       await gravar('contas', nova);
-      await auditar(email, 'conta: extrato e logótipo', `${conta.nome}: ${temMapa ? 'mapeamento guardado' : 'sem mapeamento'}${logo ? ', com logótipo' : ''}`);
+      await auditar(email, 'conta: extrato e logótipo', `${conta.nome}: ${temMapa ? 'mapeamento guardado' : 'sem mapeamento'}${cabecalho === 'auto' ? '' : `, extrato ${cabecalho === 'sim' ? 'com' : 'sem'} cabeçalho`}${logo ? ', com logótipo' : ''}`);
       onGuardado();
     } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
@@ -104,6 +123,11 @@ export function EditorConta({ conta, email, onFechar, onGuardado }: { conta: Con
 
       <h3>Colunas do extrato</h3>
       <p className="small">Carregue um extrato desta conta, tal como sai do homebanking, e indique as colunas. Ao importar, o portal reconhece o ficheiro, escolhe esta conta e aplica estas colunas.</p>
+      <CampoCabecalho valor={cabecalho} onChange={(v) => {
+        setCabecalho(v);
+        // Volta a ler o exemplo com a nova opção: as colunas mudam (com cabeçalho: os nomes; sem: "Coluna 1…").
+        if (exemplo) { setMapa({}); void lerExemplo(exemplo, v); }
+      }} />
       <button className="sec" onClick={() => document.getElementById('exemplo-extrato')?.click()}>Carregar extrato de exemplo</button>
       <input id="exemplo-extrato" type="file" accept=".csv,.xlsx,.xls,.txt" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void lerExemplo(f); }} />
       <AmostraExtrato colunas={colunas} linhas={linhas} mapa={mapa} />
