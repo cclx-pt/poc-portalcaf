@@ -28,6 +28,18 @@ export interface PesosMes {
   gravadoEm: string;
 }
 
+/** Como se mostra a tabela anual: peso em % ou pessoas (jovens e adultos por celebração) usadas na proposta. */
+export type VistaPesos = 'pct' | 'pessoas';
+
+/** Texto de uma célula da tabela anual, sem decimais; null quando o mês não tem valor para a comunidade. */
+export function textoPeso(g: Pick<PesosMes, 'metodo' | 'pesos' | 'proposta'> | undefined, c: string, vista: VistaPesos): string | null {
+  if (!g) return null;
+  const v = vista === 'pct' ? g.pesos[c] : g.proposta?.[g.metodo]?.[c]?.valor;
+  if (v == null || !Number.isFinite(v)) return null;
+  const n = Math.round(v).toLocaleString('pt-PT');
+  return vista === 'pct' ? `${n}%` : n;
+}
+
 /** Soma dos pesos (para validar 100 %). */
 export const somaPesos = (p: Record<string, number>) => Math.round(Object.values(p).reduce((t, v) => t + (Number(v) || 0), 0) * 100) / 100;
 /** Os pesos de um mês são válidos quando somam 100 % (com tolerância de arredondamento) e nenhum é negativo. */

@@ -4,7 +4,7 @@ import { Estado, mensagemErro, useCarregar, useFiltros, useFocarErro } from '../
 import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { auditar, lerConfigAssistencia, listarComunidades, listarLotes } from '../lib/db';
 import { MESES, MESES_CURTOS, num } from '../lib/format';
-import { fecharEm100, gravarPesosMes, gravarPesosVarios, listarPesos, NOME_METODO, pesosValidos, somaPesos, type MetodoPeso, type PesosMes } from '../lib/pesos';
+import { fecharEm100, gravarPesosMes, gravarPesosVarios, listarPesos, NOME_METODO, pesosValidos, somaPesos, textoPeso, type MetodoPeso, type PesosMes, type VistaPesos } from '../lib/pesos';
 import { recalcularAno } from '../lib/recalcular';
 import { comunidadeAtiva, destinoFusao, propostaPesos } from '../lib/resumos';
 import type { Comunidade } from '../lib/types';
@@ -27,6 +27,7 @@ export default function Pesos() {
   }, [ano, acesso?.email]);
   const gravados = useCarregar(() => listarPesos(ano), [ano]);
   const [metodo, setMetodo] = useState<MetodoPeso>('media');
+  const [vista, setVista] = useState<VistaPesos>('pct');
   const [mes, setMes] = useState<number>(() => (ano === new Date().getFullYear() ? new Date().getMonth() + 1 : 12));
   const [edicao, setEdicao] = useState<Record<string, string> | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -139,18 +140,26 @@ export default function Pesos() {
       <Estado aCarregar={aCarregar} erro={coms.erro || ass.erro || gravados.erro} />
       {!aCarregar && <>
         <div className="sec">
-          <h2>Pesos gravados por mês</h2>
+          <div className="linha" style={{ justifyContent: 'space-between' }}>
+            <h2>Pesos gravados por mês</h2>
+            <div className="abas" role="tablist" aria-label="Mostrar em">
+              {([['pct', '%'], ['pessoas', 'Pessoas']] as const).map(([k, rot]) => (
+                <button key={k} role="tab" aria-selected={vista === k} className={vista === k ? 'ativa' : ''} onClick={() => setVista(k)}>{rot}</button>
+              ))}
+            </div>
+          </div>
           <div className="tabela"><table>
             <thead><tr><th>Comunidade</th>{MESES_CURTOS.map((m, i) => <th key={m} className="num"><button className="link" onClick={() => { if (!sujo || confirm('Há alterações por gravar neste mês. Mudar de mês e perdê-las?')) { setEdicao(null); setMes(i + 1); } }}>{m}</button></th>)}</tr></thead>
             <tbody>{comunidades.map((c) => (
               <tr key={c.id}><td>{c.nome}</td>{MESES_CURTOS.map((m, i) => {
                 const g = porMes.get(i + 1);
-                return <td key={m} className={`num${i + 1 === mes ? ' mes-escolhido' : ''}`}>{g?.pesos[c.id] != null ? <>{num(g.pesos[c.id], 1)}%{g.manual ? <sup title="Alterado à mão"> ✎</sup> : null}</> : <span className="muted">—</span>}</td>;
+                const t = textoPeso(g, c.id, vista);
+                return <td key={m} className={`num${i + 1 === mes ? ' mes-escolhido' : ''}`}>{t != null ? <>{t}{g?.manual && vista === 'pct' ? <sup title="Alterado à mão"> ✎</sup> : null}</> : <span className="muted">—</span>}</td>;
               })}</tr>
             ))}</tbody>
             <tfoot><tr><td>Método</td>{MESES_CURTOS.map((m, i) => { const g = porMes.get(i + 1); return <td key={m} className="num small">{g ? (g.manual ? 'À mão' : NOME_METODO[g.metodo]) : 'Auto'}</td>; })}</tr></tfoot>
           </table></div>
-          <p className="muted small">"—": sem pesos gravados (usa a média automática dos 12 meses). ✎: alterado à mão. Clique num mês para ver a simulação e editar.</p>
+          <p className="muted small">{vista === 'pct' ? '% do peso de cada comunidade.' : 'Pessoas: jovens e adultos por celebração nos últimos 12 meses, pelo método do mês (média ou mediana).'} Valores sem decimais. "—": sem pesos gravados (usa a média automática dos 12 meses). ✎: alterado à mão. Clique num mês para ver a simulação e editar.</p>
         </div>
 
         <div className="sec card">

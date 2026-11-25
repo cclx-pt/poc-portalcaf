@@ -13,3 +13,18 @@ describe('pesos gravados', () => {
     expect(somaPesos(p)).toBe(100);
   });
 });
+
+describe('tabela dos pesos gravados: pessoas ou %, sem decimais', () => {
+  const g = { metodo: 'mediana', pesos: { almada: 40.37, porto: 59.63 }, proposta: { media: { almada: { valor: 11.2, pct: 38 } }, mediana: { almada: { valor: 12.6, pct: 40.37 }, porto: { valor: 18.4, pct: 59.63 } } } } as never;
+  it('% arredondada à unidade', async () => {
+    const { textoPeso } = await import('../../src/lib/pesos');
+    expect(textoPeso(g, 'almada', 'pct')).toBe('40%');
+    expect(textoPeso(g, 'porto', 'pct')).toBe('60%');
+  });
+  it('pessoas: jovens e adultos por celebração pelo método do mês, sem decimais', async () => {
+    const { textoPeso } = await import('../../src/lib/pesos');
+    expect(textoPeso(g, 'almada', 'pessoas')).toBe('13');
+    expect(textoPeso(g, 'lisboa', 'pessoas')).toBeNull();
+    expect(textoPeso(undefined, 'almada', 'pct')).toBeNull();
+  });
+});
