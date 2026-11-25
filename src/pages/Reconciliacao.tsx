@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { LogoBanco } from '../components/LogoBanco';
+import { RevisaoReembolsos } from '../components/RevisaoReembolsos';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { useAvisoSaida } from '../components/SaidaSemGravar';
-import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia } from '../lib/db';
+import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia, lerConfigReembolsos } from '../lib/db';
+import { submissoesDeLotes } from '../lib/reconciliacaoReembolsos';
 import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, resolverPartes, sugerirPadrao, candidatosReembolso, registosConciliados, consolidacaoMes, type RegistoJotform, temPalavra, validar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
 import { bancoDaConta } from '../lib/banco';
 import { dataPT, eur, MESES, r2 } from '../lib/format';
@@ -20,7 +22,7 @@ type MovVista = MovBanco & { loteId: string; contaId: string };
 const dataPt = (d: string) => d.split('-').reverse().join('/');
 
 export default function Reconciliacao() {
-  const { acesso } = useAuth();
+  const { acesso, temNivel } = useAuth();
   const { ano } = useFiltros();
   const contas = useCarregar(listarContas, []);
   const coms = useCarregar(listarComunidades, []);
@@ -38,6 +40,12 @@ export default function Reconciliacao() {
     return { depositos, despesas: [...despAntes, ...desp], contribuir };
   }, [ano, acesso?.email]);
   const cfixos = useCarregar(() => listarCustosFixos(acesso!), [acesso?.email]);
+  // Reembolsos MB Way: submissões do Registo de Despesas (com telefone e nome só no nível confidencial) e janela de datas.
+  const conf = temNivel('confidencial');
+  const reemb = useCarregar(async () => {
+    const [atual, antes, parametros] = await Promise.all([listarLotes(acesso!, 'despesas', ano, conf), listarLotes(acesso!, 'despesas', ano - 1, conf), lerConfigReembolsos()]);
+    return { subs: submissoesDeLotes([...antes, ...atual]), parametros };
+  }, [ano, acesso?.email, conf]);
   const [detalhe, setDetalhe] = useState<MovVista | null>(null);
   const [relDim, setRelDim] = useState<DimensaoRelatorio>('rubrica');
   const [filtro, setFiltro] = useState<Filtro>('todos');
@@ -45,7 +53,7 @@ export default function Reconciliacao() {
   const [alterados, setAlterados] = useState<Record<string, BancoLote>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [ocultas, setOcultas] = useState<string[]>([]);
-  const [vista, setVista] = useState<'mes' | 'relatorio'>('mes');
+  const [vista, setVista] = useState<'mes' | 'reembolsos' | 'relatorio'>('mes');
   // Extratos sempre por mês: por omissão, o último mês com movimentos neste ano.
   const mesesComDados = [...new Set((banco.dados ?? []).map((l) => l.mes))].sort((a, b) => a - b);
   const [mesEscolhido, setMes] = useState<number | null>(null);
@@ -66,8 +74,11 @@ export default function Reconciliacao() {
   const contagem = (e: EstadoMov) => movs.filter((m) => estadoDe(m) === e).length;
 
   function alterar(loteId: string, id: string, patch: Partial<MovBanco>) {
-    const base = alterados[loteId] ?? banco.dados!.find((l) => l.id === loteId)!;
-    setAlterados({ ...alterados, [loteId]: { ...base, registos: base.registos.map((m) => (m.id === id ? { ...m, ...patch } : m)) } });
+    // Atualização funcional: várias alterações seguidas (ex.: aplicar os reembolsos confirmados) não se perdem.
+    setAlterados((ant) => {
+      const base = ant[loteId] ?? banco.dados!.find((l) => l.id === loteId)!;
+      return { ...ant, [loteId]: { ...base, registos: base.registos.map((m) => (m.id === id ? { ...m, ...patch } : m)) } };
+    });
   }
   /** Propõe a classificação dos movimentos do mês (bancos visíveis) com o plano financeiro. */
   async function propor() {
@@ -134,10 +145,11 @@ export default function Reconciliacao() {
 
       <div className="abas" role="tablist">
         <button role="tab" aria-selected={vista === 'mes'} className={vista === 'mes' ? 'ativa' : ''} onClick={() => setVista('mes')}>Reconciliação do mês</button>
+        <button role="tab" aria-selected={vista === 'reembolsos'} className={vista === 'reembolsos' ? 'ativa' : ''} onClick={() => setVista('reembolsos')}>Reembolsos MB Way</button>
         <button role="tab" aria-selected={vista === 'relatorio'} className={vista === 'relatorio' ? 'ativa' : ''} onClick={() => setVista('relatorio')}>Relatório {ano}</button>
       </div>
       <div className="barra-bancos">
-        {vista === 'mes' ? <div className="mes-nav" role="group" aria-label="Mês do extrato">
+        {vista !== 'relatorio' ? <div className="mes-nav" role="group" aria-label="Mês do extrato">
           <button className="sec" aria-label="Mês anterior" disabled={mes <= 1} onClick={() => mudarMes(mes - 1)}><ChevronLeft size={16} aria-hidden /></button>
           <select value={mes} onChange={(e) => mudarMes(Number(e.target.value))} aria-label="Mês">
             {MESES.map((m, i) => <option key={m} value={i + 1}>{`${m.charAt(0).toUpperCase() + m.slice(1)} ${ano}${mesesComDados.includes(i + 1) ? '' : ' (sem extrato)'}`}</option>)}
@@ -182,6 +194,15 @@ export default function Reconciliacao() {
           </div>
         );
       })()}
+      {vista === 'reembolsos' && !banco.aCarregar && (
+        <>
+          <Estado aCarregar={reemb.aCarregar} erro={reemb.erro} />
+          {reemb.dados && <RevisaoReembolsos movs={movs} subs={reemb.dados.subs} parametros={reemb.dados.parametros}
+            usados={new Set((banco.dados ?? []).flatMap((l) => (alterados[l.id] ?? l).registos).filter((x) => x.conciliadoCom?.startsWith('despesas:')).flatMap((x) => x.conciliadoCom!.slice(9).split(',')))}
+            categorias={cats.dados ?? []} comunidades={coms.dados ?? []} ano={ano} mes={mes} email={acesso!.email} verPessoais={conf}
+            onAplicar={(loteId, m) => { const { loteId: _l, contaId: _c, ...limpo } = m as MovVista; void _l; void _c; alterar(loteId, m.id, limpo); }} />}
+        </>
+      )}
       {vista === 'mes' && <>
       {(() => {
         const c = controloMes(movs);

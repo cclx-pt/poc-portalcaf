@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { SyncEstado } from '../components/SyncEstado';
 import { ImportacaoManualJotform } from '../components/ImportacaoManualJotform';
+import { JanelaReembolsos } from '../components/JanelaReembolsos';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar, useMarcarAba } from '../components/ui';
 import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarDimensoes, listarRegrasBanco, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
@@ -412,6 +413,8 @@ export default function Configuracao() {
       </div>
 
       </>}
+
+      {area === 'estrutura' && <JanelaReembolsos />}
 
       {area === 'estrutura' && <div className="sec">
         <div className="linha" style={{ justifyContent: 'space-between' }}>
