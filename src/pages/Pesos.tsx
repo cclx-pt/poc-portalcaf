@@ -18,7 +18,7 @@ const periodoDe = (ano: number, mes: number) => `${ano}-${String(mes).padStart(2
  * o administrador pode alterar e gravar; a proposta original e o método ficam guardados.
  */
 export default function Pesos() {
-  const { acesso } = useAuth();
+  const { acesso, pode } = useAuth();
   const { ano } = useFiltros();
   const coms = useCarregar(listarComunidades, []);
   const ass = useCarregar(async () => {
@@ -99,16 +99,19 @@ export default function Pesos() {
         return novoRegisto(m, pesos, metodo, false, prop);
       }).filter((x) => somaPesos(x.pesos) > 0);
       await gravarPesosVarios(novos);
-      await auditar(acesso!.email, 'Peso das comunidades', `Recalculados os pesos de ${ano} (${NOME_METODO[metodo]}); ${novos.filter((x) => x.manual).length} meses alterados à mão mantidos`);
+      await auditar(acesso!.email, 'recalcular pesos', `Peso das comunidades (ADM-05) › Recalcular pesos de assistência: ${ano} (${NOME_METODO[metodo]}); ${novos.filter((x) => x.manual).length} meses alterados à mão mantidos`);
       setEdicao(null);
       await gravados.recarregar();
       setMsg(`Pesos de ${ano} recalculados pela ${NOME_METODO[metodo].toLowerCase()} (${novos.length} meses com assistência). Carregue em "Recalcular dados e distribuições" para os aplicar.`);
-    } catch (e) { setErro(mensagemErro(e)); } finally { setOcupado(false); }
+    } catch (e) {
+      setErro(mensagemErro(e));
+      await auditar(acesso!.email, 'recalcular pesos (falhou)', `Peso das comunidades (ADM-05): ${ano}: ${mensagemErro(e)}`);
+    } finally { setOcupado(false); }
   }
 
   async function recalcularDados() {
     setErro(null); setMsg(null); setOcupado(true);
-    try { await recalcularAno(acesso!, ano); setMsg(`Resumos e distribuições de ${ano} recalculados com os pesos gravados.`); }
+    try { await recalcularAno(acesso!, ano, 'Peso das comunidades (ADM-05) › Recalcular dados e distribuições'); setMsg(`Resumos e distribuições de ${ano} recalculados com os pesos gravados.`); }
     catch (e) { setErro(mensagemErro(e)); } finally { setOcupado(false); }
   }
 
@@ -127,8 +130,10 @@ export default function Pesos() {
             <option value="mediana">Mediana</option>
           </select>
         </label>
-        <button disabled={ocupado || !ass.dados} onClick={() => void recalcularPesos()}>Recalcular pesos de assistência</button>
-        <button className="sec" disabled={ocupado} onClick={() => void recalcularDados()}>Recalcular dados e distribuições</button>
+        {pode('recalcular') && <>
+          <button disabled={ocupado || !ass.dados} onClick={() => void recalcularPesos()}>Recalcular pesos de assistência</button>
+          <button className="sec" disabled={ocupado} onClick={() => void recalcularDados()}>Recalcular dados e distribuições</button>
+        </>}
       </div>
 
       <Estado aCarregar={aCarregar} erro={coms.erro || ass.erro || gravados.erro} />

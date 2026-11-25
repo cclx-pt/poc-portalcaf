@@ -4,8 +4,27 @@ import { calcularPublico, calcularPublicoSite, calcularResumosComReais } from '.
 import { hoje } from './format';
 import { listarPesos, pesosParaCalculo } from './pesos';
 
-/** Recalcula os resumos de um ano e a página pública. Só master e CAF (precisa de dados confidenciais). */
-export async function recalcularAno(a: Acesso, ano: number) {
+/** Perfis que podem recalcular resumos, distribuições e a página pública. */
+export const PAPEIS_RECALCULAR: Acesso['papel'][] = ['master', 'caf'];
+
+/**
+ * Recalcula os resumos de um ano e a página pública. Só Master e CAF (precisa de dados confidenciais).
+ * Fica sempre na auditoria: quem, de que ecrã, o ano e o resultado (também as tentativas recusadas e as falhas).
+ */
+export async function recalcularAno(a: Acesso, ano: number, origem = 'Recalcular') {
+  if (!PAPEIS_RECALCULAR.includes(a.papel)) {
+    await auditar(a.email, 'recalcular (recusado)', `${origem}: ${ano}, perfil sem permissão`);
+    throw new Error('Só os perfis Master e CAF podem recalcular.');
+  }
+  try {
+    return await recalcular(a, ano, origem);
+  } catch (e) {
+    await auditar(a.email, 'recalcular (falhou)', `${origem}: ${ano}: ${e instanceof Error ? e.message : String(e)}`);
+    throw e;
+  }
+}
+
+async function recalcular(a: Acesso, ano: number, origem: string) {
   const [comunidades, contribuir, depositos, despesas, assistencia, banco, custosFixos, fechos, categorias, assistenciaAnterior, configAss, pesos] = await Promise.all([
     listarComunidades(),
     listarLotes(a, 'contribuir', ano, true),
@@ -29,6 +48,6 @@ export async function recalcularAno(a: Acesso, ano: number) {
   b.set(doc(db, 'publico', String(ano)), site); // aberto: só o consolidado CCLX
   b.set(doc(db, 'publico_sites', String(ano)), publico); // com login: por comunidade
   await b.commit();
-  await auditar(a.email, 'recalcular', `Resumos e página pública de ${ano}`);
+  await auditar(a.email, 'recalcular', `${origem}: resumos e página pública de ${ano} (${resumos.length} resumos; ${[...mesesFechados].filter((p) => p.startsWith(`${ano}-`)).length} meses fechados; ${pesos.length} meses com pesos gravados)`);
   return { resumos, publico };
 }

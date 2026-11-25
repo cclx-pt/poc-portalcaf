@@ -14,7 +14,7 @@ interface Estado {
   temNivel: (n: Nivel) => boolean;
 }
 
-export type Acao = 'importar' | 'bancos' | 'aprovar' | 'configurar' | 'utilizadores' | 'publicar' | 'auditoria' | 'exportar' | 'custos' | 'registar';
+export type Acao = 'importar' | 'bancos' | 'aprovar' | 'configurar' | 'utilizadores' | 'publicar' | 'auditoria' | 'exportar' | 'custos' | 'registar' | 'recalcular';
 
 const PERMISSOES: Record<Acao, Papel[]> = {
   importar: ['master', 'caf'],
@@ -23,6 +23,7 @@ const PERMISSOES: Record<Acao, Papel[]> = {
   bancos: ['master', 'caf'],
   aprovar: ['master', 'caf'],
   publicar: ['master', 'caf'],
+  recalcular: ['master', 'caf'], // resumos, distribuições e pesos; fica sempre na auditoria
   auditoria: ['master', 'caf'],
   exportar: ['master', 'caf'],
   configurar: ['master', 'caf'],
