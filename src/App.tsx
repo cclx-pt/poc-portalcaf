@@ -27,7 +27,6 @@ import Utilizadores from './pages/Utilizadores';
 import Auditoria from './pages/Auditoria';
 import Pedidos from './pages/Pedidos';
 import Pesos from './pages/Pesos';
-import IntegracaoJotform from './pages/IntegracaoJotform';
 import type { ReactElement } from 'react';
 
 function Protegido() {
@@ -88,7 +87,7 @@ export default function App() {
             <Route path="auditoria" element={<Se acao="auditoria"><Auditoria /></Se>} />
             <Route path="pedidos" element={<Se acao="configurar"><Pedidos /></Se>} />
             <Route path="pesos" element={<Se acao="configurar"><Pesos /></Se>} />
-            <Route path="integracoes/jotform" element={<Se acao="importar"><IntegracaoJotform /></Se>} />
+            <Route path="integracoes/jotform" element={<Navigate to="/configuracao" state={{ aba: 'jotform' }} replace />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Route>
         </Routes>
