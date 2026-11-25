@@ -7,6 +7,7 @@ import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../compone
 import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia, lerConfigReembolsos } from '../lib/db';
 import { submissoesDeLotes } from '../lib/reconciliacaoReembolsos';
+import { comunidadePorMbway, listarPessoas } from '../lib/pessoas';
 import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, resolverPartes, sugerirPadrao, candidatosReembolso, registosConciliados, consolidacaoMes, type RegistoJotform, temPalavra, validar, podeValidar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
 import { bancoDaConta } from '../lib/banco';
 import { dataPT, eur, MESES, r2 } from '../lib/format';
@@ -46,6 +47,8 @@ export default function Reconciliacao() {
     const [atual, antes, parametros] = await Promise.all([listarLotes(acesso!, 'despesas', ano, conf), listarLotes(acesso!, 'despesas', ano - 1, conf), lerConfigReembolsos()]);
     return { subs: submissoesDeLotes([...antes, ...atual]), parametros };
   }, [ano, acesso?.email, conf]);
+  // Base de Pessoas (só Master e CAF): o MB Way mascarado das saídas identifica a pessoa e a comunidade.
+  const pessoas = useCarregar(async () => { try { return await listarPessoas(); } catch { return []; } }, [acesso?.email]);
   const [detalhe, setDetalhe] = useState<MovVista | null>(null);
   const [relDim, setRelDim] = useState<DimensaoRelatorio>('rubrica');
   const [filtro, setFiltro] = useState<Filtro>('todos');
@@ -88,7 +91,7 @@ export default function Reconciliacao() {
       const [deps, desp, despAntes, contrib] = await Promise.all([listarLotes(acesso!, 'depositos', ano), listarLotes(acesso!, 'despesas', ano), listarLotes(acesso!, 'despesas', ano - 1), listarLotes(acesso!, 'contribuir', ano)]);
       const ctx = {
         categorias: cats.dados ?? [], regras: regras.dados?.length ? regras.dados : REGRAS_INICIAIS, depositos: deps, despesas: [...despAntes, ...desp], contribuir: contrib,
-        historico: (banco.dados ?? []).flatMap((l) => (alterados[l.id] ?? l).registos), custosFixos: cfixos.dados ?? [],
+        historico: (banco.dados ?? []).flatMap((l) => (alterados[l.id] ?? l).registos), custosFixos: cfixos.dados ?? [], pessoas: pessoas.dados ?? [],
       };
       const novo = { ...alterados };
       for (const l of lotesMes) if (!ocultas.includes(l.contaId)) novo[l.id] = { ...l, registos: proporClassificacao(l.registos, ctx) };
@@ -199,7 +202,7 @@ export default function Reconciliacao() {
           <Estado aCarregar={reemb.aCarregar} erro={reemb.erro} />
           {reemb.dados && <RevisaoReembolsos movs={movs} subs={reemb.dados.subs} parametros={reemb.dados.parametros}
             usados={new Set((banco.dados ?? []).flatMap((l) => (alterados[l.id] ?? l).registos).filter((x) => x.conciliadoCom?.startsWith('despesas:')).flatMap((x) => x.conciliadoCom!.slice(9).split(',')))}
-            categorias={cats.dados ?? []} comunidades={coms.dados ?? []} ano={ano} mes={mes} email={acesso!.email} verPessoais={conf}
+            categorias={cats.dados ?? []} comunidades={coms.dados ?? []} ano={ano} mes={mes} email={acesso!.email} verPessoais={conf} pessoasRef={pessoas.dados ?? []}
             onAplicar={(loteId, m) => { const { loteId: _l, contaId: _c, ...limpo } = m as MovVista; void _l; void _c; alterar(loteId, m.id, limpo); }} />}
         </>
       )}
@@ -247,7 +250,8 @@ export default function Reconciliacao() {
               <tr key={`${m.contaId}-${m.id}`}>
                 <td><LogoBanco banco={bancoDe.get(m.contaId) ?? null} /></td>
                 <td>{dataPt(m.data)}</td>
-                <td className="small">{m.descricao}{m.estorno && <> <span className="etiqueta">Estorno</span></>}{m.nota && <div className={estadoDe(m) === 'rever' ? '' : 'muted'}>{m.nota}</div>}</td>
+                <td className="small">{m.descricao}{m.estorno && <> <span className="etiqueta">Estorno</span></>}{m.nota && <div className={estadoDe(m) === 'rever' ? '' : 'muted'}>{m.nota}</div>}
+                  {(() => { const x = m.valor < 0 && !(m.nota ?? '').includes('MB Way ') ? comunidadePorMbway(pessoas.dados ?? [], m.descricao) : null; return x ? <div className="muted">{`MB Way: ${x.nomes.join(', ')}${x.comunidadeId ? ` · ${(coms.dados ?? []).find((c) => c.id === x.comunidadeId)?.nome ?? x.comunidadeId}` : ' · comunidades diferentes'}`}</div> : null; })()}</td>
                 <td className="num">{m.valor > 0 ? eur(m.valor) : ''}</td>
                 <td className="num">{m.valor < 0 ? eur(-m.valor) : ''}</td>
                 <td><span className={'etiqueta' + (estadoDe(m) === 'validado' ? ' preta' : '')}>{ESTADO[estadoDe(m)]}</span>{m.conciliadoCom && <div className="small muted">Conciliado</div>}</td>

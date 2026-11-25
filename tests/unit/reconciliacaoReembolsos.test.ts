@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
+import { PARAMETROS_REEMBOLSOS as PARAMETROS,
   extrairTelefoneMascarado, normalizarTelefones, reconciliarReembolsos, relatorioInverso,
   type SubmissaoReembolso,
 } from '../../src/lib/reconciliacaoReembolsos';
@@ -207,5 +207,14 @@ describe('revisão: aplicar a decisão ao movimento', () => {
       mov('e', '2026-11-03', 'Trf Mbway 924XXX727', 45),
     ];
     expect(pendentesDeRevisao(ms).map((x) => x.id)).toEqual(['a']);
+  });
+});
+
+describe('telefones da base de Pessoas', () => {
+  it('uma submissão sem telefone usa o telemóvel da pessoa com o mesmo nome na base de Pessoas', () => {
+    const r = reconciliarReembolsos([mov('m1', '2026-11-04', 'Trf Mbway 966XXX014', -33)], [sub('R20260190', '2026-11-02', 33, { pessoa: 'Ana Silva' })],
+      new Set(), PARAMETROS, [{ nome: 'ana  silva', telefone: '966123014' }]);
+    expect(r[0]).toMatchObject({ regra: 2, submissoes: ['R20260190'] });
+    expect(r[0].observacoes.join(' ')).toMatch(/Telefone inferido/);
   });
 });

@@ -17,14 +17,16 @@ const ORDEM: ResultadoReembolso['estado'][] = ['Confirmado', 'Provável', 'Agreg
  * Despesas pelas regras da especificação (Unique ID, telefone parcial, valor e data). O revisor confirma, troca ou rejeita;
  * cada decisão fica na auditoria e na nota do movimento (grava com "Guardar classificação").
  */
-export function RevisaoReembolsos({ movs, subs, usados, parametros, categorias, comunidades, ano, mes, email, verPessoais, onAplicar }: {
+export function RevisaoReembolsos({ movs, subs, usados, parametros, categorias, comunidades, ano, mes, email, verPessoais, onAplicar, pessoasRef = [] }: {
   movs: Mov[]; subs: SubmissaoReembolso[]; usados: Set<string>; parametros: ParametrosReembolsos;
   categorias: Categoria[]; comunidades: Comunidade[]; ano: number; mes: number; email: string; verPessoais: boolean;
   onAplicar: (loteId: string, m: MovBanco) => void;
+  /** Base de Pessoas (nome + telemóvel), para inferir o telefone de quem submeteu sem ele. */
+  pessoasRef?: { nome: string; telefone?: string }[];
 }) {
   const [escolha, setEscolha] = useState<Record<string, string>>({});
   const pendentes = useMemo(() => pendentesDeRevisao(movs), [movs]);
-  const resultados = useMemo(() => reconciliarReembolsos(pendentes, subs, usados, parametros), [pendentes, subs, usados, parametros]);
+  const resultados = useMemo(() => reconciliarReembolsos(pendentes, subs, usados, parametros, pessoasRef), [pendentes, subs, usados, parametros, pessoasRef]);
   const porId = new Map(subs.map((s) => [s.id, s]));
   const movDe = new Map(pendentes.map((m) => [m.id, m]));
   const nomeCom = (id: string) => comunidades.find((c) => c.id === id)?.nome ?? id;

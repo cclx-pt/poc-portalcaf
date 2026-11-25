@@ -94,3 +94,30 @@ describe('pesquisa', () => {
     expect(procurarPessoas(ps, '')).toHaveLength(2);
   });
 });
+
+describe('máscara MB Way (como aparece no extrato)', () => {
+  it('mostra os 3 primeiros e os 3 últimos dígitos; a pesquisa aceita a máscara', async () => {
+    const { mascaraMbway } = await import('../../src/lib/pessoasBase');
+    expect(mascaraMbway('966123014')).toBe('966XXX014');
+    expect(mascaraMbway('')).toBe('');
+    const ps = [pessoa({ id: '1', nome: 'Ana', telefone: '966123014' }), pessoa({ id: '2', nome: 'Rui', telefone: '966555015' })];
+    expect(procurarPessoas(ps, '966XXX014').map((p) => p.id)).toEqual(['1']);
+    expect(procurarPessoas(ps, 'Trf Mbway 966xxx015').map((p) => p.id)).toEqual(['2']);
+  });
+});
+
+describe('MB Way do extrato → pessoa e comunidade', () => {
+  it('identifica a comunidade quando todas as pessoas com essa máscara são da mesma', async () => {
+    const { comunidadePorMbway } = await import('../../src/lib/pessoasBase');
+    const ps = [
+      pessoa({ id: '1', nome: 'Ana', telefone: '966123014', comunidadeId: 'almada' }),
+      pessoa({ id: '2', nome: 'Ana S.', telefone: '966999014', comunidadeId: 'almada' }),
+      pessoa({ id: '3', nome: 'Rui', telefone: '912000345', comunidadeId: 'moita' }),
+      pessoa({ id: '4', nome: 'Eva', telefone: '912777345', comunidadeId: 'porto' }),
+    ];
+    expect(comunidadePorMbway(ps, 'Trf Mbway 966XXX014')).toMatchObject({ comunidadeId: 'almada', nomes: ['Ana', 'Ana S.'] });
+    expect(comunidadePorMbway(ps, 'Trf Mbway 912XXX345')).toMatchObject({ comunidadeId: undefined, nomes: ['Eva', 'Rui'] });
+    expect(comunidadePorMbway(ps, 'EDP Comercial')).toBeNull();
+    expect(comunidadePorMbway(ps, 'Trf Mbway 933XXX111')).toBeNull();
+  });
+});
