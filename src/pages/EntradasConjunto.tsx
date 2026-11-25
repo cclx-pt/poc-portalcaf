@@ -114,7 +114,7 @@ export default function EntradasConjunto() {
         <div className="filtros" style={{ alignItems: 'flex-end' }}>
           <label className="campo">Origem
             <select value={origem} onChange={(e) => { setOrigem(e.target.value as typeof origem); setCategoria('todas'); }}>
-              <option value="todas">Todas</option><option value="contribuir">Contribuições</option><option value="depositos">Depósitos de coletas</option>
+              <option value="todas">Todas</option><option value="contribuir">Contribuir</option><option value="depositos">Depósitos de coletas</option>
             </select>
           </label>
           <label className="campo">De
@@ -150,7 +150,7 @@ export default function EntradasConjunto() {
 
         <div className="card sec">
           <h2>Por mês</h2>
-          <GraficoBarras dados={grafico} series={[{ key: 'contribuir', nome: 'Contribuições', cor: 'entradas' }, { key: 'depositos', nome: 'Depósitos de coletas', cor: 'entradas2' }]} empilhado altura={250} />
+          <GraficoBarras dados={grafico} series={[{ key: 'contribuir', nome: 'Contribuir', cor: 'entradas' }, { key: 'depositos', nome: 'Depósitos de coletas', cor: 'entradas2' }]} empilhado altura={250} />
         </div>
 
         <div className="sec">
