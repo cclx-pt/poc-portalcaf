@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros } from '../components/ui';
 import { SyncEstado } from '../components/SyncEstado';
+import { ImportarIfthenpay } from '../components/ImportarIfthenpay';
 import { listarComunidades, listarLotes } from '../lib/db';
 import { FONTES } from '../lib/fontes';
 import { eur, MESES_CURTOS, r2 } from '../lib/format';
@@ -15,7 +16,8 @@ const TEXTOS: Record<Origem, { titulo: string; intro: string; unidade: 'eur' | '
 };
 
 export default function Fonte({ origem }: { origem: Origem }) {
-  const { acesso, temNivel } = useAuth();
+  const { acesso, temNivel, pode } = useAuth();
+  const [ifthenpay, setIfthenpay] = useState(false);
   const { ano, comunidade } = useFiltros();
   const [verPessoais, setVerPessoais] = useState(false);
   const conf = verPessoais && temNivel('confidencial') && origem !== 'assistencia';
@@ -45,6 +47,9 @@ export default function Fonte({ origem }: { origem: Origem }) {
           <p className="muted">{t.intro} O processo é feito no Jotform; aqui só se recebe e apresenta.</p>
           <SyncEstado />
         </div>
+        {origem === 'contribuir' && pode('importar') && (
+          <div className="acoes"><button className="sec" onClick={() => setIfthenpay(true)}>Importar pagamentos IFTHENPAY</button></div>
+        )}
       </div>
       {temNivel('confidencial') && origem !== 'assistencia' && (
         <label className="small" style={{ display: 'block', marginBottom: 12 }}>
@@ -96,6 +101,7 @@ export default function Fonte({ origem }: { origem: Origem }) {
         </div>
       </>}
       <p className="muted">Campos usados: {FONTES[origem].campos.map((c) => c.label).join(', ')}.</p>
+      {ifthenpay && <ImportarIfthenpay onFechar={() => setIfthenpay(false)} onFeito={() => void lotes.recarregar()} />}
     </>
   );
 }
