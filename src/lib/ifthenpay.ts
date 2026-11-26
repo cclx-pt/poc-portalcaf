@@ -22,7 +22,8 @@ export interface PagamentoIfthenpay {
   alias?: string;
 }
 
-export interface OpcoesIfthenpay { comunidadeId: string; categoria: string; centroCusto?: string }
+/** Classificação dos pagamentos importados: centro de custo obrigatório; projeto, fornecedor e conta analítica opcionais. */
+export interface OpcoesIfthenpay { comunidadeId: string; categoria: string; centroCusto: string; projeto?: string; fornecedor?: string; contaAnalitica?: string }
 
 export const ID_IFTHENPAY = 'portal-ifthenpay-';
 
@@ -77,7 +78,8 @@ export function registosIfthenpay(pags: PagamentoIfthenpay[], o: OpcoesIfthenpay
       fonte: 'ifthenpay', idPedido: p.idPedido, liquido: p.liquido, tarifa: p.tarifa, tipo: p.tipo,
       ...(p.dataProcessamento ? { dataProcessamento: p.dataProcessamento } : {}),
       ...(p.terminal ? { terminal: p.terminal } : {}), ...(p.alias ? { alias: p.alias } : {}),
-      ...(o.centroCusto ? { centroCusto: o.centroCusto } : {}),
+      centroCusto: o.centroCusto,
+      ...(o.projeto ? { projeto: o.projeto } : {}), ...(o.fornecedor ? { fornecedor: o.fornecedor } : {}), ...(o.contaAnalitica ? { contaAnalitica: o.contaAnalitica } : {}),
       registadoPor: quem, registadoEm: agora,
     },
   }));

@@ -113,12 +113,13 @@ describe('proposta de classificação dos extratos', () => {
   });
   it('aceitar propostas valida as propostas (não as que estão para rever) e marca para contabilizar só as não financeiras', () => {
     const r = aceitarPropostas([
-      mov('1', '2026-03-05', -45, 'MEO', { estado: 'proposto', categoria: '02.03 Comunicações', comunidadeId: 'almada' }),
+      mov('1', '2026-03-05', -45, 'MEO', { estado: 'proposto', categoria: '02.03 Comunicações', comunidadeId: 'almada', centroCusto: 'CC01' }),
       mov('2', '2026-03-05', 135, 'DEP', { estado: 'proposto', categoria: 'F1.02 Depósitos de numerário', conciliadoCom: 'depositos:d1' }),
       mov('3', '2026-03-05', -45, 'R', { estado: 'rever' }),
       mov('4', '2026-03-05', -45, 'Y', { estado: 'proposto', categoria: '02.03 Comunicações' }),
+      mov('5', '2026-03-05', -45, 'SEM CC', { estado: 'proposto', categoria: '02.03 Comunicações', comunidadeId: 'almada' }),
     ], cats);
-    expect(r.map((m) => [m.estado, m.contabilizar])).toEqual([['validado', true], ['validado', false], ['rever', false], ['proposto', false]]);
+    expect(r.map((m) => [m.estado, m.contabilizar])).toEqual([['validado', true], ['validado', false], ['rever', false], ['proposto', false], ['proposto', false]]);
   });
 });
 

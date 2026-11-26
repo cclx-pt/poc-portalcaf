@@ -277,10 +277,22 @@ function proporSemPessoas(movs: MovBanco[], ctx: Contexto): MovBanco[] {
 
 /** Valida as propostas completas (com categoria e comunidade, repartição ou conciliação). Os financeiros e os conciliados não se contabilizam. */
 /** Proposta completa, pronta a validar: categoria e comunidade (ou repartida pelas comunidades, ou conciliada com o Jotform). */
-export const podeValidar = (m: MovBanco) => m.estado === 'proposto' && !!m.categoria && !!(m.comunidadeId || m.partes?.length || m.conciliadoCom);
+/**
+ * O centro de custo é obrigatório em tudo o que conta nos resultados. Ficam de fora os movimentos financeiros
+ * (transferências, depósitos…) e os conciliados com o Jotform (que trazem a sua classificação).
+ * Movimento dividido: cada linha que conta precisa do seu centro de custo ou do do movimento.
+ */
+export function faltaCentroCusto(m: MovBanco, categorias: Categoria[]): boolean {
+  if (m.conciliadoCom) return false;
+  const financeiro = (nome?: string) => categorias.some((c) => c.nome === nome && c.tipo === 'financeiro');
+  if (m.partes?.length) return m.partes.some((p) => !financeiro(p.categoria ?? m.categoria) && !(p.centroCusto || m.centroCusto));
+  return !financeiro(m.categoria) && !m.centroCusto;
+}
+
+export const podeValidar = (m: MovBanco, categorias: Categoria[]) => m.estado === 'proposto' && !!m.categoria && !!(m.comunidadeId || m.partes?.length || m.conciliadoCom) && !faltaCentroCusto(m, categorias);
 
 export function aceitarPropostas(movs: MovBanco[], categorias: Categoria[]): MovBanco[] {
-  return movs.map((m) => (podeValidar(m) ? validar(m, categorias) : m));
+  return movs.map((m) => (podeValidar(m, categorias) ? validar(m, categorias) : m));
 }
 
 /** Marca um movimento como validado (classificação manual). Num movimento itemizado, cada linha financeira fica fora dos resultados. */
