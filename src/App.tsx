@@ -28,7 +28,10 @@ import Auditoria from './pages/Auditoria';
 import Pedidos from './pages/Pedidos';
 import Pesos from './pages/Pesos';
 import Pessoas from './pages/Pessoas';
-import type { ReactElement } from 'react';
+import { lazy, Suspense, type ReactElement } from 'react';
+
+/** App Presenças. (v2), carregada só quando se abre #/presencas. */
+const PresencasApp = lazy(() => import('./presencas/PresencasApp'));
 
 function Protegido() {
   const { carregando, acesso } = useAuth();
@@ -62,6 +65,7 @@ export default function App() {
         <Routes>
           <Route path="/publico" element={<Publico />} />
           <Route path="/registar" element={<ProtegidoRegisto />} />
+          <Route path="/presencas/*" element={<Suspense fallback={<div className="login"><p className="muted">A carregar…</p></div>}><PresencasApp /></Suspense>} />
           <Route element={<Protegido />}>
             <Route index element={<Painel />} />
             <Route path="entradas" element={<Se nivel="privado"><Fonte key="c" origem="contribuir" /></Se>} />

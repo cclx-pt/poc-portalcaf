@@ -11,7 +11,8 @@ const CHAVE_EMAIL = 'caf-portal:email-login';
 /** Página onde a pessoa estava ao pedir o link (ex.: #/registar), para voltar lá depois do login. */
 const CHAVE_DESTINO = 'caf-portal:destino-login';
 
-function traduzir(e: unknown) {
+/** Mensagem em português para um erro do login por link. */
+export function traduzir(e: unknown) {
   const c = (e as { code?: string }).code ?? '';
   if (c.includes('unauthorized-domain') || c.includes('unauthorized-continue-uri')) return 'Este endereço não está autorizado no Firebase.';
   if (c.includes('operation-not-allowed')) return 'O login por link de email ainda não está ativo no Firebase (Authentication → Email/senha → Link do email).';
@@ -22,6 +23,19 @@ function traduzir(e: unknown) {
 
 /** Endereço de regresso do link: a raiz do portal, sem parâmetros. */
 export const urlRegresso = () => `${window.location.origin}${BASE}`;
+
+/**
+ * Envia o link de acesso (sem senha) e guarda o email e a página atual para voltar a ela depois do login.
+ * Não envia a quem não está registado (nem ativo).
+ */
+export async function enviarLinkAcesso(email: string): Promise<'enviado' | 'nao-registado'> {
+  const endereco = email.trim().toLowerCase();
+  if (await verificarAcesso(endereco) === 'nao-registado') return 'nao-registado';
+  await sendSignInLinkToEmail(auth, endereco, { url: urlRegresso(), handleCodeInApp: true });
+  window.localStorage.setItem(CHAVE_EMAIL, endereco);
+  window.localStorage.setItem(CHAVE_DESTINO, window.location.hash);
+  return 'enviado';
+}
 
 export default function Login() {
   const { user, motivo, sair } = useAuth();
@@ -87,14 +101,10 @@ export default function Login() {
           <label className="campo">Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></label>
           <button disabled={ocupado || !email.includes('@')} onClick={() => correr(async () => {
             const endereco = email.trim().toLowerCase();
-            // Não envia o link a quem não está registado (nem ativo).
-            if (await verificarAcesso(endereco) === 'nao-registado') {
+            if (await enviarLinkAcesso(endereco) === 'nao-registado') {
               setMsg(`Utilizador não está registado: ${endereco} não tem acesso ao portal. Peça ao Master (tesouraria@cclx.pt) para lhe dar acesso.`);
               return;
             }
-            await sendSignInLinkToEmail(auth, endereco, { url: urlRegresso(), handleCodeInApp: true });
-            window.localStorage.setItem(CHAVE_EMAIL, endereco);
-            window.localStorage.setItem(CHAVE_DESTINO, window.location.hash);
             setEnviado(true);
           })}>Enviar link de acesso</button>
         </>}

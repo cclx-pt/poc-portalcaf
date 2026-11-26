@@ -12,6 +12,8 @@ import { PARAMETROS_REEMBOLSOS, type ParametrosReembolsos } from './reconciliaca
 
 export interface Acesso {
   email: string;
+  /** Nome do perfil (saudação na app Presenças). */
+  nome?: string;
   papel: Perfil['papel'];
   nivel: Nivel;
   comunidades: string[];
