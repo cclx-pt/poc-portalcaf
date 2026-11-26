@@ -5,7 +5,7 @@ vi.mock('firebase/firestore', () => ({ doc: () => ({}), writeBatch: () => ({ set
 vi.mock('../../src/lib/db', () => ({
   db: {}, auditar,
   listarComunidades: async () => [], listarLotes: async () => [], listarBanco: async () => [], listarCustosFixos: async () => [],
-  listarFechos: async () => [], listarCategorias: async () => [], lerConfigAssistencia: async () => ({ eventoCelebracao: null }),
+  listarFechos: async () => [], listarCategorias: async () => [], lerConfigAssistencia: async () => ({ eventoCelebracao: null }), lerTraducaoJotform: async () => ({ linhas: [] }),
 }));
 vi.mock('../../src/lib/pesos', () => ({ listarPesos: async () => [], pesosParaCalculo: () => ({}) }));
 const A = (papel: string) => ({ email: `${papel}@x.pt`, papel, nivel: 'confidencial', comunidades: ['*'] }) as never;

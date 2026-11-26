@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { SyncEstado } from '../components/SyncEstado';
 import { ImportacaoManualJotform } from '../components/ImportacaoManualJotform';
+import { TraducaoJotform } from '../components/TraducaoJotform';
 import { JanelaReembolsos } from '../components/JanelaReembolsos';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar, useMarcarAba } from '../components/ui';
@@ -565,6 +566,7 @@ export default function Configuracao() {
           )}
         </>}
       </div>
+      <TraducaoJotform />
       {pode('importar') && <ImportacaoManualJotform onFeito={() => setSyncVersao((v) => v + 1)} />}
 
       </>}

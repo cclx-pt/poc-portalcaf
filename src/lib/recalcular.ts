@@ -1,5 +1,5 @@
 import { doc, writeBatch } from 'firebase/firestore';
-import { db, lerConfigAssistencia, listarBanco, listarCategorias, listarComunidades, listarCustosFixos, listarFechos, listarLotes, auditar, type Acesso } from './db';
+import { db, lerConfigAssistencia, listarBanco, listarCategorias, listarComunidades, listarCustosFixos, listarFechos, listarLotes, auditar, lerTraducaoJotform, type Acesso } from './db';
 import { calcularPublico, calcularPublicoSite, calcularResumosComReais } from './resumos';
 import { hoje } from './format';
 import { listarPesos, pesosParaCalculo } from './pesos';
@@ -25,7 +25,7 @@ export async function recalcularAno(a: Acesso, ano: number, origem = 'Recalcular
 }
 
 async function recalcular(a: Acesso, ano: number, origem: string) {
-  const [comunidades, contribuir, depositos, despesas, assistencia, banco, custosFixos, fechos, categorias, assistenciaAnterior, configAss, pesos] = await Promise.all([
+  const [comunidades, contribuir, depositos, despesas, assistencia, banco, custosFixos, fechos, categorias, assistenciaAnterior, configAss, pesos, traducaoJotform] = await Promise.all([
     listarComunidades(),
     listarLotes(a, 'contribuir', ano, true),
     listarLotes(a, 'depositos', ano, true),
@@ -38,9 +38,10 @@ async function recalcular(a: Acesso, ano: number, origem: string) {
     listarLotes(a, 'assistencia', ano - 1, false), // média dos últimos 12 meses atravessa o ano
     lerConfigAssistencia(),
     listarPesos(ano),
+    lerTraducaoJotform(),
   ]);
   const mesesFechados = new Set(fechos.filter((f) => f.estado === 'fechado').map((f) => f.periodo));
-  const resumos = calcularResumosComReais({ ano, comunidades, contribuir, depositos, despesas, assistencia, banco, custosFixos, mesesFechados, hoje: hoje(), categorias, assistenciaAnterior, eventoCelebracao: configAss.eventoCelebracao, pesosGravados: pesosParaCalculo(pesos) });
+  const resumos = calcularResumosComReais({ ano, comunidades, contribuir, depositos, despesas, assistencia, banco, custosFixos, mesesFechados, hoje: hoje(), categorias, assistenciaAnterior, eventoCelebracao: configAss.eventoCelebracao, pesosGravados: pesosParaCalculo(pesos), traducaoJotform });
   const publico = calcularPublico(ano, resumos, comunidades, mesesFechados);
   const site = calcularPublicoSite(ano, resumos, mesesFechados);
   const b = writeBatch(db);

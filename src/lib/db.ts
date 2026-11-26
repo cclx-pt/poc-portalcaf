@@ -140,6 +140,12 @@ export async function lerConfigReembolsos(): Promise<ParametrosReembolsos> {
   const d = s.exists() ? (s.data() as Partial<ParametrosReembolsos>) : {};
   return { diasAntes: Number(d.diasAntes ?? PARAMETROS_REEMBOLSOS.diasAntes), diasDepois: Number(d.diasDepois ?? PARAMETROS_REEMBOLSOS.diasDepois) };
 }
+/** Tradução das categorias do Jotform para as categorias CAF (só o Master grava). */
+export async function lerTraducaoJotform(): Promise<import('./traducaoJotform').TraducaoJotform> {
+  const s = await getDoc(doc(db, 'config', 'traducaoJotform'));
+  return s.exists() ? (s.data() as import('./traducaoJotform').TraducaoJotform) : { linhas: [] };
+}
+export const gravarTraducaoJotform = (t: import('./traducaoJotform').TraducaoJotform) => setDoc(doc(db, 'config', 'traducaoJotform'), t);
 export const gravarConfigReembolsos = (p: ParametrosReembolsos) => setDoc(doc(db, 'config', 'reembolsos'), p);
 
 // ---------- lotes individuais (registo de presenças no portal) ----------

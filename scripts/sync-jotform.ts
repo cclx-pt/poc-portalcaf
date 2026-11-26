@@ -15,6 +15,7 @@
 import { cert, initializeApp } from 'firebase-admin/app';
 import { FieldPath, getFirestore } from 'firebase-admin/firestore';
 import { SyncEmCurso, sincronizar, type ArmazemSync, type EstadoSync } from '../src/lib/sync';
+import type { TraducaoJotform } from '../src/lib/traducaoJotform';
 import { calcularPublico, calcularPublicoSite, calcularResumosComReais } from '../src/lib/resumos';
 import type { BancoLote, Categoria, Comunidade, CustoFixo, Lote, Origem } from '../src/lib/types';
 
@@ -85,7 +86,7 @@ const armazem: ArmazemSync = {
     }
   },
   async recalcular(ano) {
-    const [comunidades, conf, priv, banco, custosFixos, mesesFechados, categorias, privAnterior, configAss, pesos] = await Promise.all([
+    const [comunidades, conf, priv, banco, custosFixos, mesesFechados, categorias, privAnterior, configAss, pesos, traducaoJotform] = await Promise.all([
       lerTodos<Comunidade>('comunidades'),
       lerTodos<Lote>('lotes_conf', 'ano', ano),
       lerTodos<Lote>('lotes', 'ano', ano),
@@ -96,13 +97,14 @@ const armazem: ArmazemSync = {
       lerTodos<Lote>('lotes', 'ano', ano - 1),
       db.collection('config').doc('assistencia').get().then((d) => (d.data() as { eventoCelebracao?: string | null } | undefined)?.eventoCelebracao ?? null),
       lerTodos<{ id: string; pesos: Record<string, number> }>('pesos', 'ano', ano),
+      db.collection('config').doc('traducaoJotform').get().then((d) => (d.exists ? d.data() as TraducaoJotform : { linhas: [] })),
     ]);
     const de = (o: Origem) => conf.filter((l) => l.origem === o);
     const assistencia = priv.filter((l) => l.origem === 'assistencia');
     const assistenciaAnterior = privAnterior.filter((l) => l.origem === 'assistencia');
     comunidades.sort((a, b) => a.ordem - b.ordem);
     const hoje = new Date().toISOString().slice(0, 10);
-    const resumos = calcularResumosComReais({ ano, comunidades, contribuir: de('contribuir'), depositos: de('depositos'), despesas: de('despesas'), assistencia, banco, custosFixos, mesesFechados, hoje, categorias, assistenciaAnterior, eventoCelebracao: configAss, pesosGravados: Object.fromEntries(pesos.map((x) => [x.id, x.pesos])) });
+    const resumos = calcularResumosComReais({ ano, comunidades, contribuir: de('contribuir'), depositos: de('depositos'), despesas: de('despesas'), assistencia, banco, custosFixos, mesesFechados, hoje, categorias, assistenciaAnterior, eventoCelebracao: configAss, pesosGravados: Object.fromEntries(pesos.map((x) => [x.id, x.pesos])), traducaoJotform });
     const publico = calcularPublico(ano, resumos, comunidades, mesesFechados);
     const b = db.batch();
     for (const r of resumos) b.set(db.collection('resumos').doc(r.id), { ...r, calculadoPor: QUEM });

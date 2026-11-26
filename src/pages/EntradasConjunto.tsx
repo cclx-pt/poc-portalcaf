@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros } from '../components/ui';
 import { SyncEstado } from '../components/SyncEstado';
-import { listarComunidades, listarLotes } from '../lib/db';
+import { listarComunidades } from '../lib/db';
+import { listarLotesCaf } from '../lib/lotesCaf';
 import { dec, eur, MESES, MESES_CURTOS, norm, num, parseNumero, pct, r2, XLSX_EUR } from '../lib/format';
 import type { Registo } from '../lib/types';
 
@@ -19,8 +20,8 @@ export default function EntradasConjunto() {
   const { ano, comunidade } = useFiltros();
   const [verPessoais, setVerPessoais] = useState(false);
   const conf = verPessoais && temNivel('confidencial');
-  const contrib = useCarregar(() => listarLotes(acesso!, 'contribuir', ano, conf), [ano, conf, acesso?.email]);
-  const deps = useCarregar(() => listarLotes(acesso!, 'depositos', ano, conf), [ano, conf, acesso?.email]);
+  const contrib = useCarregar(() => listarLotesCaf(acesso!, 'contribuir', ano, conf), [ano, conf, acesso?.email]);
+  const deps = useCarregar(() => listarLotesCaf(acesso!, 'depositos', ano, conf), [ano, conf, acesso?.email]);
   const coms = useCarregar(listarComunidades, []);
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
   const nomeC = (id: string) => nomes.get(id) ?? (id === 'bolsa-geral' ? 'Geral (sem comunidade)' : id);
