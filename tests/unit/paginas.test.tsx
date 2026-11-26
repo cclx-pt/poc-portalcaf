@@ -363,3 +363,40 @@ describe('Registos em falta (página própria)', () => {
     expect(html).toMatch(/Registos de presenças em (<!-- -->)?\d{4}(<!-- -->)? <span class="muted">\(/);
   });
 });
+
+describe('Presenças. (v2, #/presencas)', () => {
+  const ver = async (rota: string) => {
+    const { MemoryRouter, Routes, Route } = await import('react-router-dom');
+    const { default: PresencasApp } = await import('../../src/presencas/PresencasApp');
+    return renderToString(<MemoryRouter initialEntries={[rota]}><Routes><Route path="/presencas/*" element={<PresencasApp />} /></Routes></MemoryRouter>);
+  };
+  it('início: saudação, novo registo, em falta e efetuados, navegação inferior', async () => {
+    AUTH.atual = { acesso: { ...MASTER_ACESSO, nome: 'Vanessa Silva' }, pode: () => true, temNivel: () => true };
+    const html = await ver('/presencas');
+    expect(html).toContain('Olá, Vanessa!');
+    expect(html).toContain('Novo registo');
+    expect(html).toContain('Em falta');
+    expect(html).toContain('Efetuados');
+    for (const t of ['Início', 'Registar', 'Histórico']) expect(html).toContain(t);
+    expect(html).toMatch(/CCLX · (<!-- -->)?2 comunidades/);
+  });
+  it('registar: formulário com contador e as contagens do evento', async () => {
+    const html = await ver('/presencas/registar');
+    expect(html).toContain('Novo registo');
+    expect(html).toContain('Abrir contador');
+    expect(html).toContain('Guardar registo');
+    expect(html).toContain('Jovens e adultos');
+  });
+  it('histórico: dias recolhidos por mês, com o total de cada dia', async () => {
+    const html = await ver('/presencas/historico');
+    expect(html).toContain('Pesquisar por data');
+    expect(html).toMatch(/abril 2026|março 2026/);
+    expect(html).toContain('aria-expanded="false"');
+  });
+  it('perfil sem permissão de registar não entra', async () => {
+    AUTH.atual = { acesso: MASTER_ACESSO, pode: () => false, temNivel: () => true };
+    const html = await ver('/presencas');
+    expect(html).not.toContain('Vamos contar?');
+    AUTH.atual = { acesso: MASTER_ACESSO, pode: () => true, temNivel: () => true };
+  });
+});

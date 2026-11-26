@@ -46,13 +46,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (u?.email) {
       const email = u.email.toLowerCase();
       if (!u.emailVerified) setMotivo('nao-verificado');
-      else if (MASTER_EMAILS.includes(email)) setAcesso({ email, papel: 'master', nivel: 'confidencial', comunidades: ['*'] });
+      else if (MASTER_EMAILS.includes(email)) {
+        let nome: string | undefined;
+        try { nome = (await lerPerfil(email))?.nome?.trim() || undefined; } catch { /* Master sem perfil gravado */ }
+        setAcesso({ email, papel: 'master', nivel: 'confidencial', comunidades: ['*'], ...(nome ? { nome } : {}) });
+      }
       else {
         try {
           const p = await lerPerfil(email);
           if (!p) setMotivo('sem-perfil');
           else if (!p.ativo) setMotivo('inativo');
-          else setAcesso({ email, papel: p.papel, nivel: p.nivel, comunidades: p.comunidades?.length ? p.comunidades : [] });
+          else setAcesso({ email, papel: p.papel, nivel: p.nivel, comunidades: p.comunidades?.length ? p.comunidades : [], ...(p.nome?.trim() ? { nome: p.nome.trim() } : {}) });
         } catch {
           setMotivo('sem-perfil');
         }
