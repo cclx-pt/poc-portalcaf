@@ -49,7 +49,7 @@ describe('layout em telemóvel e tablet', () => {
   it('ordem dos menus: Painel, Dados, Tesouraria, Análise, Registos, Administração', async () => {
     const { default: Layout } = await import('../../src/components/Layout');
     const html = renderToString(<MemoryRouter initialEntries={['/x']}><Routes><Route element={<Layout />}><Route path="x" element={<p>x</p>} /></Route></Routes></MemoryRouter>);
-    const pos = ['>Painel<', '>Dados (Jotform)<', '>Tesouraria<', '>Análise<', '>Registos<', '>Administração<'].map((t) => html.indexOf(t));
+    const pos = ['>Painel<', '>Dados Externos<', '>Tesouraria<', '>Análise<', '>Registos<', '>Administração<'].map((t) => html.indexOf(t));
     expect(pos.every((p) => p > -1)).toBe(true);
     expect([...pos].sort((a, b) => a - b)).toEqual(pos);
   });

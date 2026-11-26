@@ -3,7 +3,7 @@
  * ao pedir uma alteração ou reportar um problema. Os códigos são fixos: um ecrã novo recebe o seguinte
  * número livre da sua área, e um código nunca é reutilizado.
  *
- * Áreas: PAI Painel · DAD Dados (Jotform) · REG Registos · ANA Análise · TES Tesouraria · ADM Administração ·
+ * Áreas: PAI Painel · DAD Dados Externos · REG Registos · ANA Análise · TES Tesouraria · ADM Administração ·
  * EXT ecrãs fora do menu (login, página pública, link direto de registo).
  * Ecrãs com separadores acrescentam o número do separador: ADM-01.2.
  */
