@@ -5,6 +5,7 @@ import { RevisaoReembolsos } from '../components/RevisaoReembolsos';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { useAvisoSaida } from '../components/SaidaSemGravar';
+import { ImportarClassificacaoTesouraria } from '../components/ImportarClassificacaoTesouraria';
 import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia, lerConfigReembolsos } from '../lib/db';
 import { submissoesDeLotes } from '../lib/reconciliacaoReembolsos';
 import { comunidadePorMbway, listarPessoas } from '../lib/pessoas';
@@ -23,7 +24,7 @@ type MovVista = MovBanco & { loteId: string; contaId: string };
 const dataPt = (d: string) => d.split('-').reverse().join('/');
 
 export default function Reconciliacao() {
-  const { acesso, temNivel } = useAuth();
+  const { acesso, temNivel, pode } = useAuth();
   const { ano } = useFiltros();
   const contas = useCarregar(listarContas, []);
   const coms = useCarregar(listarComunidades, []);
@@ -50,6 +51,7 @@ export default function Reconciliacao() {
   // Base de Pessoas (só Master e CAF): o MB Way mascarado das saídas identifica a pessoa e a comunidade.
   const pessoas = useCarregar(async () => { try { return await listarPessoas(); } catch { return []; } }, [acesso?.email]);
   const [detalhe, setDetalhe] = useState<MovVista | null>(null);
+  const [tesouraria, setTesouraria] = useState(false);
   const [relDim, setRelDim] = useState<DimensaoRelatorio>('rubrica');
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [texto, setTexto] = useState('');
@@ -239,6 +241,7 @@ export default function Reconciliacao() {
           <input type="search" value={texto} placeholder="Ex.: EDP, MB WAY, R2026" onChange={(e) => setTexto(e.target.value)} />
         </label>
         <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={!movs.length || !(cats.dados ?? []).some((c) => c.codigo)} onClick={() => void propor()} title="Conciliação com o Jotform, vencimentos previstos, memória, regras e transferências para a Geral">Propor classificação</button>
+        {pode('configurar') && <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={Object.keys(alterados).length > 0} onClick={() => setTesouraria(true)} title={Object.keys(alterados).length ? 'Guarde primeiro as alterações' : 'Aplica a classificação feita pela tesouraria num Excel aos movimentos do ano'}>Importar classificação da tesouraria</button>}
         <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={!movs.some((m) => podeValidar(m, cats.dados ?? []))} onClick={aceitar} title="Valida as propostas completas (com categoria, comunidade e centro de custo)">{`Aceitar propostas (${movs.filter((m) => podeValidar(m, cats.dados ?? [])).length})`}</button>
       </div>
       {!(cats.dados ?? []).some((c) => c.codigo) && <div className="aviso">O plano financeiro ainda não está carregado (Configuração → Carregar plano financeiro).</div>}
@@ -356,6 +359,7 @@ export default function Reconciliacao() {
           </div>
         ))}
       </div>
+      {tesouraria && <ImportarClassificacaoTesouraria ano={ano} onFechar={() => setTesouraria(false)} onFeito={() => { void banco.recarregar(); void dims.recarregar(); void cats.recarregar(); }} />}
       {detalhe && <DetalheMovimento m={detalhe} categorias={cats.dados ?? []} dimensoes={dims.dados ?? []} comunidades={coms.dados ?? []} custosFixos={cfixos.dados ?? []}
         movsMes={movs} regras={regras.dados ?? []} jotform={jot.dados ?? null}
         usados={new Set((banco.dados ?? []).flatMap((l) => (alterados[l.id] ?? l).registos).filter((x) => x.id !== detalhe.id && x.conciliadoCom?.startsWith('despesas:')).flatMap((x) => x.conciliadoCom!.slice(9).split(',')))} email={acesso!.email} onRegra={() => void regras.recarregar()}

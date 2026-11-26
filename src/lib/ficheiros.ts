@@ -53,11 +53,12 @@ export function paraTabela(rows: unknown[][], cabecalho: ModoCabecalho = 'auto')
   return { colunas, linhas };
 }
 
-async function lerXlsx(file: File, cabecalho: ModoCabecalho): Promise<Tabela> {
+/** `folha`: nome da folha a ler (Excel); sem ela, ou se não existir, a primeira. */
+async function lerXlsx(file: File, cabecalho: ModoCabecalho, folha?: string): Promise<Tabela> {
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(await file.arrayBuffer());
-  const ws = wb.worksheets[0];
+  const ws = (folha && wb.getWorksheet(folha)) || wb.worksheets[0];
   const rows: unknown[][] = [];
   ws.eachRow({ includeEmpty: false }, (row) => {
     const vals = (row.values as unknown[]).slice(1).map((v) => {
@@ -83,9 +84,9 @@ async function lerCsv(file: File, cabecalho: ModoCabecalho): Promise<Tabela> {
 }
 
 /** Lê um ficheiro CSV ou Excel exportado do Jotform ou do homebanking. */
-export async function lerFicheiro(file: File, cabecalho: ModoCabecalho = 'auto'): Promise<Tabela> {
+export async function lerFicheiro(file: File, cabecalho: ModoCabecalho = 'auto', folha?: string): Promise<Tabela> {
   const nome = file.name.toLowerCase();
-  if (nome.endsWith('.xlsx') || nome.endsWith('.xlsm')) return lerXlsx(file, cabecalho);
+  if (nome.endsWith('.xlsx') || nome.endsWith('.xlsm')) return lerXlsx(file, cabecalho, folha);
   if (nome.endsWith('.xls')) throw new Error('Formato .xls antigo: abra no Excel e guarde como .xlsx ou .csv.');
   return lerCsv(file, cabecalho);
 }
