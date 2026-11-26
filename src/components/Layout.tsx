@@ -15,7 +15,7 @@ const privado = (p: Perm) => p.temNivel('privado');
 /** Menu lateral, por grupos. Cada grupo abre e fecha; o da página atual fica sempre aberto. */
 const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
   { id: 'inicio', itens: [{ to: '/', nome: 'Painel', Icone: LayoutDashboard, ver: () => true, end: true }] },
-  { id: 'dados', titulo: 'Dados (Jotform)', itens: [
+  { id: 'dados', titulo: 'Dados Externos', itens: [
     { to: '/entradas-conjunto', nome: 'Entradas: contribuições e depósitos', Icone: Wallet, ver: privado },
     { to: '/entradas', nome: 'Contribuir', Icone: HandCoins, ver: privado },
     { to: '/depositos', nome: 'Depósitos de coletas', Icone: Banknote, ver: privado },
