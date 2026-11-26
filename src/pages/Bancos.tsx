@@ -5,6 +5,7 @@ import { LogoBanco, LogoConta } from '../components/LogoBanco';
 import SaldosBancos from './SaldosBancos';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros, useMarcarAba } from '../components/ui';
+import { SugestaoRegras } from '../components/SugestaoRegras';
 import { apagarBancoLote, auditar, gravar, gravarBancoLote, listarBanco, listarComunidades, listarContas, listarFechos } from '../lib/db';
 import { AmostraExtrato, CampoCabecalho, CamposExtrato, limparMapa } from '../components/MapaExtratoEditor';
 import { lerFicheiro, type ModoCabecalho } from '../lib/ficheiros';
@@ -177,6 +178,8 @@ const periodoPt = (p: string) => { const [a, m] = p.split('-'); return `${MESES[
 
 /** Importa um extrato da CGD ou do Santander: reconhece o banco, divide por mês e substitui os meses do ficheiro. */
 function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFechar: () => void; onFeito: () => void }) {
+  // Depois de gravar: regras sugeridas pelo histórico já consolidado (anos importados e o anterior).
+  const [anosGravados, setAnosGravados] = useState<number[] | null>(null);
   const { acesso } = useAuth();
   const [nome, setNome] = useState('');
   const [colunas, setColunas] = useState<string[]>([]);
@@ -264,13 +267,16 @@ function ImportarExtrato({ contas, onFechar, onFeito }: { contas: Conta[]; onFec
       const conta = contas.find((c) => c.id === contaId)!;
       const nMov = escolhidosImp.reduce((s0, l) => s0 + l.registos.length, 0);
       await auditar(acesso!.email, 'importar extrato', `${conta.nome} (${nome}): ${nMov} movimentos em ${escolhidosImp.length} meses (${escolhidosImp.map((l) => periodoPt(l.periodo)).join(', ')})${falhas.length ? `; não gravados (mês fechado?): ${falhas.join(', ')}` : ''}`);
-      setMsg(`Gravados ${escolhidosImp.length - falhas.length} meses de ${conta.nome}. Use Propor classificação em cada mês para conciliar com o Jotform e classificar.${falhas.length ? ` Não gravados (mês fechado ou sem permissão): ${falhas.join(', ')}.` : ''}`);
+      const anos = [...new Set(escolhidosImp.map((l) => l.ano))];
+      setAnosGravados([...anos, Math.min(...anos) - 1]);
+      setMsg(`Gravados ${escolhidosImp.length - falhas.length} meses de ${conta.nome}. Use Propor classificação em cada mês para conciliar com o Jotform e classificar (as regras dos extratos são aplicadas).${falhas.length ? ` Não gravados (mês fechado ou sem permissão): ${falhas.join(', ')}.` : ''}`);
       onFeito();
     } catch (e) { setMsg(mensagemErro(e)); } finally { setOcupado(false); }
   }
   return (
     <Modal titulo="Importar extrato" onFechar={onFechar}>
       <div className="nota">Exporte o extrato do homebanking da CGD ou do Santander (CSV ou Excel), tal como sai. O portal reconhece o banco, divide os movimentos por mês e <b>substitui</b> esses meses da conta, mantendo as classificações já feitas.</div>
+      {anosGravados && <SugestaoRegras anos={anosGravados} />}
       <CampoCabecalho valor={cabecalho} onChange={(v) => { setCabecalho(v); if (ficheiro) void ler(ficheiro, v); }} />
       <input type="file" accept=".csv,.xlsx,.xls,.txt" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void ler(f); }} />
       {msg && <p className="small" style={{ marginTop: 8 }}>{contaId ? <LogoConta conta={contas.find((c) => c.id === contaId)} tamanho={16} /> : bancoFicheiro && <LogoBanco banco={bancoFicheiro} tamanho={16} />} {msg}</p>}

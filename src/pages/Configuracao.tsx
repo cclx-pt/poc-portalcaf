@@ -5,6 +5,7 @@ import { ImportacaoManualJotform } from '../components/ImportacaoManualJotform';
 import { JanelaReembolsos } from '../components/JanelaReembolsos';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar, useMarcarAba } from '../components/ui';
+import { SugestaoRegras } from '../components/SugestaoRegras';
 import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarDimensoes, listarRegrasBanco, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
 import { COMUNIDADES, CONTAS, JOTFORM_FORMS } from '../lib/seed';
 import { categoriasDoPlano, dimensoesDoPlano } from '../lib/plano';
@@ -44,6 +45,7 @@ export default function Configuracao() {
   const dims = useCarregar(listarDimensoes, []);
   const regras = useCarregar(listarRegrasBanco, []);
   const [regra, setRegra] = useState<RegraBanco | null>(null);
+  const [sugerir, setSugerir] = useState(false);
   const [contaExt, setContaExt] = useState<Conta | null>(null);
   const [tipoDim, setTipoDim] = useState<Dimensao['tipo']>('centro');
   const [msg, setMsg] = useState<string | null>(null);
@@ -419,14 +421,18 @@ export default function Configuracao() {
       {area === 'estrutura' && <div className="sec">
         <div className="linha" style={{ justifyContent: 'space-between' }}>
           <h2>Regras dos extratos</h2>
-          <button onClick={() => setRegra({ id: '', padrao: '', categoria: '', ativo: true })}>Nova regra</button>
+          <div className="linha" style={{ gap: 8 }}>
+            <button className="sec" onClick={() => setSugerir(!sugerir)}>{sugerir ? 'Fechar sugestões' : 'Sugerir regras do histórico'}</button>
+            <button onClick={() => setRegra({ id: '', padrao: '', categoria: '', ativo: true })}>Nova regra</button>
+          </div>
         </div>
-        <p className="muted">Quando o descritivo do banco contém o texto, a classificação proposta usa esta categoria, fornecedor e centro de custo. A conciliação com o Jotform, os vencimentos previstos e a memória dos movimentos já classificados vêm antes das regras.</p>
+        <p className="muted">Quando o descritivo do banco contém o texto, a proposta de classificação do extrato (Reconciliação › Propor classificação) usa esta categoria, comunidade, centro de custo, fornecedor e projeto. Vêm antes das regras só os estornos, os lotes IFTHENPAY, os reembolsos e os depósitos conciliados com o Jotform; os custos fixos e a memória ficam para os movimentos sem regra.</p>
+        {sugerir && <SugestaoRegras anos={[new Date().getFullYear(), new Date().getFullYear() - 1]} aoGuardar={() => void regras.recarregar()} />}
         <Estado aCarregar={regras.aCarregar} erro={regras.erro} vazio={!regras.dados?.length} />
         {!!regras.dados?.length && <div className="tabela"><table>
-          <thead><tr><th>Texto no banco</th><th>Categoria</th><th>Comunidade</th><th>Centro de custo</th><th>Fornecedor</th><th>Estado</th><th /></tr></thead>
+          <thead><tr><th>Texto no banco</th><th>Categoria</th><th>Comunidade</th><th>Centro de custo</th><th>Fornecedor</th><th>Projeto</th><th>Estado</th><th /></tr></thead>
           <tbody>{(regras.dados ?? []).map((x) => (
-            <tr key={x.id}><td>{x.padrao}</td><td>{x.categoria}{!!x.partes?.length && <div className="small muted">{`Dividida em ${x.partes.length} linhas: ${x.partes.map((pt) => `${(coms.dados ?? []).find((c) => c.id === pt.comunidadeId)?.nome ?? pt.comunidadeId} ${pt.pct != null ? `${String(pt.pct).replace('.', ',')}%` : `${String(pt.valor).replace('.', ',')} €`}`).join(' · ')}`}</div>}</td><td>{x.comunidadeId ? (coms.dados ?? []).find((c) => c.id === x.comunidadeId)?.nome ?? x.comunidadeId : '—'}</td><td>{x.centroCusto ?? '—'}</td><td>{x.fornecedor ?? '—'}</td><td>{ativoTxt(x.ativo) ?? 'Ativa'}</td>
+            <tr key={x.id}><td>{x.padrao}</td><td>{x.categoria}{!!x.partes?.length && <div className="small muted">{`Dividida em ${x.partes.length} linhas: ${x.partes.map((pt) => `${(coms.dados ?? []).find((c) => c.id === pt.comunidadeId)?.nome ?? pt.comunidadeId} ${pt.pct != null ? `${String(pt.pct).replace('.', ',')}%` : `${String(pt.valor).replace('.', ',')} €`}`).join(' · ')}`}</div>}</td><td>{x.comunidadeId ? (coms.dados ?? []).find((c) => c.id === x.comunidadeId)?.nome ?? x.comunidadeId : '—'}</td><td>{x.centroCusto ?? '—'}</td><td>{x.fornecedor ?? '—'}</td><td>{x.projeto ?? '—'}</td><td>{ativoTxt(x.ativo) ?? 'Ativa'}</td>
               <td><button className="link" onClick={() => setRegra(x)}>Editar</button> · <button className="link" onClick={() => void apagarRegra(x)}>Apagar</button></td></tr>
           ))}</tbody>
         </table></div>}
@@ -450,6 +456,10 @@ export default function Configuracao() {
               </select></label>
             <label className="campo">Fornecedor<input value={regra.fornecedor ?? ''} list="forn-regras" onChange={(e) => setRegra({ ...regra, fornecedor: e.target.value || undefined })} />
               <datalist id="forn-regras">{(dims.dados ?? []).filter((d) => d.tipo === 'fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist></label>
+            <label className="campo">Projeto ou evento
+              <select value={regra.projeto ?? ''} onChange={(e) => setRegra({ ...regra, projeto: e.target.value || undefined })}>
+                <option value="">—</option>{(dims.dados ?? []).filter((d) => d.tipo === 'projeto' && d.ativo !== false).map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
+              </select></label>
             <label className="opcao"><input type="checkbox" checked={regra.ativo !== false} onChange={(e) => setRegra({ ...regra, ativo: e.target.checked })} /> Ativa</label>
           </div>
           <div className="acoes" style={{ marginTop: 14 }}>
