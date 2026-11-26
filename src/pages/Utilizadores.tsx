@@ -5,10 +5,11 @@ import { sendSignInLinkToEmail } from 'firebase/auth';
 import { auth } from '../firebase';
 import { apagarPerfil, auditar, gravarPerfil, listarComunidades, listarPerfis } from '../lib/db';
 import { urlRegresso } from './Login';
+import { erroPerfil } from '../lib/perfis';
 import { MASTER_EMAILS, NIVEIS, NIVEL_LABEL, PAPEL_LABEL, type Nivel, type Papel, type Perfil } from '../lib/types';
 
 const NIVEL_DEFEITO: Record<Papel, Nivel> = { master: 'confidencial', caf: 'confidencial', tesoureiro: 'privado', leitura: 'publico', registos: 'publico' };
-const novo = (): Perfil => ({ email: '', papel: 'leitura', nivel: 'publico', comunidades: ['*'], ativo: true });
+const novo = (): Perfil => ({ email: '', nome: '', papel: 'leitura', nivel: 'publico', comunidades: ['*'], ativo: true });
 
 export default function Utilizadores() {
   const { acesso } = useAuth();
@@ -30,11 +31,12 @@ export default function Utilizadores() {
   async function guardar() {
     if (!edit) return;
     try {
-      const p = { ...edit, email: edit.email.trim().toLowerCase(), comunidades: edit.papel === 'caf' ? ['*'] : edit.comunidades };
-      if (p.papel !== 'caf' && !p.comunidades.length) { setMsg('Escolha "Todas" ou pelo menos uma comunidade.'); return; }
+      const p = { ...edit, nome: edit.nome?.trim(), email: edit.email.trim().toLowerCase(), comunidades: edit.papel === 'caf' ? ['*'] : edit.comunidades };
+      const erro = erroPerfil(p);
+      if (erro) { setMsg(erro); return; }
       const eNovo = !(perfis.dados ?? []).some((x) => x.email === p.email);
       await gravarPerfil(p);
-      await auditar(acesso!.email, 'utilizador', `${p.email}: ${p.papel}, ${p.nivel}, ${p.comunidades.join(',')}, ${p.ativo ? 'ativo' : 'inativo'}`);
+      await auditar(acesso!.email, 'utilizador', `${p.nome} <${p.email}>: ${p.papel}, ${p.nivel}, ${p.comunidades.join(',')}, ${p.ativo ? 'ativo' : 'inativo'}`);
       let enviado = '';
       if (eNovo && p.ativo && enviarEmail) {
         try { await enviarAcesso(p.email); enviado = ` Enviámos o email de acesso para ${p.email}.`; }
@@ -61,25 +63,26 @@ export default function Utilizadores() {
       {msg && <div className="aviso">{msg}</div>}
       <Estado aCarregar={perfis.aCarregar} erro={perfis.erro} />
       <div className="tabela"><table>
-        <thead><tr><th>Email</th><th>Perfil</th><th>Nível</th><th>Comunidades</th><th>Estado</th><th /></tr></thead>
+        <thead><tr><th>Nome</th><th>Email</th><th>Perfil</th><th>Nível</th><th>Comunidades</th><th>Estado</th><th /></tr></thead>
         <tbody>
           {(perfis.dados ?? []).map((p) => (
             <tr key={p.email}>
-              <td>{p.email}</td><td>{PAPEL_LABEL[p.papel]}</td><td>{NIVEL_LABEL[p.nivel]}</td>
+              <td>{p.nome?.trim() || <b>Sem nome</b>}</td><td>{p.email}</td><td>{PAPEL_LABEL[p.papel]}</td><td>{NIVEL_LABEL[p.nivel]}</td>
               <td>{p.comunidades.includes('*') ? 'Todas' : p.comunidades.map((c) => nomes.get(c) ?? c).join(', ')}</td>
               <td>{p.ativo ? 'Ativo' : 'Inativo'}</td>
               <td><button className="link" onClick={() => { setEnviarEmail(false); setEdit(p); }}>Editar</button> · {p.ativo && <><button className="link" onClick={() => void reenviar(p.email)} title="Envia o link de entrada no portal para este email">Enviar email de acesso</button> · </>}<button className="link" onClick={() => remover(p.email)}>Remover</button></td>
             </tr>
           ))}
-          {!perfis.dados?.length && !perfis.aCarregar && <tr><td colSpan={6} className="muted">Ainda não há utilizadores além dos Master.</td></tr>}
+          {!perfis.dados?.length && !perfis.aCarregar && <tr><td colSpan={7} className="muted">Ainda não há utilizadores além dos Master.</td></tr>}
         </tbody>
       </table></div>
       {edit && (
         <div className="modal-fundo" onClick={() => setEdit(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{edit.email ? edit.email : 'Novo utilizador'}</h2>
+            <h2>{edit.nome?.trim() || edit.email || 'Novo utilizador'}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
-              <label className="campo">Email<input type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></label>
+              <label className="campo">Nome *<input value={edit.nome ?? ''} autoComplete="name" onChange={(e) => setEdit({ ...edit, nome: e.target.value })} /></label>
+              <label className="campo">Email *<input type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></label>
               <label className="campo">Perfil
                 <select value={edit.papel} onChange={(e) => { const papel = e.target.value as Papel; setEdit({ ...edit, papel, nivel: NIVEL_DEFEITO[papel], comunidades: papel === 'caf' ? ['*'] : edit.comunidades }); }}>
                   {(['caf', 'tesoureiro', 'leitura', 'registos'] as Papel[]).map((p) => <option key={p} value={p}>{PAPEL_LABEL[p]}</option>)}
@@ -109,7 +112,7 @@ export default function Utilizadores() {
               <label className="opcao" style={{ marginTop: 10 }}><input type="checkbox" checked={enviarEmail} onChange={(e) => setEnviarEmail(e.target.checked)} /> Enviar o email de acesso ao portal (link de entrada, sem senha)</label>
             )}
             <div className="acoes" style={{ marginTop: 14 }}>
-              <button disabled={!edit.email.includes('@')} onClick={guardar}>Guardar</button>
+              <button disabled={!edit.email.includes('@') || !edit.nome?.trim()} onClick={guardar}>Guardar</button>
               <button className="sec" onClick={() => setEdit(null)}>Cancelar</button>
             </div>
           </div>
