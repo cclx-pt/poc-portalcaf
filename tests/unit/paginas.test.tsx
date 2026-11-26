@@ -400,3 +400,11 @@ describe('Presenças. (v2, #/presencas)', () => {
     AUTH.atual = { acesso: MASTER_ACESSO, pode: () => true, temNivel: () => true };
   });
 });
+
+describe('regras sugeridas pelo histórico', () => {
+  it('enquanto carrega o histórico, mostra o estado de carregamento (sem erro)', async () => {
+    AUTH.atual = { acesso: MASTER_ACESSO, pode: () => true, temNivel: () => true };
+    const { SugestaoRegras } = await import('../../src/components/SugestaoRegras');
+    expect(() => renderToString(<SugestaoRegras anos={[2026, 2025]} />)).not.toThrow();
+  });
+});

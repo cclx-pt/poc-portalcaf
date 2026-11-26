@@ -10,7 +10,7 @@ import type { Categoria, CustoFixo, Lote, MovBanco, ParteMov } from './types';
 
 /** Divisão guardada numa regra: valor fixo (positivo) ou percentagem do que sobra depois dos valores fixos. */
 export interface ParteRegra { comunidadeId: string; categoria?: string; centroCusto?: string; descricao?: string; valor?: number; pct?: number }
-export interface RegraBanco { id: string; padrao: string; categoria: string; fornecedor?: string; centroCusto?: string; comunidadeId?: string; ativo?: boolean; partes?: ParteRegra[] }
+export interface RegraBanco { id: string; padrao: string; categoria: string; fornecedor?: string; centroCusto?: string; comunidadeId?: string; projeto?: string; contaAnalitica?: string; ativo?: boolean; partes?: ParteRegra[] }
 
 /**
  * Valores das linhas de uma divisão: as de valor fixo ficam (com o sinal do movimento); as percentagens aplicam-se
@@ -132,9 +132,9 @@ function aplicarRegra(m: MovBanco, regra: RegraBanco, proposto: (patch: Partial<
       comunidadeId: x.comunidadeId, valor: valores[i],
       ...(x.categoria ? { categoria: x.categoria } : {}), ...(x.centroCusto ? { centroCusto: x.centroCusto } : {}), ...(x.descricao ? { descricao: x.descricao } : {}), ...(x.pct != null ? { pct: x.pct } : {}),
     }));
-    return proposto({ categoria: regra.categoria, fornecedor: regra.fornecedor, centroCusto: regra.centroCusto, comunidadeId: undefined, partes, nota: `Regra "${regra.padrao}" (dividida em ${partes.length} linhas)` });
+    return proposto({ categoria: regra.categoria, fornecedor: regra.fornecedor, centroCusto: regra.centroCusto, ...(regra.projeto ? { projeto: regra.projeto } : {}), comunidadeId: undefined, partes, nota: `Regra "${regra.padrao}" (dividida em ${partes.length} linhas)` });
   }
-  return proposto({ categoria: regra.categoria, fornecedor: regra.fornecedor, centroCusto: regra.centroCusto, comunidadeId: regra.comunidadeId ?? m.comunidadeId, nota: `Regra "${regra.padrao}"` });
+  return proposto({ categoria: regra.categoria, fornecedor: regra.fornecedor, centroCusto: regra.centroCusto, comunidadeId: regra.comunidadeId ?? m.comunidadeId, ...(regra.projeto ? { projeto: regra.projeto } : {}), ...(regra.contaAnalitica ? { contaAnalitica: regra.contaAnalitica } : {}), nota: `Regra "${regra.padrao}"` });
 }
 
 export function proporClassificacao(movs: MovBanco[], ctx: Contexto): MovBanco[] {

@@ -419,7 +419,7 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
         comunidadeId: x.comunidadeId, ...(x.categoria ? { categoria: x.categoria } : {}), ...(x.centroCusto ? { centroCusto: x.centroCusto } : {}), ...(x.descricao?.trim() ? { descricao: x.descricao.trim() } : {}),
         ...(x.pct != null ? { pct: x.pct } : { valor: Math.abs(x.valor) }),
       })) : undefined;
-      const nova: RegraBanco = { id, padrao: padrao.trim(), categoria: v.categoria, fornecedor: v.fornecedor, centroCusto: v.centroCusto, comunidadeId: comComunidade && !repartir ? v.comunidadeId : undefined, ativo: true, ...(partesRegra ? { partes: partesRegra } : {}) };
+      const nova: RegraBanco = { id, padrao: padrao.trim(), categoria: v.categoria, fornecedor: v.fornecedor, centroCusto: v.centroCusto, projeto: repartir ? undefined : v.projeto, contaAnalitica: repartir ? undefined : v.contaAnalitica, comunidadeId: comComunidade && !repartir ? v.comunidadeId : undefined, ativo: true, ...(partesRegra ? { partes: partesRegra } : {}) };
       await gravar('regras_banco', nova);
       await auditar(email, 'regra dos extratos', `${existente ? 'Atualizada' : 'Criada'} na reconciliação: ${nova.padrao} → ${nova.categoria}`);
       onRegra();
