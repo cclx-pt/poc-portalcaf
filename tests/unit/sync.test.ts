@@ -273,3 +273,19 @@ describe('filtros do Jotform: reembolsos e depósitos', () => {
     expect(r.ignoradas).toBe(1);
   });
 });
+
+describe('reler tudo (completo): registos do portal também na cópia confidencial', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('mantém os pagamentos IFTHENPAY importados no portal (lotes e lotes_conf)', async () => {
+    const { fetchFalso } = jotformFalso({ [F]: [{ id: 'j1', created_at: '2026-10-02 10:00:00', comunidade: 'Almada', valor: '50', nome: 'Ana' }] });
+    vi.stubGlobal('fetch', fetchFalso);
+    const m = armazemMemoria();
+    const ifp: Lote = { id: 'contribuir_2026_10_almada', origem: 'contribuir', ano: 2026, mes: 10, periodo: '2026-10', comunidadeId: 'almada', total: 4, n: 1, atualizadoEm: '', atualizadoPor: 'x',
+      registos: [{ id: 'portal-ifthenpay-A1', data: '2026-10-03', valor: 4, categoria: 'R1.02', extra: { liquido: 3.88, fonte: 'ifthenpay' } }] };
+    await m.arm.gravarLotes([{ col: 'lotes', id: ifp.id, lote: ifp }, { col: 'lotes_conf', id: ifp.id, lote: ifp }]);
+    await sincronizar(m.arm, CFG, 'teste', { modo: 'completo' });
+    expect(m.cols.lotes.get(ifp.id)!.registos.map((r) => r.id).sort()).toEqual(['j1', 'portal-ifthenpay-A1']);
+    expect(m.cols.lotes_conf.get(ifp.id)!.registos.map((r) => r.id).sort()).toEqual(['j1', 'portal-ifthenpay-A1']);
+    expect(m.cols.lotes_conf.get(ifp.id)!.total).toBe(54);
+  });
+});

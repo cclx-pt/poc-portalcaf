@@ -178,7 +178,7 @@ function proporSemPessoas(movs: MovBanco[], ctx: Contexto): MovBanco[] {
       // Líquido das contribuições dos 7 dias anteriores ainda não atribuídas a outro lote.
       const janela = contrib.filter((x) => !x.usado && Number.isFinite(x.liquido) && dias(x.data, m.data) >= 0 && dias(x.data, m.data) <= 7);
       const soma = r2(janela.reduce((t, x) => t + x.liquido, 0));
-      let nota = 'Lote IFTHENPAY do Contribuir (contado pelo Jotform)';
+      let nota = 'Lote IFTHENPAY do Contribuir (contado pelo Contribuir: Jotform e formulários IFTHENPAY)';
       if (janela.length) {
         const dif = r2(v - soma);
         if (Math.abs(dif) < 0.005) janela.forEach((x) => { x.usado = true; });

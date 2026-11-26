@@ -203,6 +203,8 @@ async function sincronizarOrigem(
     const existentes = await arm.listarIdsLotes(origem);
     const abertosEx = existentes.filter((l) => !fechados.has(l.periodo));
     const privEx = await arm.lerLotes('lotes', abertosEx.map((l) => l.id));
+    // A cópia confidencial também guarda os registos do portal (ex.: pagamentos IFTHENPAY importados).
+    const confEx = temConf ? await arm.lerLotes('lotes_conf', abertosEx.map((l) => l.id)) : new Map<string, Lote>();
     const doPortal = (l?: Lote) => (l?.registos ?? []).filter((r) => eRegistoDoPortal(r) || eCorrigido(r));
     const juntar = (novo: Lote, portal: Lote['registos']): Lote => {
       if (!portal.length) return novo;
@@ -213,7 +215,7 @@ async function sincronizarOrigem(
     for (const { p, c } of abertos) {
       anosTocados.add(p.ano);
       ops.push({ col: 'lotes', id: p.id, lote: juntar(p, doPortal(privEx.get(p.id))) });
-      if (temConf) ops.push({ col: 'lotes_conf', id: c.id, lote: c });
+      if (temConf) ops.push({ col: 'lotes_conf', id: c.id, lote: juntar(c, doPortal(confEx.get(c.id))) });
     }
     novos = abertos.reduce((s, { p }) => s + p.registos.length, 0);
     for (const l of abertosEx) {
@@ -224,6 +226,9 @@ async function sincronizarOrigem(
         // Deixou de haver submissões Jotform neste mês: fica só com os registos do portal.
         const ex = privEx.get(l.id)!;
         if (portal.length !== ex.registos.length) ops.push({ col: 'lotes', id: l.id, lote: juntar({ ...ex, registos: [] }, portal) });
+        const conf = confEx.get(l.id);
+        const portalConf = doPortal(conf);
+        if (temConf && conf && portalConf.length !== conf.registos.length) ops.push({ col: 'lotes_conf', id: l.id, lote: juntar({ ...conf, registos: [] }, portalConf) });
         continue;
       }
       removidos++;
