@@ -8,7 +8,7 @@ import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia, lerConfigReembolsos } from '../lib/db';
 import { submissoesDeLotes } from '../lib/reconciliacaoReembolsos';
 import { comunidadePorMbway, listarPessoas } from '../lib/pessoas';
-import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, resolverPartes, sugerirPadrao, candidatosReembolso, registosConciliados, consolidacaoMes, type RegistoJotform, temPalavra, validar, podeValidar, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
+import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, resolverPartes, sugerirPadrao, candidatosReembolso, registosConciliados, consolidacaoMes, type RegistoJotform, temPalavra, validar, podeValidar, faltaCentroCusto, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
 import { bancoDaConta } from '../lib/banco';
 import { dataPT, eur, MESES, r2 } from '../lib/format';
 import type { BancoLote, Categoria, Comunidade, Dimensao, EstadoMov, MovBanco, ParteMov } from '../lib/types';
@@ -239,7 +239,7 @@ export default function Reconciliacao() {
           <input type="search" value={texto} placeholder="Ex.: EDP, MB WAY, R2026" onChange={(e) => setTexto(e.target.value)} />
         </label>
         <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={!movs.length || !(cats.dados ?? []).some((c) => c.codigo)} onClick={() => void propor()} title="Conciliação com o Jotform, vencimentos previstos, memória, regras e transferências para a Geral">Propor classificação</button>
-        <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={!movs.some(podeValidar)} onClick={aceitar} title="Valida as propostas completas (com categoria e comunidade)">{`Aceitar propostas (${movs.filter(podeValidar).length})`}</button>
+        <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={!movs.some((m) => podeValidar(m, cats.dados ?? []))} onClick={aceitar} title="Valida as propostas completas (com categoria, comunidade e centro de custo)">{`Aceitar propostas (${movs.filter((m) => podeValidar(m, cats.dados ?? [])).length})`}</button>
       </div>
       {!(cats.dados ?? []).some((c) => c.codigo) && <div className="aviso">O plano financeiro ainda não está carregado (Configuração → Carregar plano financeiro).</div>}
       <div className="tabela sec">
@@ -271,7 +271,8 @@ export default function Reconciliacao() {
                 </td>
                 <td>
                   <div className="acoes" style={{ margin: 0, flexWrap: 'nowrap' }}>
-                    {podeValidar(m) && <button className="sec" title="Valida esta proposta (categoria e comunidade preenchidas)" onClick={() => { const { loteId: _l, contaId: _c, ...limpo } = m; void _l; void _c; alterar(m.loteId, m.id, validar(limpo, cats.dados ?? [])); }}>Validar</button>}
+                    {podeValidar(m, cats.dados ?? []) && <button className="sec" title="Valida esta proposta (categoria, comunidade e centro de custo preenchidos)" onClick={() => { const { loteId: _l, contaId: _c, ...limpo } = m; void _l; void _c; alterar(m.loteId, m.id, validar(limpo, cats.dados ?? [])); }}>Validar</button>}
+                    {m.estado === 'proposto' && m.categoria && faltaCentroCusto(m, cats.dados ?? []) && <span className="small" title="Abra o movimento e escolha o centro de custo para o poder validar"> falta o centro de custo</span>}
                     <button className="link" onClick={() => setDetalhe(m)}>{m.conciliadoCom ? 'Detalhe' : 'Detalhe ou dividir'}</button>
                   </div>
                 </td>
@@ -394,6 +395,7 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
   const final = (): Partial<MovBanco> => (repartir
     ? { ...v, comunidadeId: undefined, categoria: catPrincipal(), partes: partes.map((p) => ({ ...p, categoria: p.categoria || undefined, descricao: p.descricao?.trim() || undefined, contabilizar: undefined })) }
     : { ...v, partes: undefined });
+  const semCentro = faltaCentroCusto({ ...m, ...final() } as MovBanco, categorias);
   const opcoesCat = categorias.filter((c) => c.ativo !== false && (c.tipo === 'financeiro' || (m.valor > 0 ? c.tipo === 'entrada' : c.tipo === 'saida')));
   const falta = r2(m.valor - somaPartes);
   const mudar = (i: number, patch: Partial<ParteMov>) => setPartes(partes.map((x, k) => (k === i ? { ...x, ...patch } : x)));
@@ -449,7 +451,7 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
         <label className="campo">Fornecedor
           <input value={v.fornecedor ?? ''} list="forn-mov" onChange={(e) => setV({ ...v, fornecedor: e.target.value || undefined })} />
           <datalist id="forn-mov">{dims('fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist></label>
-        <label className="campo">Centro de custo
+        <label className="campo">{semCentro ? <b>Centro de custo * (obrigatório)</b> : 'Centro de custo *'}
           <select value={v.centroCusto ?? ''} onChange={(e) => setV({ ...v, centroCusto: e.target.value || undefined })}>
             <option value="">—</option>
             {dims('centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
@@ -478,7 +480,7 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
           <button className="sec" type="button" onClick={iguais}>Repartir em partes iguais</button>
         </div>
         <div className="tabela"><table>
-          <thead><tr><th>Categoria</th><th>Comunidade</th><th>Descrição</th><th>Tipo</th><th className="num">Valor fixo (€) ou %</th><th className="num">Valor (€)</th><th /></tr></thead>
+          <thead><tr><th>Categoria</th><th>Comunidade</th><th>Centro de custo</th><th>Descrição</th><th>Tipo</th><th className="num">Valor fixo (€) ou %</th><th className="num">Valor (€)</th><th /></tr></thead>
           <tbody>{partes.map((p, i) => (
             <tr key={i}>
               <td><select value={p.categoria ?? ''} onChange={(e) => mudar(i, { categoria: e.target.value || undefined })} aria-label="Categoria da linha">
@@ -486,6 +488,9 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
               </select></td>
               <td><select value={p.comunidadeId} onChange={(e) => mudar(i, { comunidadeId: e.target.value })} aria-label="Comunidade da linha">
                 <option value="">—</option>{comunidades.filter((c) => c.ativo !== false).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select></td>
+              <td><select value={p.centroCusto ?? ''} onChange={(e) => mudar(i, { centroCusto: e.target.value || undefined })} aria-label="Centro de custo da linha">
+                <option value="">{v.centroCusto ? `Igual ao movimento (${v.centroCusto})` : '—'}</option>{dims('centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
               </select></td>
               <td><input value={p.descricao ?? ''} placeholder="Ex.: lanche do GC" onChange={(e) => mudar(i, { descricao: e.target.value })} aria-label="Descrição da linha" /></td>
               <td><select value={p.pct != null ? 'pct' : 'valor'} aria-label="Tipo da linha" onChange={(e) => mudar(i, e.target.value === 'pct' ? { pct: Math.round((Math.abs(p.valor) / Math.abs(m.valor || 1)) * 10000) / 100 } : { pct: undefined })}>
@@ -521,7 +526,8 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
         </div>}
       </>}
       <div className="acoes" style={{ marginTop: 14 }}>
-        <button disabled={!ok || (!repartir && (!v.categoria || (!v.comunidadeId && !v.conciliadoCom)))} onClick={() => onAplicar(validar({ ...m, ...final(), nota: v.estado === 'rever' ? undefined : v.nota } as MovBanco, categorias))}>Validar</button>
+        {semCentro && <p className="small" style={{ flexBasis: '100%', margin: 0 }}>Para validar, escolha o centro de custo{repartir ? ' (do movimento ou de cada linha que conta nos resultados)' : ''}.</p>}
+        <button disabled={!ok || semCentro || (!repartir && (!v.categoria || (!v.comunidadeId && !v.conciliadoCom)))} onClick={() => onAplicar(validar({ ...m, ...final(), nota: v.estado === 'rever' ? undefined : v.nota } as MovBanco, categorias))}>Validar</button>
         <button className="sec" disabled={!ok} onClick={() => onAplicar({ ...final(), estado: 'proposto', contabilizar: false })}>Guardar como proposta</button>
         <button className="sec" onClick={() => onAplicar({ estado: 'rever', contabilizar: false, nota: v.nota?.startsWith('REVER') ? v.nota : 'REVER - marcado à mão' })}>Para rever</button>
         <button className="sec" onClick={() => onAplicar({ estado: 'por-classificar', contabilizar: false, categoria: undefined, comunidadeId: undefined, partes: undefined, conciliadoCom: null, centroCusto: undefined, fornecedor: undefined, projeto: undefined, contaAnalitica: undefined, nota: undefined })}>Limpar</button>

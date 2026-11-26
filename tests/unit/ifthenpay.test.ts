@@ -28,6 +28,12 @@ describe('gravar só uma vez', () => {
     expect(regs[0]).toMatchObject({ id: 'portal-ifthenpay-A1', data: '2026-10-03', valor: 4, categoria: 'R1.02 Ofertas gerais',
       extra: { fonte: 'ifthenpay', liquido: 3.88, tarifa: 0.12, centroCusto: 'CC01', idPedido: 'A1', registadoPor: 'caf@cclx.pt' } });
   });
+  it('guarda as dimensões opcionais: projeto ou evento, fornecedor e conta analítica', () => {
+    const [r] = registosIfthenpay(pags, { ...OPC, projeto: 'Conferência 2026', fornecedor: 'IFTHENPAY', contaAnalitica: 'Ofertas online' }, 'x', 't');
+    expect(r.extra).toMatchObject({ centroCusto: 'CC01', projeto: 'Conferência 2026', fornecedor: 'IFTHENPAY', contaAnalitica: 'Ofertas online' });
+    const [s] = registosIfthenpay(pags, OPC, 'x', 't');
+    expect(s.extra).not.toHaveProperty('projeto');
+  });
   it('junta aos lotes mensais da comunidade e ignora os pedidos já importados (em qualquer comunidade)', () => {
     const regs = registosIfthenpay(pags, OPC, 'x', 't');
     const outubro: Lote = { id: 'contribuir_2026_10_almada', origem: 'contribuir', ano: 2026, mes: 10, periodo: '2026-10', comunidadeId: 'almada', total: 50, n: 1, atualizadoEm: '', atualizadoPor: '',

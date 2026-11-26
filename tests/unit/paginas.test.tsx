@@ -299,7 +299,8 @@ describe('páginas', () => {
     expect(html).toMatch(/role="tab"[^>]*>Anual<\/button>/);
     expect(html).toMatch(/role="tab"[^>]*>Mensal<\/button>/);
     expect(html).toContain('class="grafico-tabela"');
-    expect(html).toMatch(/<details class="sec card registos-falta"><summary><h2>Dados · 1 linha de 2026<\/h2>/);
+    expect(html).toMatch(/<details class="sec card registos-falta"><summary><h2>Dados · 1 linha de 2026 · 1 sem centro de custo<\/h2>/);
+    expect(html).toContain("<b>Sem centro de custo</b>");
   });
 
   it('Bancos: vista conjunta do mês com logótipo por linha, filtros por banco e totais', async () => {

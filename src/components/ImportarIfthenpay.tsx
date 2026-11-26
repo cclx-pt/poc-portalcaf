@@ -23,10 +23,16 @@ export function ImportarIfthenpay({ onFechar, onFeito }: { onFechar: () => void;
   const [comunidadeId, setComunidade] = useState('');
   const [categoria, setCategoria] = useState('');
   const [centroCusto, setCentro] = useState('');
+  const [projeto, setProjeto] = useState('');
+  const [fornecedor, setFornecedor] = useState('');
+  const [contaAnalitica, setConta] = useState('');
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const entradas = (cats.dados ?? []).filter((c) => c.tipo === 'entrada' && c.ativo !== false);
-  const centros = (dims.dados ?? []).filter((d) => d.tipo === 'centro' && d.ativo !== false);
+  const dimsDe = (t: 'centro' | 'projeto' | 'fornecedor' | 'conta') => (dims.dados ?? []).filter((d) => d.tipo === t && d.ativo !== false);
+  const centros = dimsDe('centro');
+  const codCat = entradas.find((c) => c.nome === categoria)?.codigo;
+  const contas = dimsDe('conta').filter((d) => !codCat || !d.categoria || d.categoria === codCat);
   const anos = [...new Set(pags.map((p) => Number(p.data.slice(0, 4))))];
   const novos = pags.filter((p) => !existentes.has(`portal-ifthenpay-${p.idPedido}`));
   const soma = (xs: PagamentoIfthenpay[], k: 'valor' | 'tarifa' | 'liquido') => r2(xs.reduce((s, p) => s + p[k], 0));
@@ -56,7 +62,7 @@ export function ImportarIfthenpay({ onFechar, onFeito }: { onFechar: () => void;
       const agora = new Date().toISOString();
       const quem = acesso!.email;
       const ja = await idsGravados(anos); // volta a confirmar, para nunca gravar duas vezes
-      const regs = registosIfthenpay(pags, { comunidadeId, categoria, centroCusto: centroCusto || undefined }, quem, agora);
+      const regs = registosIfthenpay(pags, { comunidadeId, categoria, centroCusto, projeto: projeto || undefined, fornecedor: fornecedor.trim() || undefined, contaAnalitica: contaAnalitica || undefined }, quem, agora);
       const [priv, conf] = await Promise.all([false, true].map(async (c) => (await Promise.all(anos.map((a) => listarLotes(acesso!, 'contribuir', a, c)))).flat()));
       const p = juntarIfthenpay(regs, comunidadeId, new Map(priv.map((l) => [l.id, l])), ja, quem, agora);
       const c = juntarIfthenpay(regs, comunidadeId, new Map(conf.map((l) => [l.id, l])), ja, quem, agora);
@@ -64,7 +70,7 @@ export function ImportarIfthenpay({ onFechar, onFeito }: { onFechar: () => void;
       const porId = new Map(c.lotes.map((l) => [l.id, l]));
       const falhas = await gravarLotes(p.lotes.map((l) => porId.get(l.id)!), p.lotes);
       const nomeCom = (coms.dados ?? []).find((x) => x.id === comunidadeId)?.nome ?? comunidadeId;
-      await auditar(quem, 'importar IFTHENPAY', `${nome}: ${p.novos} pagamentos (${eur(soma(novos, 'valor'))}, líquido ${eur(soma(novos, 'liquido'))}) em ${nomeCom} · ${categoria}${centroCusto ? ` · ${centroCusto}` : ''}${p.repetidos ? `; ${p.repetidos} já importados` : ''}${falhas.length ? `; recusados: ${falhas.join(', ')}` : ''}`);
+      await auditar(quem, 'importar IFTHENPAY', `${nome}: ${p.novos} pagamentos (${eur(soma(novos, 'valor'))}, líquido ${eur(soma(novos, 'liquido'))}) em ${nomeCom} · ${categoria}· ${[centroCusto, projeto, fornecedor.trim(), contaAnalitica].filter(Boolean).join(' · ')}${p.repetidos ? `; ${p.repetidos} já importados` : ''}${falhas.length ? `; recusados: ${falhas.join(', ')}` : ''}`);
       setExistentes(await idsGravados(anos));
       setMsg({ tipo: falhas.length ? 'erro' : 'ok', texto: `${p.novos} pagamentos gravados em ${nomeCom}${p.repetidos ? `; ${p.repetidos} já tinham sido importados e ficaram de fora` : ''}.${falhas.length ? ` Recusados (mês fechado ou sem permissão): ${falhas.join(', ')}.` : ' Recalcule os resumos no Painel para atualizar os totais.'}` });
       onFeito();
@@ -92,22 +98,38 @@ export function ImportarIfthenpay({ onFechar, onFeito }: { onFechar: () => void;
             </select>
           </label>
           <label className="campo">Categoria *
-            <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+            <select value={categoria} onChange={(e) => { setCategoria(e.target.value); setConta(''); }}>
               <option value="">Escolha…</option>
               {entradas.map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
             </select>
           </label>
-          <label className="campo">Centro de custo
+          <label className="campo">Centro de custo *
             <select value={centroCusto} onChange={(e) => setCentro(e.target.value)}>
-              <option value="">—</option>
+              <option value="">Escolha…</option>
               {centros.map((d) => <option key={d.id} value={d.codigo ?? d.nome}>{d.codigo ? `${d.codigo} ${d.nome}` : d.nome}</option>)}
+            </select>
+          </label>
+          <label className="campo">Projeto ou evento
+            <select value={projeto} onChange={(e) => setProjeto(e.target.value)}>
+              <option value="">—</option>
+              {dimsDe('projeto').map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
+            </select>
+          </label>
+          <label className="campo">Fornecedor
+            <input value={fornecedor} list="forn-ifthenpay" onChange={(e) => setFornecedor(e.target.value)} />
+            <datalist id="forn-ifthenpay">{dimsDe('fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist>
+          </label>
+          <label className="campo">Conta analítica
+            <select value={contaAnalitica} onChange={(e) => setConta(e.target.value)}>
+              <option value="">—</option>
+              {contas.map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
             </select>
           </label>
         </div>
       </>}
       {msg && <div className={msg.tipo === 'ok' ? 'ok-box' : 'aviso'} style={{ marginTop: 10 }}>{msg.texto}</div>}
       <div className="acoes" style={{ marginTop: 14 }}>
-        <button disabled={ocupado || !novos.length || !comunidadeId || !categoria} onClick={() => void gravar()}>{ocupado ? 'A gravar…' : `Gravar ${novos.length} pagamentos`}</button>
+        <button disabled={ocupado || !novos.length || !comunidadeId || !categoria || !centroCusto} onClick={() => void gravar()}>{ocupado ? 'A gravar…' : `Gravar ${novos.length} pagamentos`}</button>
         <button className="sec" onClick={onFechar}>Fechar</button>
       </div>
     </Modal>

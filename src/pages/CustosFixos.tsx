@@ -51,6 +51,7 @@ export default function CustosFixos() {
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
   const linhas = (cf.dados ?? []).filter((c) => (comunidade === 'todas' || c.comunidadeId === comunidade) && custoNoAno(c, ano))
     .sort((a, b) => (nomes.get(a.comunidadeId) ?? '').localeCompare(nomes.get(b.comunidadeId) ?? '') || a.rubrica.localeCompare(b.rubrica) || a.inicio.localeCompare(b.inicio));
+  const semCentro = linhas.filter((c) => !c.centroCusto).length;
   const ate = mesesDecorridos(ano, hoje());
   const noAno = (c: CustoFixo) => r2(Array.from({ length: 12 }, (_, i) => (custoAtivo(c, periodo(ano, i + 1)) ? valorImputadoNoMes(c, periodo(ano, i + 1)) : 0)).reduce((s, v) => s + v, 0));
   const ateHoje = (c: CustoFixo) => r2(Array.from({ length: ate }, (_, i) => (custoAtivo(c, periodo(ano, i + 1)) ? valorImputadoNoMes(c, periodo(ano, i + 1)) : 0)).reduce((s, v) => s + v, 0));
@@ -134,7 +135,7 @@ export default function CustosFixos() {
   }
 
   async function guardar() {
-    if (!edit) return;
+    if (!edit || !edit.centroCusto) return;
     try {
       const id = edit.id || `${edit.comunidadeId}-${edit.rubrica.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${edit.inicio}`;
       const incidencia = Math.min(100, Math.max(0, r2(Number(edit.incidencia ?? 100))));
@@ -212,7 +213,7 @@ export default function CustosFixos() {
       )}
       {!!linhas.length && (
         <details className="sec card registos-falta">
-          <summary><h2>{`Dados · ${linhas.length} linha${linhas.length === 1 ? '' : 's'} de ${ano}`}</h2></summary>
+          <summary><h2>{`Dados · ${linhas.length} linha${linhas.length === 1 ? '' : 's'} de ${ano}${semCentro ? ` · ${semCentro} sem centro de custo` : ''}`}</h2></summary>
         <div className="tabela"><table>
           <thead><tr><th>Ano</th><th>Comunidade</th><th>Rubrica</th><th>Nível</th><th className="num">Mensal (total)</th><th className="num">Incidência</th><th className="num">Imputado</th><th>Âmbito</th><th>Início</th><th>Fim</th><th className="num">{ano} (até hoje)</th><th className="num">{ano} (ano)</th><th /></tr></thead>
           <tbody>{linhas.map((c) => (
@@ -220,7 +221,8 @@ export default function CustosFixos() {
               <td>{anoDoCusto(c)}</td>
               <td>{nomes.get(c.comunidadeId) ?? c.comunidadeId}</td>
               <td>{c.rubrica}
-                <div className="small muted">{c.categoria ? [c.categoria, c.fornecedor, nomeCentro(c.centroCusto), c.projeto].filter(Boolean).join(' · ') : 'Sem categoria do plano'}</div>
+                <div className="small muted">{c.categoria ? [c.categoria, c.contaAnalitica, c.fornecedor, nomeCentro(c.centroCusto), c.projeto].filter(Boolean).join(' · ') : 'Sem categoria do plano'}</div>
+                {!c.centroCusto && <div className="small"><b>Sem centro de custo</b> (obrigatório: edite a linha)</div>}
                 {c.notas && <div className="muted">{c.notas}</div>}</td>
               <td><span className={'etiqueta' + (c.nivel === 'confidencial' ? ' preta' : '')}>{NIVEL_LABEL[c.nivel]}</span></td>
               <td className="num">{eur(c.valorMensal)}{c.periodicidade && <div className="small muted">{descreverPeriodicidade(c)}</div>}</td><td className="num">{pct(c.incidencia)}</td><td className="num">{eur(valorImputado(c))}</td>
@@ -350,9 +352,9 @@ export default function CustosFixos() {
                 <input value={edit.fornecedor ?? ''} list="fornecedores" onChange={(e) => setEdit({ ...edit, fornecedor: e.target.value || undefined })} />
                 <datalist id="fornecedores">{dimsDe('fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist>
               </label>
-              <label className="campo">Centro de custo
+              <label className="campo">Centro de custo *
                 <select value={edit.centroCusto ?? ''} onChange={(e) => setEdit({ ...edit, centroCusto: e.target.value || undefined })}>
-                  <option value="">—</option>
+                  <option value="">Escolha…</option>
                   {dimsDe('centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
                 </select>
               </label>
@@ -399,7 +401,8 @@ export default function CustosFixos() {
               <label className="campo" style={{ gridColumn: '1 / -1' }}>Notas<input value={edit.notas ?? ''} onChange={(e) => setEdit({ ...edit, notas: e.target.value })} /></label>
             </div>
             <div className="acoes" style={{ marginTop: 14 }}>
-              <button disabled={!edit.rubrica || !edit.inicio || (!!edit.fim && edit.fim < edit.inicio)} onClick={guardar}>Guardar</button>
+              {!edit.centroCusto && <p className="small" style={{ flexBasis: '100%', margin: 0 }}>Para guardar, escolha o centro de custo.</p>}
+              <button disabled={!edit.rubrica || !edit.inicio || !edit.centroCusto || (!!edit.fim && edit.fim < edit.inicio)} onClick={guardar}>Guardar</button>
               <button className="sec" onClick={() => setEdit(null)}>Cancelar</button>
             </div>
           </div>
