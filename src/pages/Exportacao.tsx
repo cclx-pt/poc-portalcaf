@@ -2,7 +2,8 @@ import { partesMes, GERAIS_POR_REPARTIR } from '../lib/resumos';
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { mensagemErro, useFiltros } from '../components/ui';
-import { auditar, listarBanco, listarCategorias, listarComunidades, listarContas, listarLotes, listarResumos } from '../lib/db';
+import { auditar, listarBanco, listarCategorias, listarComunidades, listarContas, listarResumos } from '../lib/db';
+import { listarLotesCaf } from '../lib/lotesCaf';
 import { MESES, periodo, r2 } from '../lib/format';
 
 /** Exportação mensal para o contabilista: folha de movimentos e folha de resumo. */
@@ -18,7 +19,7 @@ export default function Exportacao() {
     try {
       const [coms, contas, cats, contribuir, depositos, despesas, banco, resumos] = await Promise.all([
         listarComunidades(), listarContas(), listarCategorias(),
-        listarLotes(acesso!, 'contribuir', ano, true), listarLotes(acesso!, 'depositos', ano, true), listarLotes(acesso!, 'despesas', ano, true),
+        listarLotesCaf(acesso!, 'contribuir', ano, true), listarLotesCaf(acesso!, 'depositos', ano, true), listarLotesCaf(acesso!, 'despesas', ano, true),
         listarBanco(ano), listarResumos(acesso!, ano),
       ]);
       const nomeC = new Map(coms.map((c) => [c.id, c.nome]));

@@ -66,6 +66,7 @@ vi.mock('../../src/lib/db', () => ({
     ] },
   ]),
 }));
+vi.mock('../../src/lib/lotesCaf', () => ({ listarLotesCaf: (_a: unknown, origem: string) => sync(LOTES[origem] ?? []) }));
 vi.mock('../../src/components/ui', async (orig) => ({
   ...(await orig<typeof import('../../src/components/ui')>()),
   useCarregar: (fn: () => Promise<unknown> & { __sync?: unknown }) => { const p = fn(); return { dados: p.__sync, erro: null, aCarregar: false, recarregar: async () => {} }; },

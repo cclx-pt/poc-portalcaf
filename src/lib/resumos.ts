@@ -1,3 +1,4 @@
+import { tradutorJotform, traduzirLotes, type OrigemJotform, type TraducaoJotform } from './traducaoJotform';
 import { MESES, periodo, r2 } from './format';
 import { OUTROS_FUNCIONAMENTO, classificador } from './rubricas';
 import { pedacosDe } from './classificacaoBanco';
@@ -6,6 +7,12 @@ import type { BancoLote, Categoria, Comunidade, CustoFixo, Lote, ParteRubrica, P
 
 export interface DadosCalculo {
   ano: number;
+  /**
+   * Tradução das categorias do Jotform para as categorias CAF (Configuração › Jotform e sincronização).
+   * Quando é passada (mesmo vazia), o Contribuir, os depósitos e as despesas contam só com categorias CAF:
+   * o que não tem tradução fica "Por traduzir". Sem ela, as categorias do Jotform entram como vêm.
+   */
+  traducaoJotform?: TraducaoJotform | null;
   comunidades: Comunidade[];
   contribuir: Lote[];
   depositos: Lote[];
@@ -217,10 +224,13 @@ export function comunidadeAtiva(c: Comunidade, p: string) {
 export function calcularResumos(d0: DadosCalculo): Resumo[] {
   // Fusões (ex.: Barreiro → Moita depois de 18/07/2026): registos e movimentos depois do fim passam para a sucessora.
   const destino = destinoFusao(d0.comunidades);
+  // O portal só trabalha com categorias CAF: as do Jotform são traduzidas antes de qualquer cálculo.
+  const tr = d0.traducaoJotform !== undefined ? tradutorJotform(d0.traducaoJotform, d0.categorias ?? []) : null;
+  const caf = (ls: Lote[], o: OrigemJotform) => (tr ? traduzirLotes(ls, o, tr) : ls);
   const d: DadosCalculo = {
     ...d0,
-    contribuir: lotesComFusao(d0.contribuir, destino), depositos: lotesComFusao(d0.depositos, destino),
-    despesas: lotesComFusao(d0.despesas, destino), assistencia: lotesComFusao(d0.assistencia, destino),
+    contribuir: lotesComFusao(caf(d0.contribuir, 'contribuir'), destino), depositos: lotesComFusao(caf(d0.depositos, 'depositos'), destino),
+    despesas: lotesComFusao(caf(d0.despesas, 'despesas'), destino), assistencia: lotesComFusao(d0.assistencia, destino),
     banco: d0.banco.map((b) => ({ ...b, registos: b.registos.map((r) => ({
       ...r, ...(r.comunidadeId ? { comunidadeId: destino(r.comunidadeId, r.data) } : {}),
       ...(r.partes?.length ? { partes: r.partes.map((p) => ({ ...p, comunidadeId: destino(p.comunidadeId, r.data) })) } : {}),

@@ -3,7 +3,8 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros } from '../components/ui';
 import { SyncEstado } from '../components/SyncEstado';
 import { ImportarIfthenpay } from '../components/ImportarIfthenpay';
-import { listarComunidades, listarLotes } from '../lib/db';
+import { listarComunidades } from '../lib/db';
+import { listarLotesCaf } from '../lib/lotesCaf';
 import { FONTES } from '../lib/fontes';
 import { eur, MESES_CURTOS, r2 } from '../lib/format';
 import type { Origem } from '../lib/types';
@@ -11,7 +12,7 @@ import type { Origem } from '../lib/types';
 const TEXTOS: Record<Origem, { titulo: string; intro: string; unidade: 'eur' | 'pessoas' }> = {
   contribuir: { titulo: 'Contribuir', intro: 'Contribuições registadas no formulário CCLX - CONTRIBUIR (só as com PAGO = "PAGO"). Para ver em conjunto com os depósitos de coletas, use Entradas: contribuições e depósitos.', unidade: 'eur' },
   depositos: { titulo: 'Depósitos de coletas', intro: 'Coletas em dinheiro depositadas, registadas no formulário CCLX - REGISTO DE DEPÓSITOS.', unidade: 'eur' },
-  despesas: { titulo: 'Reembolsos e despesas', intro: 'Despesas e reembolsos registados no formulário CCLX - REGISTO DE DESPESAS (categorias mantidas do Jotform).', unidade: 'eur' },
+  despesas: { titulo: 'Reembolsos e despesas', intro: 'Despesas e reembolsos registados no formulário CCLX - REGISTO DE DESPESAS (categorias do Jotform traduzidas para as categorias CAF).', unidade: 'eur' },
   assistencia: { titulo: 'Assistência', intro: 'Presenças registadas no formulário CCLX : Registo de Presenças. A média de adultos dos últimos 12 meses serve para distribuir, cada mês, a bolsa geral e os gerais.', unidade: 'pessoas' },
 };
 
@@ -21,7 +22,7 @@ export default function Fonte({ origem }: { origem: Origem }) {
   const { ano, comunidade } = useFiltros();
   const [verPessoais, setVerPessoais] = useState(false);
   const conf = verPessoais && temNivel('confidencial') && origem !== 'assistencia';
-  const lotes = useCarregar(() => listarLotes(acesso!, origem, ano, conf), [origem, ano, conf, acesso?.email]);
+  const lotes = useCarregar(() => listarLotesCaf(acesso!, origem, ano, conf), [origem, ano, conf, acesso?.email]);
   const coms = useCarregar(listarComunidades, []);
   const nomes = new Map((coms.dados ?? []).map((c) => [c.id, c.nome]));
   const t = TEXTOS[origem];
@@ -91,7 +92,7 @@ export default function Fonte({ origem }: { origem: Origem }) {
               <tr key={r.comunidadeId + r.id}>
                 <td>{r.data.split('-').reverse().join('/')}</td>
                 <td>{nomes.get(r.comunidadeId) ?? r.comunidadeId}</td>
-                <td>{origem === 'assistencia' ? r.evento ?? '' : r.categoria}{r.evento && origem !== 'assistencia' ? ` · ${r.evento}` : ''}</td>
+                <td>{origem === 'assistencia' ? r.evento ?? '' : r.categoria}{r.evento && origem !== 'assistencia' ? ` · ${r.evento}` : ''}{r.extra?.categoriaJotform != null && <div className="small muted" title="Valor no Jotform, traduzido em Configuração › Jotform e sincronização">Jotform: {String(r.extra.categoriaJotform)}</div>}</td>
                 {origem !== 'assistencia' && <td>{conf ? r.pessoa ?? '' : r.pessoaRef ?? ''}</td>}
                 {conf && <td className="small">{[r.nif && `NIF ${r.nif}`, r.email, r.telefone, r.iban].filter(Boolean).join(' · ')}</td>}
                 <td className="num">{fmt(r.valor)}</td>
