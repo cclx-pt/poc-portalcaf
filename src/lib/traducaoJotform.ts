@@ -10,7 +10,8 @@ import type { Categoria, Lote } from './types';
 export type OrigemJotform = 'contribuir' | 'depositos' | 'despesas';
 export const ORIGENS_JOTFORM: OrigemJotform[] = ['contribuir', 'depositos', 'despesas'];
 export const NOME_ORIGEM: Record<OrigemJotform, string> = { contribuir: 'Contribuir', depositos: 'Depósitos de coletas', despesas: 'Reembolsos e despesas' };
-export interface LinhaTraducao { origem: OrigemJotform; valor: string; codigo: string }
+/** Regra direta: no formulário `origem`, se a categoria do Jotform é (ou contém) `valor`, a categoria CAF é `codigo`. */
+export interface LinhaTraducao { origem: OrigemJotform; valor: string; codigo: string; modo?: 'igual' | 'contem' }
 export interface TraducaoJotform { linhas: LinhaTraducao[]; atualizadoEm?: string; atualizadoPor?: string }
 export const POR_TRADUZIR = 'Por traduzir';
 
@@ -18,34 +19,36 @@ export const POR_TRADUZIR = 'Por traduzir';
 const tipoDe = (o: OrigemJotform): Categoria['tipo'] => (o === 'despesas' ? 'saida' : 'entrada');
 const chave = (s: string) => norm(s).replace(/[^a-z0-9]+/g, ' ').trim();
 
-export interface Traducao { categoria: string | null; fonte: 'tabela' | 'caf' | 'automatica' | null }
+export interface Traducao { categoria: string | null; fonte: 'regra' | 'caf' | null; regra?: LinhaTraducao }
 
 /**
- * Tradutor: 1) a tabela; 2) um valor que já é o nome de uma categoria CAF; 3) proposta automática pelos sinónimos
- * das categorias (só categorias do plano, do tipo do formulário); 4) nada (por traduzir).
+ * Tradutor só com regras escritas: 1) regra "igual" (sem maiúsculas nem acentos); 2) regra "contém" (a mais longa);
+ * 3) um valor que já é o nome de uma categoria CAF (ex.: registos IFTHENPAY do portal); 4) nada: por traduzir.
  */
 export function tradutorJotform(t: TraducaoJotform | null | undefined, categorias: Categoria[]) {
   const porCodigo = new Map(categorias.filter((c) => c.codigo).map((c) => [c.codigo!, c]));
   const nomes = new Map(categorias.filter((c) => c.codigo).map((c) => [chave(c.nome), c]));
-  const tabela = new Map((t?.linhas ?? []).map((l) => [`${l.origem}|${chave(l.valor)}`, l.codigo]));
-  const classificar = classificador(categorias);
+  const regras = (t?.linhas ?? []).filter((l) => porCodigo.has(l.codigo) && chave(l.valor));
+  const iguais = new Map(regras.filter((l) => (l.modo ?? 'igual') === 'igual').map((l) => [`${l.origem}|${chave(l.valor)}`, l]));
+  const contem = regras.filter((l) => l.modo === 'contem').sort((a, b) => chave(b.valor).length - chave(a.valor).length);
   const cache = new Map<string, Traducao>();
   return (origem: OrigemJotform, valor: string): Traducao => {
     const k = `${origem}|${chave(valor)}`;
     if (cache.has(k)) return cache.get(k)!;
-    let r: Traducao = { categoria: null, fonte: null };
-    const daTabela = tabela.get(k);
+    const v = ` ${chave(valor)} `;
+    const regra = iguais.get(k) ?? contem.find((l) => l.origem === origem && v.includes(` ${chave(l.valor)} `));
     const caf = nomes.get(chave(valor));
-    if (daTabela && porCodigo.has(daTabela)) r = { categoria: porCodigo.get(daTabela)!.nome, fonte: 'tabela' };
-    else if (caf) r = { categoria: caf.nome, fonte: 'caf' };
-    else if (valor.trim()) {
-      const c = classificar(valor, tipoDe(origem));
-      const cat = nomes.get(chave(c.categoria));
-      if (cat && cat.tipo === tipoDe(origem)) r = { categoria: cat.nome, fonte: 'automatica' };
-    }
+    const r: Traducao = regra ? { categoria: porCodigo.get(regra.codigo)!.nome, fonte: 'regra', regra } : caf ? { categoria: caf.nome, fonte: 'caf' } : { categoria: null, fonte: null };
     cache.set(k, r);
     return r;
   };
+}
+
+/** Sugestão para escrever uma regra (pelos sinónimos das categorias, do tipo do formulário). Nunca se aplica sozinha. */
+export function sugestaoRegra(origem: OrigemJotform, valor: string, categorias: Categoria[]): Categoria | null {
+  const c = classificador(categorias)(valor, tipoDe(origem));
+  const cat = categorias.find((x) => x.codigo && x.nome === c.categoria);
+  return cat && cat.tipo === tipoDe(origem) ? cat : null;
 }
 
 /** Lotes com as categorias CAF (o valor do Jotform fica em extra.categoriaJotform). */
@@ -73,15 +76,4 @@ export function valoresJotform(lotes: Partial<Record<OrigemJotform, Lote[]>>): V
     out.set(k, { ...x, n: x.n + 1, total: Math.round((x.total + r.valor) * 100) / 100 });
   }
   return [...out.values()].sort((a, b) => ORIGENS_JOTFORM.indexOf(a.origem) - ORIGENS_JOTFORM.indexOf(b.origem) || b.total - a.total);
-}
-
-/** Proposta para os valores sem linha na tabela (e que não são já categorias CAF): a correspondência automática. */
-export function propostaTraducao(valores: ValorJotform[], t: TraducaoJotform, categorias: Categoria[]): LinhaTraducao[] {
-  const tr = tradutorJotform({ linhas: [] }, categorias);
-  const tem = new Set(t.linhas.map((l) => `${l.origem}|${chave(l.valor)}`));
-  const codigo = new Map(categorias.filter((c) => c.codigo).map((c) => [c.nome, c.codigo!]));
-  return valores.filter((v) => !tem.has(`${v.origem}|${chave(v.valor)}`)).flatMap((v) => {
-    const r = tr(v.origem, v.valor);
-    return r.fonte === 'automatica' && r.categoria ? [{ origem: v.origem, valor: v.valor, codigo: codigo.get(r.categoria)! }] : [];
-  });
 }

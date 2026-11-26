@@ -1,19 +1,19 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, mensagemErro, useCarregar } from './ui';
+import { Estado, Modal, mensagemErro, useCarregar } from './ui';
 import { auditar, gravarTraducaoJotform, lerTraducaoJotform, listarCategorias, listarLotes } from '../lib/db';
-import { eur, norm, num } from '../lib/format';
+import { eur, num } from '../lib/format';
 import { recalcularAno } from '../lib/recalcular';
-import { NOME_ORIGEM, ORIGENS_JOTFORM, tradutorJotform, valoresJotform, type LinhaTraducao, type OrigemJotform } from '../lib/traducaoJotform';
+import { NOME_ORIGEM, ORIGENS_JOTFORM, sugestaoRegra, tradutorJotform, valoresJotform, type LinhaTraducao, type OrigemJotform } from '../lib/traducaoJotform';
 import type { Categoria } from '../lib/types';
 
-const chave = (o: OrigemJotform, v: string) => `${o}|${norm(v).replace(/[^a-z0-9]+/g, ' ').trim()}`;
 /** Categorias CAF que servem a cada formulário: entradas (ou financeiras) no Contribuir e nos depósitos; gastos (ou financeiras) nas despesas. */
 const servem = (o: OrigemJotform, c: Categoria) => !!c.codigo && c.ativo !== false && (c.tipo === 'financeiro' || c.tipo === (o === 'despesas' ? 'saida' : 'entrada'));
+interface Edicao { indice: number | null; l: LinhaTraducao }
 
 /**
- * Tabela de tradução das categorias do Jotform para as categorias CAF (Configuração › Jotform e sincronização).
- * O portal só trabalha com categorias CAF: o que não tiver tradução aparece como "Por traduzir" nos resultados.
+ * Regras de tradução das categorias do Jotform para as categorias CAF (Configuração › Jotform e sincronização):
+ * "se aparece A, a categoria CAF é B", por formulário. O portal só trabalha com categorias CAF: sem regra, "Por traduzir".
  */
 export function TraducaoJotform() {
   const { acesso } = useAuth();
@@ -26,87 +26,125 @@ export function TraducaoJotform() {
     const lotes = Object.fromEntries(ORIGENS_JOTFORM.map((o, i) => [o, [...ls[i * 2], ...ls[i * 2 + 1]]]));
     return { categorias, traducao, valores: valoresJotform(lotes) };
   }, [acesso?.email]);
-  const [edit, setEdit] = useState<Record<string, string> | null>(null);
+  const [edit, setEdit] = useState<Edicao | null>(null);
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  const [filtro, setFiltro] = useState<'todos' | 'por-traduzir'>('todos');
+  const [porAplicar, setPorAplicar] = useState(false);
   if (dados.aCarregar || dados.erro || !dados.dados) return <Estado aCarregar={dados.aCarregar || !dados.dados} erro={dados.erro} />;
   const { categorias, traducao, valores } = dados.dados;
   const master = acesso?.papel === 'master';
-  const daTabela = Object.fromEntries(traducao.linhas.map((l) => [chave(l.origem, l.valor), l.codigo]));
-  const atual = edit ?? daTabela;
-  const tr = tradutorJotform({ linhas: [] }, categorias);
-  const codigoDe = new Map(categorias.filter((c) => c.codigo).map((c) => [c.nome, c.codigo!]));
-  // Linhas: os valores que existem nos dados e as traduções gravadas que já não aparecem nos dados.
-  const linhas = [...valores, ...traducao.linhas.filter((l) => !valores.some((v) => chave(v.origem, v.valor) === chave(l.origem, l.valor))).map((l) => ({ origem: l.origem, valor: l.valor, n: 0, total: 0 }))];
-  const estado = (o: OrigemJotform, v: string) => {
-    if (atual[chave(o, v)]) return 'tabela';
-    const r = tr(o, v);
-    return r.fonte === 'caf' ? 'caf' : r.fonte === 'automatica' ? 'automatica' : 'falta';
-  };
-  const nFalta = linhas.filter((l) => estado(l.origem, l.valor) === 'falta').length;
-  const nAuto = linhas.filter((l) => estado(l.origem, l.valor) === 'automatica').length;
-  const mostrar = filtro === 'todos' ? linhas : linhas.filter((l) => ['falta', 'automatica'].includes(estado(l.origem, l.valor)));
+  const tr = tradutorJotform(traducao, categorias);
+  const nomeCat = (codigo: string) => categorias.find((c) => c.codigo === codigo)?.nome ?? `${codigo} (não existe)`;
+  const semRegra = valores.filter((v) => tr(v.origem, v.valor).fonte === null);
+  const apanha = (l: LinhaTraducao) => valores.filter((v) => v.origem === l.origem && tr(v.origem, v.valor).regra === l);
 
-  function aceitarPropostas() {
-    const n = { ...atual };
-    for (const l of linhas) if (estado(l.origem, l.valor) === 'automatica') n[chave(l.origem, l.valor)] = codigoDe.get(tr(l.origem, l.valor).categoria!)!;
-    setEdit(n);
-  }
-  async function guardar() {
+  async function gravarLinhas(linhas: LinhaTraducao[], descricao: string) {
     setOcupado(true); setMsg(null);
     try {
-      const novas: LinhaTraducao[] = linhas.filter((l) => atual[chave(l.origem, l.valor)]).map((l) => ({ origem: l.origem, valor: l.valor, codigo: atual[chave(l.origem, l.valor)] }));
-      await gravarTraducaoJotform({ linhas: novas, atualizadoEm: new Date().toISOString(), atualizadoPor: acesso!.email });
-      await auditar(acesso!.email, 'tradução das categorias do Jotform', `${novas.length} traduções gravadas`);
-      await recalcularAno(acesso!, ano, 'Tradução das categorias do Jotform');
-      setEdit(null);
+      await gravarTraducaoJotform({ linhas, atualizadoEm: new Date().toISOString(), atualizadoPor: acesso!.email });
+      await auditar(acesso!.email, 'tradução das categorias do Jotform', descricao);
+      setEdit(null); setPorAplicar(true);
       await dados.recarregar();
-      setMsg({ tipo: 'ok', texto: `${novas.length} traduções gravadas e resumos de ${ano} recalculados. Para anos anteriores, use Recalcular no Painel.` });
     } catch (e) { setMsg({ tipo: 'erro', texto: mensagemErro(e) }); } finally { setOcupado(false); }
   }
+  function guardar() {
+    if (!edit) return;
+    const l = { ...edit.l, valor: edit.l.valor.trim(), modo: edit.l.modo ?? 'igual' };
+    const linhas = edit.indice == null ? [...traducao.linhas, l] : traducao.linhas.map((x, i) => (i === edit.indice ? l : x));
+    void gravarLinhas(linhas, `${edit.indice == null ? 'Nova regra' : 'Regra alterada'}: ${NOME_ORIGEM[l.origem]} · ${l.modo === 'contem' ? 'contém' : 'igual a'} "${l.valor}" → ${nomeCat(l.codigo)}`);
+  }
+  function apagar(i: number) {
+    const l = traducao.linhas[i];
+    if (!confirm(`Apagar a regra "${l.valor}" → ${nomeCat(l.codigo)}?`)) return;
+    void gravarLinhas(traducao.linhas.filter((_, k) => k !== i), `Regra apagada: ${NOME_ORIGEM[l.origem]} · "${l.valor}" → ${nomeCat(l.codigo)}`);
+  }
+  async function aplicar() {
+    setOcupado(true); setMsg(null);
+    try {
+      await recalcularAno(acesso!, ano, 'Tradução das categorias do Jotform');
+      setPorAplicar(false);
+      setMsg({ tipo: 'ok', texto: `Resumos de ${ano} recalculados com as regras. Para ${ano - 1}, use Recalcular no Painel com esse ano.` });
+    } catch (e) { setMsg({ tipo: 'erro', texto: mensagemErro(e) }); } finally { setOcupado(false); }
+  }
+  const novaRegra = (origem: OrigemJotform = 'contribuir', valor = '') =>
+    setEdit({ indice: null, l: { origem, valor, modo: 'igual', codigo: valor ? sugestaoRegra(origem, valor, categorias)?.codigo ?? '' : '' } });
+  const valido = !!edit && !!edit.l.valor.trim() && !!edit.l.codigo;
 
   return (
     <div className="sec card">
-      <h2 style={{ marginTop: 0 }}>Tradução das categorias do Jotform</h2>
-      <p className="small">O portal só trabalha com <b>categorias CAF</b>. Os formulários do Jotform usam nomes diferentes para a mesma coisa ("Dízimo", "Dizimo", "Dízimos"…): aqui diz-se a que categoria CAF corresponde cada valor, por formulário. O Jotform não é alterado; a tradução aplica-se nos resultados, nas listas e na exportação. Valores dos anos {ano - 1} e {ano}.</p>
-      {(nFalta > 0 || nAuto > 0) && <div className="aviso">{nFalta > 0 && <>{num(nFalta)} valores <b>por traduzir</b> (aparecem como "Por traduzir" nos resultados). </>}{nAuto > 0 && <>{num(nAuto)} com proposta automática por confirmar.</>}</div>}
-      {msg && <div className={msg.tipo === 'ok' ? 'ok-box' : 'aviso'}>{msg.texto}</div>}
-      <div className="linha" style={{ gap: 8, marginBottom: 8 }}>
-        <label className="campo">Mostrar
-          <select value={filtro} onChange={(e) => setFiltro(e.target.value as 'todos' | 'por-traduzir')}><option value="todos">Todos</option><option value="por-traduzir">Por traduzir ou por confirmar</option></select>
-        </label>
-        {master && nAuto > 0 && <button className="sec" style={{ alignSelf: 'flex-end' }} onClick={aceitarPropostas}>{`Aceitar as ${nAuto} propostas automáticas`}</button>}
+      <div className="linha" style={{ justifyContent: 'space-between' }}>
+        <h2 style={{ marginTop: 0 }}>Tradução das categorias do Jotform</h2>
+        {master && <button onClick={() => novaRegra()}>Nova regra</button>}
       </div>
-      <div className="tabela"><table>
-        <thead><tr><th>Formulário</th><th>Valor no Jotform</th><th className="num">Registos</th><th className="num">Total</th><th>Categoria CAF</th><th>Estado</th></tr></thead>
-        <tbody>{mostrar.map((l) => {
-          const k = chave(l.origem, l.valor);
-          const e = estado(l.origem, l.valor);
-          const proposta = e === 'automatica' || e === 'caf' ? tr(l.origem, l.valor).categoria : null;
-          return (
-            <tr key={k}>
-              <td className="small">{NOME_ORIGEM[l.origem]}</td>
-              <td>{l.valor}</td>
-              <td className="num">{l.n ? num(l.n) : '—'}</td>
-              <td className="num">{l.n ? eur(l.total) : '—'}</td>
-              <td>
-                {e === 'caf' ? <span className="small muted">Já é uma categoria CAF</span> : (
-                  <select value={atual[k] ?? ''} disabled={!master} aria-label={`Categoria CAF para ${l.valor}`} onChange={(ev) => setEdit({ ...atual, [k]: ev.target.value })}>
-                    <option value="">{proposta ? `Proposta: ${proposta}` : 'Escolha…'}</option>
-                    {categorias.filter((c) => servem(l.origem, c)).map((c) => <option key={c.id} value={c.codigo}>{c.nome}</option>)}
-                  </select>
-                )}
-              </td>
-              <td className="small">{e === 'tabela' ? 'Traduzido' : e === 'caf' ? 'Categoria CAF' : e === 'automatica' ? 'Proposta automática' : <b className="neg">Por traduzir</b>}</td>
+      <p className="small">O portal só trabalha com <b>categorias CAF</b>. Cada regra diz: no formulário X, <b>se aparece A, a categoria CAF é B</b>. "Igual" exige o mesmo texto (sem contar maiúsculas e acentos); "Contém" apanha o texto dentro de outro (ex.: "Dízimo" apanha "Dízimo Sede Manhã"). Sem regra, o registo aparece como "Por traduzir". O Jotform não é alterado.</p>
+      {msg && <div className={msg.tipo === 'ok' ? 'ok-box' : 'aviso'}>{msg.texto}</div>}
+      {porAplicar && master && <div className="nota">Regras gravadas. Os resultados do Painel e das análises mudam depois de recalcular. <button className="sec" disabled={ocupado} onClick={() => void aplicar()}>{ocupado ? 'A recalcular…' : `Recalcular ${ano}`}</button></div>}
+
+      <h3>Regras ({num(traducao.linhas.length)})</h3>
+      {!traducao.linhas.length ? <p className="muted small">Ainda não há regras. Comece pelos valores sem regra, em baixo.</p> : (
+        <div className="tabela"><table>
+          <thead><tr><th>Formulário</th><th>Se aparece (A)</th><th>Correspondência</th><th>Categoria CAF (B)</th><th className="num">Registos que apanha</th>{master && <th />}</tr></thead>
+          <tbody>{traducao.linhas.map((l, i) => {
+            const vs = apanha(l);
+            return (
+              <tr key={`${l.origem}|${l.valor}|${i}`}>
+                <td className="small">{NOME_ORIGEM[l.origem]}</td>
+                <td>{l.valor}</td>
+                <td className="small">{l.modo === 'contem' ? 'Contém' : 'Igual'}</td>
+                <td>{nomeCat(l.codigo)}</td>
+                <td className="num" title={vs.map((v) => v.valor).join(', ')}>{num(vs.reduce((s, v) => s + v.n, 0))}</td>
+                {master && <td><button className="link" onClick={() => setEdit({ indice: i, l })}>Editar</button> · <button className="link" onClick={() => apagar(i)}>Apagar</button></td>}
+              </tr>
+            );
+          })}</tbody>
+        </table></div>
+      )}
+
+      <h3>Valores do Jotform sem regra ({num(semRegra.length)})</h3>
+      {!semRegra.length ? <p className="ok-box small">Todos os valores do Jotform de {ano - 1} e {ano} têm regra.</p> : <>
+        <div className="aviso">{num(semRegra.length)} valores ainda aparecem como "Por traduzir" nos resultados.</div>
+        <div className="tabela"><table>
+          <thead><tr><th>Formulário</th><th>Valor no Jotform</th><th className="num">Registos</th><th className="num">Total</th><th>Sugestão</th>{master && <th />}</tr></thead>
+          <tbody>{semRegra.map((v) => (
+            <tr key={`${v.origem}|${v.valor}`}>
+              <td className="small">{NOME_ORIGEM[v.origem]}</td>
+              <td>{v.valor}</td>
+              <td className="num">{num(v.n)}</td>
+              <td className="num">{eur(v.total)}</td>
+              <td className="small muted">{sugestaoRegra(v.origem, v.valor, categorias)?.nome ?? '—'}</td>
+              {master && <td><button className="link" onClick={() => novaRegra(v.origem, v.valor)}>Criar regra</button></td>}
             </tr>
-          );
-        })}</tbody>
-      </table></div>
-      {master
-        ? <div className="acoes" style={{ marginTop: 10 }}><button disabled={ocupado || !edit} onClick={() => void guardar()}>{ocupado ? 'A gravar…' : 'Guardar tradução'}</button>{edit && <button className="sec" onClick={() => setEdit(null)}>Cancelar</button>}</div>
-        : <p className="small muted">Só o Master altera a tradução.</p>}
+          ))}</tbody>
+        </table></div>
+      </>}
+      {!master && <p className="small muted">Só o Master cria e altera regras.</p>}
       {traducao.atualizadoEm && <p className="small muted">Última alteração: {new Date(traducao.atualizadoEm).toLocaleDateString('pt-PT')} · {traducao.atualizadoPor}</p>}
+
+      {edit && (
+        <Modal titulo={edit.indice == null ? 'Nova regra de tradução' : 'Editar regra de tradução'} onFechar={() => setEdit(null)}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+            <label className="campo">Formulário
+              <select value={edit.l.origem} onChange={(e) => setEdit({ ...edit, l: { ...edit.l, origem: e.target.value as OrigemJotform, codigo: '' } })}>
+                {ORIGENS_JOTFORM.map((o) => <option key={o} value={o}>{NOME_ORIGEM[o]}</option>)}
+              </select></label>
+            <label className="campo">Se aparece (A)<input value={edit.l.valor} placeholder="Dízimo" onChange={(e) => setEdit({ ...edit, l: { ...edit.l, valor: e.target.value } })} /></label>
+            <label className="campo">Correspondência
+              <select value={edit.l.modo ?? 'igual'} onChange={(e) => setEdit({ ...edit, l: { ...edit.l, modo: e.target.value as 'igual' | 'contem' } })}>
+                <option value="igual">Igual</option><option value="contem">Contém</option>
+              </select></label>
+            <label className="campo">Categoria CAF (B)
+              <select value={edit.l.codigo} onChange={(e) => setEdit({ ...edit, l: { ...edit.l, codigo: e.target.value } })}>
+                <option value="">Escolha…</option>
+                {categorias.filter((c) => servem(edit.l.origem, c)).map((c) => <option key={c.id} value={c.codigo}>{c.nome}</option>)}
+              </select></label>
+          </div>
+          {edit.l.valor.trim() && <p className="small">Apanha {num(valores.filter((v) => v.origem === edit.l.origem && tradutorJotform({ linhas: [{ ...edit.l, modo: edit.l.modo ?? 'igual', codigo: edit.l.codigo || (categorias.find((c) => servem(edit.l.origem, c))?.codigo ?? '') }] }, categorias)(v.origem, v.valor).fonte === 'regra').reduce((s, v) => s + v.n, 0))} registos de {ano - 1} e {ano}.</p>}
+          <div className="acoes" style={{ marginTop: 12 }}>
+            <button disabled={!valido || ocupado} onClick={guardar}>{ocupado ? 'A gravar…' : 'Guardar regra'}</button>
+            <button className="sec" onClick={() => setEdit(null)}>Cancelar</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

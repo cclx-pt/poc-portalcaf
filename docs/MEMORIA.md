@@ -46,7 +46,7 @@
 | 26/11/2026 | Centro de custo obrigatório em todas as classificações que contam nos resultados |
 | 26/11/2026 | Nome obrigatório no registo de utilizadores |
 | 26/11/2026 | Ao importar extratos, o portal sugere regras a partir das repetições do histórico; as regras ficam em Configuração e são usadas na proposta de classificação |
-| 26/11/2026 | O portal só trabalha com categorias CAF: tabela de tradução das categorias do Jotform, por formulário; sem tradução, "Por traduzir" |
+| 26/11/2026 | O portal só trabalha com categorias CAF: regras diretas de tradução das categorias do Jotform (A → B), por formulário, só regras escritas; sem regra, "Por traduzir" |
 | 26/11/2026 | App Presenças. (v2) com identidade própria Midnight & Lime, aprovada na especificação UI/UX 1.2; o resto do portal mantém a identidade CAF |
 
 ## 4. Histórico de PRs
@@ -164,7 +164,7 @@ Data = dia da integração em `main`. Os detalhes completos estão em cada PR no
 - **#102** Importar a classificação da tesouraria (Excel) como proposta; cria categorias, centros de custo, projetos, fornecedores e contas analíticas em falta.
 - **#103** App Presenças. (v2) em `#/presencas`; regras do registo partilhadas com o v1 (`useRegistoPresenca`).
 - **#104** Instruções para agentes (Copilot, Claude), esta memória e os documentos de segurança.
-- **#106** Tabela de tradução das categorias do Jotform para as categorias CAF (Configuração › Jotform e sincronização); resultados, listas e exportação só com categorias CAF.
+- **#106** Regras de tradução das categorias do Jotform para as categorias CAF ("se aparece A, a categoria é B", por formulário, igual ou contém; Configuração › Jotform e sincronização); resultados, listas e exportação só com categorias CAF; sem regra, "Por traduzir".
 - **#105** Regras dos extratos sugeridas pelo histórico consolidado (movimentos validados que se repetem em 3 meses ou mais com a mesma classificação), ao importar um extrato e em Configuração › Regras dos extratos; regras com projeto e conta analítica.
 
 ## 5. Onde está o resto

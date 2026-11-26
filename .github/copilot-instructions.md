@@ -77,7 +77,7 @@ As regras não se publicam pelo CI. Procedimento usado:
 
 ## 6. Regras de negócio que não se podem perder
 
-- **Só categorias CAF.** As categorias do Jotform traduzem-se pela tabela `config/traducaoJotform` (`src/lib/traducaoJotform.ts`, Configuração › Jotform e sincronização) antes de qualquer cálculo, lista ou exportação (`listarLotesCaf` para ler). Os lotes guardam o valor original; nunca regravar lotes traduzidos.
+- **Só categorias CAF.** As categorias do Jotform traduzem-se por regras diretas (A → B, por formulário, igual ou contém; só regras escritas, sem traduções automáticas) em `config/traducaoJotform` (`src/lib/traducaoJotform.ts`, Configuração › Jotform e sincronização) antes de qualquer cálculo, lista ou exportação (`listarLotesCaf` para ler). Os lotes guardam o valor original; nunca regravar lotes traduzidos.
 - **Cada euro conta uma vez.** Lotes IFTHENPAY no banco são financeiros (F1.03, contam pelo Contribuir); depósitos de coletas F1.02 (contam pelo Registo de Depósitos); reembolsos F3.02 (contam pelo Registo de Despesas).
 - Contribuir, depósitos e reembolsos do Jotform são **definitivos** (contam em todos os meses). Extratos e custos fixos: meses fechados com valores reais, meses abertos com a previsão dos custos fixos.
 - Taxa IFTHENPAY (valor menos líquido) é gasto em **03.07 Taxas** (sem ela, 03.03).
