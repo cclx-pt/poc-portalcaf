@@ -21,10 +21,10 @@ describe('regras diretas: se aparece A no Jotform, a categoria CAF é B', () => 
     expect(tr('contribuir', 'Missões').categoria).toBeNull();
     expect(tr('contribuir', 'Dízimo Sede Manhã').categoria).toBeNull();
   });
-  it('regra "contém": palavras inteiras; ganha a mais longa', () => {
+  it('regra "contém": como LIKE %texto% (dentro de qualquer palavra); ganha a mais longa', () => {
     expect(tr('contribuir', 'Oferta Sede Manhã')).toMatchObject({ categoria: 'R1.02 Ofertas gerais' });
     expect(tr('contribuir', 'Oferta Missionária Sede')).toMatchObject({ categoria: 'R1.03 Ofertas consignadas' });
-    expect(tr('contribuir', 'Ofertas').categoria).toBeNull();
+    expect(tr('contribuir', 'Ofertas')).toMatchObject({ categoria: 'R1.02 Ofertas gerais' });
   });
   it('só regras escritas: sem regra fica por traduzir (a sugestão pelos sinónimos não se aplica sozinha)', () => {
     expect(tr('contribuir', 'Dízimos')).toEqual({ categoria: null, fonte: null });
@@ -69,10 +69,14 @@ describe('várias opções numa regra, separadas por ";"', () => {
     expect(tr('despesas', 'Retiro Jovens').categoria).toBeNull();
     expect(tr('despesas', 'Retiro;Retiros').categoria).toBeNull();
   });
+  it('"contém" apanha o texto no meio de outro, como %Retiro% (B1-Retiro2026, RetiroJovens)', () => {
+    const t2 = tradutorJotform({ linhas: [{ origem: 'despesas', valor: 'Retiro', codigo: '07.01', modo: 'contem' }] }, cats);
+    for (const v of ['B1-Retiro2026', 'RetiroJovens', 'Despesas do RETIRO', 'Pré-retiro', 'retiro']) expect(t2('despesas', v).categoria).toBe('07.01 Apoio missionário');
+    expect(t2('despesas', 'Ret iro').categoria).toBeNull();
+  });
   it('"contém": basta uma das opções aparecer; opções vazias são ignoradas', () => {
     expect(tr('contribuir', 'Oferta Sede Manhã')).toMatchObject({ categoria: 'R1.02 Ofertas gerais' });
     expect(tr('contribuir', 'Coleta Almada')).toMatchObject({ categoria: 'R1.02 Ofertas gerais', regra: tabela.linhas[1] });
-    expect(tr('contribuir', 'Dízimo').categoria).toBeNull();
   });
   it('as opções de uma regra', () => {
     expect(opcoesRegra(' Retiro;Retiros; ;B1-Retiro2026 ')).toEqual(['Retiro', 'Retiros', 'B1-Retiro2026']);

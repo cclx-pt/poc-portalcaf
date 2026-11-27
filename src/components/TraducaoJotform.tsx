@@ -77,7 +77,7 @@ export function TraducaoJotform() {
         <h2 style={{ marginTop: 0 }}>Tradução das categorias do Jotform</h2>
         {master && <button onClick={() => novaRegra()}>Nova regra</button>}
       </div>
-      <p className="small">O portal só trabalha com <b>categorias CAF</b>. Cada regra diz: no formulário X, <b>se aparece A, a categoria CAF é B</b>. "Igual" exige o mesmo texto (sem contar maiúsculas e acentos); "Contém" apanha o texto dentro de outro (ex.: "Dízimo" apanha "Dízimo Sede Manhã"). Uma regra pode ter <b>várias opções separadas por ";"</b> (ex.: "Retiro;Retiros;B1-Retiro2026"): basta uma aparecer. Sem regra, o registo aparece como "Por traduzir". O Jotform não é alterado.</p>
+      <p className="small">O portal só trabalha com <b>categorias CAF</b>. Cada regra diz: no formulário X, <b>se aparece A, a categoria CAF é B</b>. "Igual" exige o mesmo texto (sem contar maiúsculas e acentos); "Contém" funciona como <b>%texto%</b>: apanha o texto em qualquer parte, mesmo no meio de uma palavra (ex.: "Retiro" apanha "B1-Retiro2026" e "Dízimo" apanha "Dízimo Sede Manhã"). Uma regra pode ter <b>várias opções separadas por ";"</b> (ex.: "Retiro;Retiros;B1-Retiro2026"): basta uma aparecer. Sem regra, o registo aparece como "Por traduzir". O Jotform não é alterado.</p>
       {msg && <div className={msg.tipo === 'ok' ? 'ok-box' : 'aviso'}>{msg.texto}</div>}
       {porAplicar && master && <div className="nota">Regras gravadas. Os resultados do Painel e das análises mudam depois de recalcular. <button className="sec" disabled={ocupado} onClick={() => void aplicar()}>{ocupado ? 'A recalcular…' : `Recalcular ${ano}`}</button></div>}
 
