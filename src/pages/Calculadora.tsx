@@ -107,7 +107,7 @@ export default function Calculadora() {
     contaAnalitica: grav.contaAnalitica || undefined, nivel: grav.nivel, ano: grav.ano, lancamento,
     notas: `Calculadora de distribuição: ${eur(total)} (${fonte === 'anual' ? `média anual ${ano}` : `pesos de ${MESES[Number(fonte) - 1]} ${ano}`})`,
   });
-  const faltaGrav = [!grav.rubrica.trim() && 'o nome', !grav.categoria && 'a categoria', !grav.centroCusto && 'o centro de custo',
+  const faltaGrav = [!grav.rubrica.trim() && 'o nome', !grav.categoria && 'a categoria', !grav.centroCusto && 'o centro de custo', !grav.projeto && 'o projeto ou evento',
     Math.round(resumo.porDistribuir * 100) !== 0 && 'distribuir o montante todo (Por distribuir a 0,00 €)', !novas.length && 'pelo menos uma comunidade com montante'].filter(Boolean) as string[];
 
   async function gravarCustos() {
@@ -194,9 +194,9 @@ export default function Calculadora() {
               <option value="">Escolha…</option>
               {dimsDe('centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
             </select></label>
-          <label className="campo">Projeto ou evento
+          <label className="campo">Projeto ou evento *
             <select value={grav.projeto} onChange={(e) => setGrav({ ...grav, projeto: e.target.value })}>
-              <option value="">—</option>
+              <option value="">Escolha…</option>
               {dimsDe('projeto').map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
             </select></label>
           <label className="campo">Fornecedor

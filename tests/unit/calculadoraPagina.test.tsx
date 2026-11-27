@@ -33,7 +33,7 @@ describe('Ferramentas › Calculadora de distribuição (FER-01)', () => {
   it('com permissão de custos, mostra "Gravar como custos fixos" com os campos obrigatórios e só categorias de saída', async () => {
     const { default: Calculadora } = await import('../../src/pages/Calculadora');
     const html = renderToString(<MemoryRouter><Calculadora /></MemoryRouter>).replace(/<!-- -->/g, '');
-    for (const t of ['Gravar como custos fixos', 'Nome *', 'Categoria *', 'Centro de custo *', 'Projeto ou evento', 'Fornecedor', 'Conta analítica', 'Ano *', 'De uma vez num mês', 'Dividido pelos 12 meses', '04.03 Eventos', 'CC05 Eventos', 'Gravar em Custos fixos', 'Vai gravar 2 linhas', 'Para gravar, falta: o nome, a categoria, o centro de custo']) expect(html).toContain(t);
+    for (const t of ['Gravar como custos fixos', 'Nome *', 'Categoria *', 'Centro de custo *', 'Projeto ou evento *', 'Fornecedor', 'Conta analítica', 'Ano *', 'De uma vez num mês', 'Dividido pelos 12 meses', '04.03 Eventos', 'CC05 Eventos', 'Gravar em Custos fixos', 'Vai gravar 2 linhas', 'Para gravar, falta: o nome, a categoria, o centro de custo, o projeto ou evento']) expect(html).toContain(t);
     expect(html).not.toContain('R1.01 Dízimos');
   });
 });
