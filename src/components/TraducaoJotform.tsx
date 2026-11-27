@@ -4,7 +4,7 @@ import { Estado, Modal, mensagemErro, useCarregar } from './ui';
 import { auditar, gravarTraducaoJotform, lerTraducaoJotform, listarCategorias, listarLotes } from '../lib/db';
 import { eur, num } from '../lib/format';
 import { recalcularAno } from '../lib/recalcular';
-import { NOME_ORIGEM, ORIGENS_JOTFORM, sugestaoRegra, tradutorJotform, valoresJotform, type LinhaTraducao, type OrigemJotform } from '../lib/traducaoJotform';
+import { NOME_ORIGEM, opcoesRegra, ORIGENS_JOTFORM, sugestaoRegra, tradutorJotform, valoresJotform, type LinhaTraducao, type OrigemJotform } from '../lib/traducaoJotform';
 import type { Categoria } from '../lib/types';
 
 /** Categorias CAF que servem a cada formulário: entradas (ou financeiras) no Contribuir e nos depósitos; gastos (ou financeiras) nas despesas. */
@@ -49,7 +49,7 @@ export function TraducaoJotform() {
   }
   function guardar() {
     if (!edit) return;
-    const l = { ...edit.l, valor: edit.l.valor.trim(), modo: edit.l.modo ?? 'igual' };
+    const l = { ...edit.l, valor: opcoesRegra(edit.l.valor).join(';'), modo: edit.l.modo ?? 'igual' };
     const linhas = edit.indice == null ? [...traducao.linhas, l] : traducao.linhas.map((x, i) => (i === edit.indice ? l : x));
     void gravarLinhas(linhas, `${edit.indice == null ? 'Nova regra' : 'Regra alterada'}: ${NOME_ORIGEM[l.origem]} · ${l.modo === 'contem' ? 'contém' : 'igual a'} "${l.valor}" → ${nomeCat(l.codigo)}`);
   }
@@ -68,7 +68,7 @@ export function TraducaoJotform() {
   }
   const novaRegra = (origem: OrigemJotform = 'contribuir', valor = '') =>
     setEdit({ indice: null, l: { origem, valor, modo: 'igual', codigo: valor ? sugestaoRegra(origem, valor, categorias)?.codigo ?? '' : '' } });
-  const valido = !!edit && !!edit.l.valor.trim() && !!edit.l.codigo;
+  const valido = !!edit && opcoesRegra(edit.l.valor).length > 0 && !!edit.l.codigo;
 
   return (
     <div className="sec card">
@@ -76,7 +76,7 @@ export function TraducaoJotform() {
         <h2 style={{ marginTop: 0 }}>Tradução das categorias do Jotform</h2>
         {master && <button onClick={() => novaRegra()}>Nova regra</button>}
       </div>
-      <p className="small">O portal só trabalha com <b>categorias CAF</b>. Cada regra diz: no formulário X, <b>se aparece A, a categoria CAF é B</b>. "Igual" exige o mesmo texto (sem contar maiúsculas e acentos); "Contém" apanha o texto dentro de outro (ex.: "Dízimo" apanha "Dízimo Sede Manhã"). Sem regra, o registo aparece como "Por traduzir". O Jotform não é alterado.</p>
+      <p className="small">O portal só trabalha com <b>categorias CAF</b>. Cada regra diz: no formulário X, <b>se aparece A, a categoria CAF é B</b>. "Igual" exige o mesmo texto (sem contar maiúsculas e acentos); "Contém" apanha o texto dentro de outro (ex.: "Dízimo" apanha "Dízimo Sede Manhã"). Uma regra pode ter <b>várias opções separadas por ";"</b> (ex.: "Retiro;Retiros;B1-Retiro2026"): basta uma aparecer. Sem regra, o registo aparece como "Por traduzir". O Jotform não é alterado.</p>
       {msg && <div className={msg.tipo === 'ok' ? 'ok-box' : 'aviso'}>{msg.texto}</div>}
       {porAplicar && master && <div className="nota">Regras gravadas. Os resultados do Painel e das análises mudam depois de recalcular. <button className="sec" disabled={ocupado} onClick={() => void aplicar()}>{ocupado ? 'A recalcular…' : `Recalcular ${ano}`}</button></div>}
 
@@ -89,7 +89,7 @@ export function TraducaoJotform() {
             return (
               <tr key={`${l.origem}|${l.valor}|${i}`}>
                 <td className="small">{NOME_ORIGEM[l.origem]}</td>
-                <td>{l.valor}</td>
+                <td>{opcoesRegra(l.valor).join('; ')}</td>
                 <td className="small">{l.modo === 'contem' ? 'Contém' : 'Igual'}</td>
                 <td>{nomeCat(l.codigo)}</td>
                 <td className="num" title={vs.map((v) => v.valor).join(', ')}>{num(vs.reduce((s, v) => s + v.n, 0))}</td>
@@ -127,7 +127,7 @@ export function TraducaoJotform() {
               <select value={edit.l.origem} onChange={(e) => setEdit({ ...edit, l: { ...edit.l, origem: e.target.value as OrigemJotform, codigo: '' } })}>
                 {ORIGENS_JOTFORM.map((o) => <option key={o} value={o}>{NOME_ORIGEM[o]}</option>)}
               </select></label>
-            <label className="campo">Se aparece (A)<input value={edit.l.valor} placeholder="Dízimo" onChange={(e) => setEdit({ ...edit, l: { ...edit.l, valor: e.target.value } })} /></label>
+            <label className="campo">Se aparece (A)<input value={edit.l.valor} placeholder="Retiro;Retiros;B1-Retiro2026" onChange={(e) => setEdit({ ...edit, l: { ...edit.l, valor: e.target.value } })} /></label>
             <label className="campo">Correspondência
               <select value={edit.l.modo ?? 'igual'} onChange={(e) => setEdit({ ...edit, l: { ...edit.l, modo: e.target.value as 'igual' | 'contem' } })}>
                 <option value="igual">Igual</option><option value="contem">Contém</option>
