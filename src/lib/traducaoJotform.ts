@@ -28,8 +28,8 @@ export const opcoesRegra = (valor: string) => valor.split(';').map((s) => s.trim
 export interface Traducao { categoria: string | null; fonte: 'regra' | 'caf' | null; regra?: LinhaTraducao }
 
 /**
- * Tradutor só com regras escritas: 1) regra "igual" (sem maiúsculas nem acentos); 2) regra "contém" (a mais longa);
- * 3) um valor que já é o nome de uma categoria CAF (ex.: registos IFTHENPAY do portal); 4) nada: por traduzir.
+ * Tradutor só com regras escritas: 1) regra "igual" (sem maiúsculas nem acentos); 2) um valor que já é o nome de uma
+ * categoria CAF (ex.: registos IFTHENPAY do portal); 3) regra "contém", como LIKE %texto% (a mais longa); 4) nada: por traduzir.
  */
 export function tradutorJotform(t: TraducaoJotform | null | undefined, categorias: Categoria[]) {
   const porCodigo = new Map(categorias.filter((c) => c.codigo).map((c) => [c.codigo!, c]));
@@ -44,9 +44,11 @@ export function tradutorJotform(t: TraducaoJotform | null | undefined, categoria
   return (origem: OrigemJotform, valor: string): Traducao => {
     const k = `${origem}|${chave(valor)}`;
     if (cache.has(k)) return cache.get(k)!;
-    const v = ` ${chave(valor)} `;
-    const regra = iguais.get(k) ?? contem.find(({ l, o }) => l.origem === origem && v.includes(` ${o} `))?.l;
+    // "Contém" funciona como LIKE '%texto%': o texto pode estar no meio de outra palavra (B1-Retiro2026).
+    const v = chave(valor);
+    // Um valor que já é o nome de uma categoria CAF fica como está (o "contém" não o muda).
     const caf = nomes.get(chave(valor));
+    const regra = iguais.get(k) ?? (caf ? undefined : contem.find(({ l, o }) => l.origem === origem && v.includes(o))?.l);
     const r: Traducao = regra ? { categoria: porCodigo.get(regra.codigo)!.nome, fonte: 'regra', regra } : caf ? { categoria: caf.nome, fonte: 'caf' } : { categoria: null, fonte: null };
     cache.set(k, r);
     return r;
