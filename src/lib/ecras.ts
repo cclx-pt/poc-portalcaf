@@ -31,6 +31,7 @@ export const ECRAS: Record<string, Ecra> = {
   '/orcamento': { codigo: 'TES-04', nome: 'Orçamento' },
   '/fecho': { codigo: 'TES-05', nome: 'Fecho mensal e publicação' },
   '/exportacao': { codigo: 'TES-06', nome: 'Exportação contabilista' },
+  '/ferramentas/calculadora': { codigo: 'FER-01', nome: 'Calculadora de distribuição' },
   '/configuracao': { codigo: 'ADM-01', nome: 'Configuração' },
   '/utilizadores': { codigo: 'ADM-02', nome: 'Utilizadores' },
   '/auditoria': { codigo: 'ADM-03', nome: 'Auditoria' },

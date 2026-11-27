@@ -6,7 +6,7 @@ describe('códigos dos ecrãs', () => {
   it('cada endereço tem o seu código, e um código nunca se repete', () => {
     const codigos = Object.values(ECRAS).map((e) => e.codigo);
     expect(new Set(codigos).size).toBe(codigos.length);
-    for (const c of codigos) expect(c).toMatch(/^(PAI|DAD|REG|ANA|TES|ADM|EXT)-\d{2}$/);
+    for (const c of codigos) expect(c).toMatch(/^(PAI|DAD|REG|ANA|TES|FER|ADM|EXT)-\d{2}$/);
   });
 
   it('encontra o ecrã pelo endereço, com ou sem barra no fim', () => {

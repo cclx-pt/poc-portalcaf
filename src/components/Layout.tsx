@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Bug, Building2, Percent, Contact, CalendarCheck, CalendarX, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, ListChecks, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
+import { Calculator, ChevronDown, PanelLeftClose, PanelLeftOpen, type LucideIcon, Banknote, Bug, Building2, Percent, Contact, CalendarCheck, CalendarX, ChartColumn, ClipboardList, Droplets, FileSpreadsheet, FileText, Globe, HandCoins, HeartHandshake, Landmark, LayoutDashboard, ListChecks, LockKeyhole, PiggyBank, Receipt, Scale, Settings, ShieldCheck, Users, Wallet, X, Menu as MenuIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { useCarregar, useFiltros, Rodape } from './ui';
 import { BotaoReportar } from './Reportar';
@@ -40,6 +40,9 @@ const GRUPOS: { id: string; titulo?: string; itens: Item[] }[] = [
     { to: '/registos/presencas/em-falta', nome: 'Registos em falta', Icone: CalendarX, ver: (p) => privado(p) && p.pode('registar') },
     { to: '/registos/batismos', nome: 'Batismos', Icone: Droplets, ver: privado, etiqueta: 'em desenvolvimento' },
     { to: '/registos/conversoes', nome: 'Conversões', Icone: HeartHandshake, ver: privado, etiqueta: 'em desenvolvimento' },
+  ] },
+  { id: 'ferramentas', titulo: 'Ferramentas', itens: [
+    { to: '/ferramentas/calculadora', nome: 'Calculadora de distribuição', Icone: Calculator, ver: privado },
   ] },
   { id: 'admin', titulo: 'Administração', itens: [
     { to: '/configuracao', nome: 'Configuração', Icone: Settings, ver: (p) => p.pode('configurar') },
