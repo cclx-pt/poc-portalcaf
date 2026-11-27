@@ -3,7 +3,8 @@ import { useAuth } from '../auth/AuthProvider';
 import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { auditar, listarComunidades, listarLotes } from '../lib/db';
 import {
-  apagarPessoa, apagarPessoas, apagarTodasPessoas, chavePessoa, fundirComJotform, gravarPessoa, gravarPessoas, idNovaPessoa, listarPessoas, mascaraMbway, normEmail, normNif, pessoasDoJotform, procurarPessoas, validarPessoa, type Pessoa,
+  apagarPessoa, apagarPessoas, apagarTodasPessoas, chavePessoa, desfazerFusao, fundirComJotform, fundirPessoas, gravarPessoa, gravarPessoas, gruposRepetidos, idNovaPessoa, listarPessoas, mascaraMbway, normEmail, normNif, pessoasDoJotform, procurarPessoas, propostaFusao, validarPessoa,
+  type EscolhaFusao, type GrupoRepetidos, type Pessoa,
 } from '../lib/pessoas';
 import { normalizarTelefones } from '../lib/reconciliacaoReembolsos';
 
@@ -26,6 +27,9 @@ export default function Pessoas() {
   const [msg, setMsg] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [repetidos, setRepetidos] = useState<GrupoRepetidos[] | null>(null);
+  const [selecionadas, setSelecionadas] = useState<string[]>([]);
+  const porId = new Map((pessoas.dados ?? []).map((p) => [p.id, p]));
   const nomeCom = (id?: string) => (id ? (coms.dados ?? []).find((c) => c.id === id)?.nome ?? id : '—');
   const lista = procurarPessoas(pessoas.dados ?? [], q).filter((p) => !com || p.comunidadeId === com);
 
@@ -95,6 +99,34 @@ export default function Pessoas() {
     } catch (e) { setErro(mensagemErro(e)); } finally { setOcupado(false); }
   }
 
+  /** Funde as linhas de um grupo na escolhida (as outras são apagadas; a fusão pode ser desfeita). */
+  async function fundir(linhas: Pessoa[], e: EscolhaFusao): Promise<boolean> {
+    if (!confirm(`Fundir ${linhas.length} linhas numa só (${e.nome}, ${telTxt(e.telefone)})? As outras linhas são apagadas; pode desfazer em "Desfazer fusão".`)) return false;
+    setErro(null); setMsg(null); setOcupado(true);
+    try {
+      const r = fundirPessoas(linhas, e, acesso!.email, new Date().toISOString());
+      await gravarPessoa(r.pessoa);
+      await apagarPessoas(r.apagar);
+      await auditar(acesso!.email, 'pessoas', `Fundidas ${linhas.length} linhas em ${r.pessoa.nome} (${r.pessoa.telefone}): ${linhas.map((x) => `${x.nome} ${x.telefone}${x.email ? ` ${x.email}` : ''}`).join('; ')}`);
+      await pessoas.recarregar();
+      setSelecionadas([]);
+      setMsg(`${linhas.length} linhas fundidas em ${r.pessoa.nome}.`);
+      return true;
+    } catch (x) { setErro(mensagemErro(x)); return false; } finally { setOcupado(false); }
+  }
+
+  async function desfazer(p: Pessoa) {
+    const originais = desfazerFusao(p);
+    if (!confirm(`Desfazer a fusão de ${p.nome}? Voltam as ${originais.length} linhas como estavam antes.`)) return;
+    setErro(null); setMsg(null); setOcupado(true);
+    try {
+      await gravarPessoas(originais);
+      await auditar(acesso!.email, 'pessoas', `Desfeita a fusão de ${p.nome}: repostas ${originais.length} linhas`);
+      await pessoas.recarregar();
+      setMsg(`Fusão desfeita: ${originais.length} linhas repostas.`);
+    } catch (x) { setErro(mensagemErro(x)); } finally { setOcupado(false); }
+  }
+
   async function apagar(p: Pessoa) {
     if (!confirm(`Apagar ${p.nome} da base de pessoas? Esta ação não se pode desfazer.`)) return;
     try {
@@ -109,11 +141,12 @@ export default function Pessoas() {
       <div className="linha" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <h1>Pessoas (dados de referência)</h1>
-          <p className="muted">Base confidencial de nome, telemóvel, contribuinte, e-mail e comunidade, para futuras consolidações e registos. Só o Master e o CAF a veem. Uma linha por nome + telemóvel + e-mail (não se agrupa: a mesma pessoa pode ter várias linhas). Sem nome ou sem telemóvel não se grava; a proposta do Jotform (Contribuir e Registo de Despesas) deixa de fora a comunidade Geral e não muda as linhas editadas à mão. Todas as alterações ficam na auditoria.</p>
+          <p className="muted">Base confidencial de nome, telemóvel, contribuinte, e-mail e comunidade, para futuras consolidações e registos. Só o Master e o CAF a veem. Uma linha por nome + telemóvel + e-mail (não se agrupa sozinho: a mesma pessoa pode ter várias linhas). Em <b>Procurar repetidos</b> (ou selecionando linhas) junta-se a mesma pessoa numa só linha: os outros telemóveis ficam guardados e contam no MB Way, os outros e-mails vão para as notas, e cada fusão pode ser desfeita. Sem nome ou sem telemóvel não se grava; a proposta do Jotform (Contribuir e Registo de Despesas) deixa de fora a comunidade Geral e não muda as linhas editadas à mão. Todas as alterações ficam na auditoria.</p>
         </div>
         <div className="acoes">
           <button className="sec" disabled={ocupado || !pessoas.dados} onClick={() => void atualizarDoJotform()}>{ocupado ? 'A ler o Jotform…' : `Atualizar a partir do Jotform (${ano - 1} e ${ano})`}</button>
           <button onClick={() => { setErro(null); setEdit({ ...vazia }); }}>Nova pessoa</button>
+          <button className="sec" disabled={ocupado || (pessoas.dados ?? []).length < 2} onClick={() => setRepetidos(gruposRepetidos(pessoas.dados ?? []))}>Procurar repetidos</button>
           <button className="sec" disabled={ocupado || !(pessoas.dados ?? []).length} onClick={() => void apagarTudo()}>Apagar tudo</button>
         </div>
       </div>
@@ -129,34 +162,52 @@ export default function Pessoas() {
           </select>
         </label>
         <span className="small muted" style={{ alignSelf: 'flex-end' }}>{`${lista.length} de ${(pessoas.dados ?? []).length} pessoas`}</span>
+        {selecionadas.length >= 2 && <button style={{ alignSelf: 'flex-end' }} disabled={ocupado} onClick={() => setRepetidos([{ tipo: 'M', motivo: 'Linhas escolhidas à mão', ids: selecionadas }])}>{`Fundir as ${selecionadas.length} selecionadas`}</button>}
         {(q.trim() || com) && lista.length > 0 && <button className="sec" style={{ alignSelf: 'flex-end' }} disabled={ocupado} onClick={() => void apagarLista()}>{`Apagar as ${lista.length} da lista`}</button>}
       </div>
 
       <Estado aCarregar={pessoas.aCarregar} erro={pessoas.erro} vazio={!pessoas.dados?.length} />
       {!!pessoas.dados?.length && (
         <div className="tabela"><table>
-          <thead><tr><th>Nome</th><th>Telemóvel</th><th title="Como aparece no extrato: Trf Mbway 966XXX014">MB Way</th><th>Contribuinte</th><th>E-mail</th><th>Comunidade</th><th>Origem</th><th /></tr></thead>
+          <thead><tr><th><span className="sr-only">Selecionar</span></th><th>Nome</th><th>Telemóvel</th><th title="Como aparece no extrato: Trf Mbway 966XXX014">MB Way</th><th>Contribuinte</th><th>E-mail</th><th>Comunidade</th><th>Origem</th><th /></tr></thead>
           <tbody>
             {lista.slice(0, 500).map((p) => (
               <tr key={p.id}>
+                <td><input type="checkbox" aria-label={`Selecionar ${p.nome}`} checked={selecionadas.includes(p.id)} onChange={(e) => setSelecionadas(e.target.checked ? [...selecionadas, p.id] : selecionadas.filter((x) => x !== p.id))} /></td>
                 <td>{p.nome}{p.notas && <div className="small muted">{p.notas}</div>}</td>
-                <td className="small">{p.telefone ? telTxt(p.telefone) : '—'}</td>
+                <td className="small">{p.telefone ? telTxt(p.telefone) : '—'}{p.outrosTelefones?.length ? <div className="muted">{`Outros: ${p.outrosTelefones.map(telTxt).join(', ')}`}</div> : null}</td>
                 <td className="small">{mascaraMbway(p.telefone) || '—'}</td>
                 <td>{p.nif ?? '—'}</td>
                 <td className="small">{p.email ?? '—'}</td>
                 <td>{nomeCom(p.comunidadeId)}</td>
-                <td className="small">{p.manual ? 'Editada à mão' : 'Jotform'}{p.fontes.length ? <span className="muted">{` · ${p.fontes.length} registo${p.fontes.length === 1 ? '' : 's'}`}</span> : null}</td>
+                <td className="small">{p.fusao ? `Fundida (${p.fusao.originais.length} linhas)` : p.manual ? 'Editada à mão' : 'Jotform'}{p.fontes.length ? <span className="muted">{` · ${p.fontes.length} registo${p.fontes.length === 1 ? '' : 's'}`}</span> : null}</td>
                 <td>
                   <div className="acoes" style={{ margin: 0, flexWrap: 'nowrap' }}>
                     <button className="link" onClick={() => { setErro(null); setEdit({ novo: false, id: p.id, nome: p.nome, telefone: p.telefone, nif: p.nif ?? '', email: p.email ?? '', comunidadeId: p.comunidadeId ?? '', notas: p.notas ?? '' }); }}>Editar</button>
+                    {p.fusao && <button className="link" disabled={ocupado} onClick={() => void desfazer(p)}>Desfazer fusão</button>}
                     <button className="link" onClick={() => void apagar(p)}>Apagar</button>
                   </div>
                 </td>
               </tr>
             ))}
-            {!lista.length && <tr><td colSpan={8} className="muted">Nenhuma pessoa com este filtro.</td></tr>}
+            {!lista.length && <tr><td colSpan={9} className="muted">Nenhuma pessoa com este filtro.</td></tr>}
           </tbody>
         </table></div>
+      )}
+
+      {repetidos && (
+        <Modal titulo="Repetidos" onFechar={() => setRepetidos(null)}>
+          {erro && <div className="aviso">{erro}</div>}
+          {!repetidos.length ? <p className="ok-box small">Não há linhas repetidas.</p> : <>
+            <p className="small muted">{`${repetidos.length} grupos. A: mesmo telemóvel e mesmo nome. B: mesmo telemóvel e nome parecido. C: mesmo NIF ou e-mail com telemóveis diferentes (os outros telemóveis ficam na linha que fica, e contam no MB Way). Escolha a linha e os valores que ficam; os outros e-mails vão para as notas. Pode desfazer cada fusão.`}</p>
+            {repetidos.map((g) => {
+              const linhas = g.ids.map((id) => porId.get(id)).filter((x): x is Pessoa => !!x);
+              return linhas.length < 2 ? null : <GrupoFusao key={g.ids.join('|')} grupo={g} linhas={linhas} nomeCom={nomeCom} ocupado={ocupado}
+                onFundir={async (e) => { if (await fundir(linhas, e)) setRepetidos((rs) => (rs ?? []).filter((x) => x !== g)); }}
+                onIgnorar={() => setRepetidos((rs) => (rs ?? []).filter((x) => x !== g))} />;
+            })}
+          </>}
+        </Modal>
       )}
 
       {edit && (
@@ -183,5 +234,55 @@ export default function Pessoas() {
         </Modal>
       )}
     </>
+  );
+}
+
+const TIPO_GRUPO: Record<GrupoRepetidos['tipo'], string> = { A: 'A · mesmo telemóvel e nome', B: 'B · nome parecido', C: 'C · mesmo NIF ou e-mail', M: 'Selecionadas' };
+
+/** Um grupo de linhas repetidas: escolher a linha que fica e o valor de cada campo, e fundir. */
+function GrupoFusao({ grupo, linhas, nomeCom, ocupado, onFundir, onIgnorar }: {
+  grupo: GrupoRepetidos; linhas: Pessoa[]; nomeCom: (id?: string) => string; ocupado: boolean;
+  onFundir: (e: EscolhaFusao) => void; onIgnorar: () => void;
+}) {
+  const [e, setE] = useState<EscolhaFusao>(() => propostaFusao(linhas));
+  type Campo = 'nome' | 'telefone' | 'email' | 'nif' | 'comunidadeId';
+  const campo = (k: Campo, rotulo: string, txt: (v: string) => string = (v) => v, obrigatorio = false) => {
+    const vs = [...new Set(linhas.map((x) => x[k]).filter((v): v is string => !!v))];
+    return (
+      <label className="campo" key={k}>{rotulo}
+        <select value={e[k] ?? ''} onChange={(ev) => setE({ ...e, [k]: ev.target.value || undefined })}>
+          {!obrigatorio && <option value="">—</option>}
+          {vs.map((v) => <option key={v} value={v}>{txt(v)}</option>)}
+        </select>
+      </label>
+    );
+  };
+  return (
+    <div className="card" style={{ marginBottom: 12 }}>
+      <div className="linha" style={{ justifyContent: 'space-between' }}>
+        <b>{grupo.motivo}</b><span className="etiqueta">{TIPO_GRUPO[grupo.tipo]}</span>
+      </div>
+      <div className="tabela"><table>
+        <thead><tr><th>Fica</th><th>Nome</th><th>Telemóvel</th><th>E-mail</th><th>NIF</th><th>Comunidade</th><th>Origem</th></tr></thead>
+        <tbody>{linhas.map((x) => (
+          <tr key={x.id}>
+            <td><input type="radio" name={`manter-${grupo.ids.join('|')}`} aria-label={`Fica a linha de ${x.nome}`} checked={e.manterId === x.id} onChange={() => setE({ ...e, manterId: x.id })} /></td>
+            <td>{x.nome}</td><td className="small">{telTxt(x.telefone)}</td><td className="small">{x.email ?? '—'}</td><td>{x.nif ?? '—'}</td>
+            <td>{nomeCom(x.comunidadeId)}</td><td className="small">{`${x.manual ? 'Editada à mão' : 'Jotform'} · ${x.fontes.length}`}</td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, margin: '8px 0' }}>
+        {campo('nome', 'Nome', undefined, true)}
+        {campo('telefone', 'Telemóvel principal', telTxt, true)}
+        {campo('email', 'E-mail')}
+        {campo('nif', 'NIF')}
+        {campo('comunidadeId', 'Comunidade', nomeCom)}
+      </div>
+      <div className="acoes" style={{ margin: 0 }}>
+        <button disabled={ocupado} onClick={() => onFundir(e)}>{`Fundir ${linhas.length} linhas`}</button>
+        <button className="sec" onClick={onIgnorar}>Ignorar</button>
+      </div>
+    </div>
   );
 }

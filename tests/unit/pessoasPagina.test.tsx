@@ -7,7 +7,8 @@ vi.mock('../../src/firebase', () => ({ db: {} }));
 vi.mock('../../src/lib/db', () => ({ listarComunidades: () => sync([{ id: 'almada', nome: 'Almada', ordem: 1 }]), listarLotes: async () => [], auditar: async () => {} }));
 vi.mock('../../src/lib/pessoas', async (orig) => ({
   ...(await orig<typeof import('../../src/lib/pessoas')>()),
-  listarPessoas: () => sync([{ id: 'nif-123456789', nome: 'Ana Silva', telefone: '912345678', nif: '123456789', email: 'ana@x.pt', comunidadeId: 'almada', manual: false, fontes: ['contribuir:1', 'despesas:2'], atualizadoEm: '', atualizadoPor: '' }]),
+  listarPessoas: () => sync([{ id: 'nif-123456789', nome: 'Ana Silva', telefone: '912345678', nif: '123456789', email: 'ana@x.pt', comunidadeId: 'almada', manual: false, fontes: ['contribuir:1', 'despesas:2'], atualizadoEm: '', atualizadoPor: '' },
+    { id: 'f1', nome: 'Rui Costa', telefone: '922222222', outrosTelefones: ['933333333'], manual: true, fontes: [], atualizadoEm: '', atualizadoPor: '', fusao: { originais: [{ id: 'f1' }, { id: 'f2' }], em: '', por: '' } }]),
 }));
 vi.mock('../../src/components/ui', async (orig) => ({
   ...(await orig<typeof import('../../src/components/ui')>()),
@@ -20,6 +21,6 @@ describe('Administração › Pessoas (ADM-06)', () => {
     const { default: Pessoas } = await import('../../src/pages/Pessoas');
     const html = renderToString(<MemoryRouter><Pessoas /></MemoryRouter>).replace(/<!-- -->/g, '');
     expect(html).toMatch(/Jotform<span[^>]*> · 2 registos/);
-    for (const t of ['Pessoas (dados de referência)', 'Ana Silva', '912 345 678', '123456789', 'ana@x.pt', 'Almada', 'Atualizar a partir do Jotform (2025 e 2026)', 'Nova pessoa', 'Apagar tudo', 'Telemóvel', '912XXX678']) expect(html).toContain(t);
+    for (const t of ['Pessoas (dados de referência)', 'Ana Silva', '912 345 678', '123456789', 'ana@x.pt', 'Almada', 'Atualizar a partir do Jotform (2025 e 2026)', 'Nova pessoa', 'Apagar tudo', 'Telemóvel', '912XXX678', 'Procurar repetidos', 'Fundida (2 linhas)', 'Desfazer fusão', 'Outros: 933 333 333', 'Selecionar Ana Silva']) expect(html).toContain(t);
   });
 });
