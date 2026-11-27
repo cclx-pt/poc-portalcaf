@@ -164,6 +164,11 @@ Data = dia da integração em `main`. Os detalhes completos estão em cada PR no
 - **#102** Importar a classificação da tesouraria (Excel) como proposta; cria categorias, centros de custo, projetos, fornecedores e contas analíticas em falta.
 - **#103** App Presenças. (v2) em `#/presencas`; regras do registo partilhadas com o v1 (`useRegistoPresenca`).
 - **#104** Instruções para agentes (Copilot, Claude), esta memória e os documentos de segurança.
+- **#111** Calculadora de distribuição: gravar a distribuição manual como custos fixos (nome, categoria, centro de custo e projeto ou evento obrigatórios; ano; de uma vez num mês ou dividido pelos 12 meses, com os cêntimos que sobram numa linha de dezembro); uma linha por comunidade com montante, a Geral não entra.
+- **#110** Regras de tradução do Jotform (ADM-01.3) com várias opções separadas por ";" (ex.: "Retiro;Retiros;B1-Retiro2026"), em "igual" e em "contém".
+- **#109** Novo grupo Ferramentas com a Calculadora de distribuição (FER-01): pesos de um mês (gravados, senão a proposta pela média) ou média anual até hoje; distribuição inicial e manual (% inteiras ligadas ao montante), diferença e por distribuir.
+- **#108** Peso das comunidades (ADM-05): descarregar "Pesos gravados por mês" em Excel (folhas Pesos (%) e Pessoas).
+- **#107** Peso das comunidades (ADM-05): percentagens sempre inteiras que somam 100 (maiores restos), na proposta, na simulação e na validação.
 - **#106** Regras de tradução das categorias do Jotform para as categorias CAF ("se aparece A, a categoria é B", por formulário, igual ou contém; Configuração › Jotform e sincronização); resultados, listas e exportação só com categorias CAF; sem regra, "Por traduzir".
 - **#105** Regras dos extratos sugeridas pelo histórico consolidado (movimentos validados que se repetem em 3 meses ou mais com a mesma classificação), ao importar um extrato e em Configuração › Regras dos extratos; regras com projeto e conta analítica.
 
