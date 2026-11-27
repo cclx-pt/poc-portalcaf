@@ -7,6 +7,9 @@ import { JanelaReembolsos } from '../components/JanelaReembolsos';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar, useMarcarAba } from '../components/ui';
 import { SugestaoRegras } from '../components/SugestaoRegras';
+import { Escolha } from '../components/Escolha';
+import { useCriarDimensao } from '../components/useCriarDimensao';
+import { opcoesCategorias, opcoesDimensoes } from '../lib/escolha';
 import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarDimensoes, listarRegrasBanco, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
 import { COMUNIDADES, CONTAS, JOTFORM_FORMS } from '../lib/seed';
 import { categoriasDoPlano, dimensoesDoPlano } from '../lib/plano';
@@ -44,6 +47,7 @@ export default function Configuracao() {
   const contas = useCarregar(listarContas, []);
   const cats = useCarregar(listarCategorias, []);
   const dims = useCarregar(listarDimensoes, []);
+  const criarDim = useCriarDimensao(dims.dados ?? [], dims.recarregar);
   const regras = useCarregar(listarRegrasBanco, []);
   const [regra, setRegra] = useState<RegraBanco | null>(null);
   const [sugerir, setSugerir] = useState(false);
@@ -444,23 +448,17 @@ export default function Configuracao() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
             <label className="campo">Texto no descritivo do banco<input value={regra.padrao} placeholder="MEO" onChange={(e) => setRegra({ ...regra, padrao: e.target.value })} /></label>
             <label className="campo">Categoria
-              <select value={regra.categoria} onChange={(e) => setRegra({ ...regra, categoria: e.target.value })}>
-                <option value="">—</option>{(cats.dados ?? []).filter((c) => c.codigo && c.ativo !== false).map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
-              </select></label>
+              <Escolha aria-label="Categoria" vazio="—" valor={regra.categoria} opcoes={opcoesCategorias((cats.dados ?? []).filter((c) => c.codigo && c.ativo !== false))} onChange={(v) => setRegra({ ...regra, categoria: v })} /></label>
             <label className="campo">Comunidade (opcional)
               <select value={regra.comunidadeId ?? ''} onChange={(e) => setRegra({ ...regra, comunidadeId: e.target.value || undefined })}>
                 <option value="">—</option>{(coms.dados ?? []).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select></label>
             <label className="campo">Centro de custo
-              <select value={regra.centroCusto ?? ''} onChange={(e) => setRegra({ ...regra, centroCusto: e.target.value || undefined })}>
-                <option value="">—</option>{(dims.dados ?? []).filter((d) => d.tipo === 'centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
-              </select></label>
-            <label className="campo">Fornecedor<input value={regra.fornecedor ?? ''} list="forn-regras" onChange={(e) => setRegra({ ...regra, fornecedor: e.target.value || undefined })} />
-              <datalist id="forn-regras">{(dims.dados ?? []).filter((d) => d.tipo === 'fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist></label>
+              <Escolha aria-label="Centro de custo" vazio="—" valor={regra.centroCusto ?? ''} opcoes={opcoesDimensoes(criarDim.todas.filter((d) => d.tipo === 'centro' && d.ativo !== false))} criar={criarDim.criar('centro')} onChange={(v) => setRegra({ ...regra, centroCusto: v || undefined })} /></label>
+            <label className="campo">Fornecedor
+              <Escolha aria-label="Fornecedor" vazio="—" textoLivre valor={regra.fornecedor ?? ''} opcoes={opcoesDimensoes(criarDim.todas.filter((d) => d.tipo === 'fornecedor' && d.ativo !== false))} criar={criarDim.criar('fornecedor')} onChange={(v) => setRegra({ ...regra, fornecedor: v || undefined })} /></label>
             <label className="campo">Projeto ou evento
-              <select value={regra.projeto ?? ''} onChange={(e) => setRegra({ ...regra, projeto: e.target.value || undefined })}>
-                <option value="">—</option>{(dims.dados ?? []).filter((d) => d.tipo === 'projeto' && d.ativo !== false).map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
-              </select></label>
+              <Escolha aria-label="Projeto ou evento" vazio="—" valor={regra.projeto ?? ''} opcoes={opcoesDimensoes(criarDim.todas.filter((d) => d.tipo === 'projeto' && d.ativo !== false))} criar={criarDim.criar('projeto')} onChange={(v) => setRegra({ ...regra, projeto: v || undefined })} /></label>
             <label className="opcao"><input type="checkbox" checked={regra.ativo !== false} onChange={(e) => setRegra({ ...regra, ativo: e.target.checked })} /> Ativa</label>
           </div>
           <div className="acoes" style={{ marginTop: 14 }}>
@@ -627,10 +625,7 @@ export default function Configuracao() {
               {edit.v.tipo === 'centro' && <label className="campo">Âmbito<input value={edit.v.ambito ?? ''} list="ambitos-cc" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, ambito: e.target.value } })} />
                 <datalist id="ambitos-cc">{['Central', 'Local', 'Transversal', 'Ministério', 'Evento', 'Atividade', 'Projeto'].map((a) => <option key={a} value={a} />)}</datalist></label>}
               {edit.v.tipo === 'conta' && <label className="campo">Categoria
-                <select value={edit.v.categoria ?? ''} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, categoria: e.target.value || undefined } })}>
-                  <option value="">—</option>
-                  {(cats.dados ?? []).filter((c) => c.codigo).map((c) => <option key={c.id} value={c.codigo}>{c.nome}</option>)}
-                </select></label>}
+                <Escolha aria-label="Categoria" vazio="—" valor={edit.v.categoria ?? ''} opcoes={(cats.dados ?? []).filter((c) => c.codigo).map((c) => ({ valor: c.codigo!, rotulo: c.nome }))} onChange={(v) => setEdit({ ...edit, v: { ...edit.v, categoria: v || undefined } })} /></label>}
             </>}
           </div>
           <div className="acoes" style={{ marginTop: 14 }}>

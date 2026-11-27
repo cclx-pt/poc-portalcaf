@@ -4,6 +4,9 @@ import { CORES } from '../lib/cores';
 import { useAuth } from '../auth/AuthProvider';
 import { CampoData, Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../components/ui';
 import { apagar, auditar, gravar, listarCategorias, listarComunidades, listarCustosFixos, listarDimensoes } from '../lib/db';
+import { Escolha } from '../components/Escolha';
+import { useCriarDimensao } from '../components/useCriarDimensao';
+import { opcoesCategorias, opcoesDimensoes } from '../lib/escolha';
 import { proporClassificacaoCusto, propostasCustos } from '../lib/custosPlano';
 import { eur, eurK, periodo, r2 } from '../lib/format';
 import { custoAtivo, custoNoAno, descreverPeriodicidade, mesesDecorridos, valorImputado, valorImputadoNoMes } from '../lib/resumos';
@@ -30,7 +33,8 @@ export default function CustosFixos() {
   const cats = useCarregar(listarCategorias, []);
   const dims = useCarregar(listarDimensoes, []);
   const catsDespesa = (cats.dados ?? []).filter((c) => c.tipo === 'saida' && c.codigo && c.ativo !== false);
-  const dimsDe = (t: 'centro' | 'projeto' | 'fornecedor' | 'conta') => (dims.dados ?? []).filter((d) => d.tipo === t && d.ativo !== false);
+  const criarDim = useCriarDimensao(dims.dados ?? [], dims.recarregar);
+  const dimsDe = (t: 'centro' | 'projeto' | 'fornecedor' | 'conta') => criarDim.todas.filter((d) => d.tipo === t && d.ativo !== false);
   const nomeCentro = (cod?: string) => dimsDe('centro').find((d) => d.codigo === cod)?.nome ?? cod;
   const [classificar, setClassificar] = useState(false);
   const [aClassificar, setAClassificar] = useState(false);
@@ -337,32 +341,19 @@ export default function CustosFixos() {
                 <datalist id="rubricas">{['Renda', 'Vencimentos', 'Segurança Social', 'Luz', 'Água', 'Internet', 'Seguros', 'Condomínio'].map((r) => <option key={r} value={r} />)}</datalist>
               </label>
               <label className="campo">Categoria do plano
-                <select value={edit.categoria ?? ''} onChange={(e) => setEdit({ ...edit, categoria: e.target.value || undefined, contaAnalitica: undefined })}>
-                  <option value="">—</option>
-                  {catsDespesa.map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
-                </select>
+                <Escolha aria-label="Categoria do plano" vazio="—" valor={edit.categoria ?? ''} opcoes={opcoesCategorias(catsDespesa)} onChange={(v) => setEdit({ ...edit, categoria: v || undefined, contaAnalitica: undefined })} />
               </label>
               <label className="campo">Conta analítica
-                <select value={edit.contaAnalitica ?? ''} onChange={(e) => setEdit({ ...edit, contaAnalitica: e.target.value || undefined })}>
-                  <option value="">—</option>
-                  {dimsDe('conta').filter((d) => !edit.categoria || !d.categoria || edit.categoria.startsWith(d.categoria)).map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
-                </select>
+                <Escolha aria-label="Conta analítica" vazio="—" valor={edit.contaAnalitica ?? ''} opcoes={opcoesDimensoes(dimsDe('conta').filter((d) => !edit.categoria || !d.categoria || edit.categoria.startsWith(d.categoria)))} onChange={(v) => setEdit({ ...edit, contaAnalitica: v || undefined })} />
               </label>
               <label className="campo">Fornecedor
-                <input value={edit.fornecedor ?? ''} list="fornecedores" onChange={(e) => setEdit({ ...edit, fornecedor: e.target.value || undefined })} />
-                <datalist id="fornecedores">{dimsDe('fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist>
+                <Escolha aria-label="Fornecedor" vazio="—" textoLivre valor={edit.fornecedor ?? ''} opcoes={opcoesDimensoes(dimsDe('fornecedor'))} criar={criarDim.criar('fornecedor')} onChange={(v) => setEdit({ ...edit, fornecedor: v || undefined })} />
               </label>
               <label className="campo">Centro de custo *
-                <select value={edit.centroCusto ?? ''} onChange={(e) => setEdit({ ...edit, centroCusto: e.target.value || undefined })}>
-                  <option value="">Escolha…</option>
-                  {dimsDe('centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
-                </select>
+                <Escolha aria-label="Centro de custo" vazio="Escolha…" valor={edit.centroCusto ?? ''} opcoes={opcoesDimensoes(dimsDe('centro'))} criar={criarDim.criar('centro')} onChange={(v) => setEdit({ ...edit, centroCusto: v || undefined })} />
               </label>
               <label className="campo">Projeto ou evento
-                <select value={edit.projeto ?? ''} onChange={(e) => setEdit({ ...edit, projeto: e.target.value || undefined })}>
-                  <option value="">—</option>
-                  {dimsDe('projeto').map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
-                </select>
+                <Escolha aria-label="Projeto ou evento" vazio="—" valor={edit.projeto ?? ''} opcoes={opcoesDimensoes(dimsDe('projeto'))} criar={criarDim.criar('projeto')} onChange={(v) => setEdit({ ...edit, projeto: v || undefined })} />
               </label>
               <label className="campo">Periodicidade
                 <select value={edit.periodicidade ? edit.periodicidade.unidade : 'mensal'} onChange={(e) => {
