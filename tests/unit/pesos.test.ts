@@ -4,13 +4,20 @@ import { fecharEm100, pesosValidos, somaPesos } from '../../src/lib/pesos';
 
 describe('pesos gravados', () => {
   it('têm de somar 100% (tolerância de arredondamento) e nenhum pode ser negativo', () => {
-    expect(pesosValidos({ a: 33.33, b: 33.33, c: 33.34 })).toBe(true);
+    expect(pesosValidos({ a: 33, b: 33, c: 34 })).toBe(true);
     expect(pesosValidos({ a: 50, b: 49 })).toBe(false);
     expect(pesosValidos({ a: 110, b: -10 })).toBe(false);
   });
-  it('fecha a soma em 100 no maior peso', () => {
-    const p = fecharEm100({ a: 33.33, b: 33.33, c: 33.33 });
-    expect(somaPesos(p)).toBe(100);
+  it('fecha a soma em 100 com percentagens inteiras (maiores restos)', () => {
+    expect(fecharEm100({ a: 33.33, b: 33.33, c: 33.33 })).toEqual({ a: 34, b: 33, c: 33 });
+    expect(fecharEm100({ a: 66.67, b: 33.33 })).toEqual({ a: 67, b: 33 });
+    // empate nos restos: primeiro o maior peso
+    expect(fecharEm100({ a: 12.5, b: 12.5, c: 37.5, d: 37.5 })).toEqual({ a: 12, b: 12, c: 38, d: 38 });
+    expect(fecharEm100({ a: 0, b: 0 })).toEqual({ a: 0, b: 0 });
+  });
+  it('pesos com decimais não são válidos: têm de ser inteiros', () => {
+    expect(pesosValidos({ a: 40, b: 60 })).toBe(true);
+    expect(pesosValidos({ a: 40.5, b: 59.5 })).toBe(false);
   });
 });
 

@@ -9,7 +9,7 @@ import { recalcularAno } from '../lib/recalcular';
 import { comunidadeAtiva, destinoFusao, propostaPesos } from '../lib/resumos';
 import type { Comunidade } from '../lib/types';
 
-const pctTxt = (v: number | undefined) => (v == null ? '—' : `${num(v, 2)}%`);
+const pctTxt = (v: number | undefined) => (v == null ? '—' : `${num(Math.round(v), 0)}%`);
 const periodoDe = (ano: number, mes: number) => `${ano}-${String(mes).padStart(2, '0')}`;
 
 /**
@@ -57,7 +57,8 @@ export default function Pesos() {
   const elegiveis = elegiveisDe(mes);
 
   // Valores no editor: o que está a ser editado, senão o gravado, senão a proposta do método escolhido.
-  const base: Record<string, number> = gravadoMes?.pesos ?? Object.fromEntries(elegiveis.map((c) => [c, proposta?.[metodo][c]?.pct ?? 0]));
+  // Percentagens sempre inteiras: um mês gravado antes com decimais aparece já arredondado (soma 100).
+  const base: Record<string, number> = gravadoMes ? fecharEm100(gravadoMes.pesos) : Object.fromEntries(elegiveis.map((c) => [c, proposta?.[metodo][c]?.pct ?? 0]));
   const valores: Record<string, number> = edicao ? Object.fromEntries(Object.entries(edicao).map(([c, v]) => [c, Number(v.replace(',', '.')) || 0])) : base;
   const sujo = !!edicao;
   const soma = somaPesos(Object.fromEntries(elegiveis.map((c) => [c, valores[c] ?? 0])));
@@ -75,14 +76,15 @@ export default function Pesos() {
 
   async function gravarMes(): Promise<boolean> {
     setErro(null); setMsg(null);
-    const pesos = Object.fromEntries(elegiveis.map((c) => [c, Math.round((valores[c] ?? 0) * 100) / 100]));
-    if (!pesosValidos(pesos)) { setErro(`Os pesos de ${MESES[mes - 1]} somam ${num(somaPesos(pesos), 2)}%: têm de somar 100%.`); return false; }
+    const pesos = Object.fromEntries(elegiveis.map((c) => [c, valores[c] ?? 0]));
+    if (Object.values(pesos).some((v) => !Number.isInteger(v))) { setErro(`Os pesos de ${MESES[mes - 1]} têm de ser percentagens inteiras, sem decimais.`); return false; }
+    if (!pesosValidos(pesos)) { setErro(`Os pesos de ${MESES[mes - 1]} somam ${num(somaPesos(pesos), 0)}%: têm de somar 100%.`); return false; }
     const prop = propostaDe(mes);
-    const igualProposta = elegiveis.every((c) => Math.abs((prop[metodo][c]?.pct ?? 0) - pesos[c]) < 0.005);
+    const igualProposta = elegiveis.every((c) => (prop[metodo][c]?.pct ?? 0) === pesos[c]);
     setOcupado(true);
     try {
       await gravarPesosMes(novoRegisto(mes, pesos, metodo, !igualProposta, prop));
-      await auditar(acesso!.email, 'Peso das comunidades', `${periodoDe(ano, mes)}: ${igualProposta ? `proposta (${NOME_METODO[metodo]})` : 'alterado à mão'}: ${elegiveis.map((c) => `${nomes.get(c) ?? c} ${num(pesos[c], 2)}%`).join(', ')}`);
+      await auditar(acesso!.email, 'Peso das comunidades', `${periodoDe(ano, mes)}: ${igualProposta ? `proposta (${NOME_METODO[metodo]})` : 'alterado à mão'}: ${elegiveis.map((c) => `${nomes.get(c) ?? c} ${num(pesos[c], 0)}%`).join(', ')}`);
       setEdicao(null);
       await gravados.recarregar();
       setMsg(`Pesos de ${MESES[mes - 1]} gravados. Carregue em "Recalcular dados e distribuições" para os aplicar nos resumos.`);
@@ -100,7 +102,7 @@ export default function Pesos() {
       const novos = Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
         const prop = propostaDe(m);
         const antigo = porMes.get(m);
-        if (antigo?.manual) return { ...antigo, proposta: prop, calculadoEm: new Date().toISOString() };
+        if (antigo?.manual) return { ...antigo, pesos: fecharEm100(antigo.pesos), proposta: prop, calculadoEm: new Date().toISOString() };
         const pesos = fecharEm100(Object.fromEntries(elegiveisDe(m).map((c) => [c, prop[metodo][c]?.pct ?? 0])));
         return novoRegisto(m, pesos, metodo, false, prop);
       }).filter((x) => somaPesos(x.pesos) > 0);
@@ -185,20 +187,20 @@ export default function Pesos() {
             <thead><tr><th>Comunidade</th><th className="num">Média 12m (pessoas)</th><th className="num">% média</th><th className="num">Mediana 12m (pessoas)</th><th className="num">% mediana</th><th className="num">Peso a usar (%)</th><th className="num">Diferença da proposta</th></tr></thead>
             <tbody>{elegiveis.map((c) => {
               const pm = proposta?.media[c]; const pd = proposta?.mediana[c];
-              const prop = (gravadoMes ? gravadoMes.proposta[gravadoMes.metodo]?.[c]?.pct : proposta?.[metodo][c]?.pct) ?? 0;
+              const prop = Math.round((gravadoMes ? gravadoMes.proposta[gravadoMes.metodo]?.[c]?.pct : proposta?.[metodo][c]?.pct) ?? 0);
               const v = valores[c] ?? 0;
               return (
                 <tr key={c}>
                   <td>{nomes.get(c) ?? c}</td>
                   <td className="num">{pm ? num(pm.valor, 1) : '—'}</td><td className="num">{pctTxt(pm?.pct)}</td>
                   <td className="num">{pd ? num(pd.valor, 1) : '—'}</td><td className="num">{pctTxt(pd?.pct)}</td>
-                  <td className="num"><input inputMode="decimal" style={{ width: 90 }} aria-label={`Peso de ${nomes.get(c) ?? c}`} aria-invalid={!!erro && Math.abs(soma - 100) > 0.05}
+                  <td className="num"><input inputMode="numeric" style={{ width: 90 }} aria-label={`Peso de ${nomes.get(c) ?? c}`} aria-invalid={!!erro && (soma !== 100 || !Number.isInteger(v))}
                     value={edicao ? edicao[c] ?? '' : String(v)} onChange={(e) => setEdicao({ ...Object.fromEntries(elegiveis.map((x) => [x, String(valores[x] ?? 0)])), [c]: e.target.value })} /></td>
-                  <td className="num">{Math.abs(v - prop) < 0.005 ? '—' : `${v - prop > 0 ? '+' : ''}${num(v - prop, 2)} p.p.`}</td>
+                  <td className="num">{v === prop ? '—' : `${v - prop > 0 ? '+' : ''}${num(v - prop, Number.isInteger(v) ? 0 : 2)} p.p.`}</td>
                 </tr>
               );
             })}</tbody>
-            <tfoot><tr className="total-geral"><td>Total</td><td /><td className="num">100%</td><td /><td className="num">100%</td><td className={`num${Math.abs(soma - 100) > 0.05 ? ' neg' : ''}`}>{num(soma, 2)}%</td><td /></tr></tfoot>
+            <tfoot><tr className="total-geral"><td>Total</td><td /><td className="num">100%</td><td /><td className="num">100%</td><td className={`num${soma !== 100 ? ' neg' : ''}`}>{num(soma, Number.isInteger(soma) ? 0 : 2)}%</td><td /></tr></tfoot>
           </table></div>
           <div className="acoes" style={{ marginTop: 12 }}>
             <button className="sec" disabled={!proposta} onClick={() => usar('media')}>Usar a média</button>

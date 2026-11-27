@@ -374,7 +374,8 @@ describe('Peso das comunidades (ADM-05): média, mediana e pesos gravados', () =
   });
   it('proposta em percentagem pelos dois métodos', () => {
     const p = propostaPesos(assistencia, [], 2026, 3, ['almada', 'porto']);
-    expect(p.media.almada.pct).toBeCloseTo(66.67, 2);
+    expect(p.media.almada.pct).toBe(67);
+    expect(p.media.porto.pct).toBe(33);
     expect(p.mediana.almada.pct).toBe(50);
     expect(p.mediana.porto).toEqual({ valor: 100, pct: 50 });
   });
