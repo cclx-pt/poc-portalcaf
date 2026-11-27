@@ -34,3 +34,28 @@ describe('Ferramentas › Calculadora de distribuição', () => {
     expect(pesosMediaAnual([])).toEqual({});
   });
 });
+
+import { linhasCustosFixos } from '../../src/lib/calculadora';
+describe('gravar a distribuição como custos fixos', () => {
+  const base = { rubrica: 'Festa de Natal', categoria: '04.03 Eventos', centroCusto: 'CC05', projeto: 'Natal 2026', fornecedor: undefined, contaAnalitica: undefined, nivel: 'privado' as const, ano: 2026, notas: 'Calculadora: 1000,00 €' };
+  it('de uma vez num mês: uma linha por comunidade com montante, só nesse mês; sem montante não grava', () => {
+    const ls = linhasCustosFixos({ almada: 150, porto: 0, sede: 270.5 }, { ...base, lancamento: { tipo: 'mes', mes: 12 } });
+    expect(ls).toEqual([
+      { id: 'almada-festa-de-natal-2026-12', comunidadeId: 'almada', rubrica: 'Festa de Natal', valorMensal: 150, incidencia: 100, ambito: 'local', categoria: '04.03 Eventos', centroCusto: 'CC05', projeto: 'Natal 2026', ano: 2026, inicio: '2026-12', fim: '2026-12', nivel: 'privado', notas: 'Calculadora: 1000,00 €' },
+      { id: 'sede-festa-de-natal-2026-12', comunidadeId: 'sede', rubrica: 'Festa de Natal', valorMensal: 270.5, incidencia: 100, ambito: 'local', categoria: '04.03 Eventos', centroCusto: 'CC05', projeto: 'Natal 2026', ano: 2026, inicio: '2026-12', fim: '2026-12', nivel: 'privado', notas: 'Calculadora: 1000,00 €' },
+    ]);
+  });
+  it('dividido pelos 12 meses: valor certo por mês; os cêntimos que sobram ficam numa linha de dezembro', () => {
+    const [a] = linhasCustosFixos({ almada: 120 }, { ...base, lancamento: { tipo: 'ano' } });
+    expect(a).toMatchObject({ id: 'almada-festa-de-natal-2026-01', valorMensal: 10, inicio: '2026-01', fim: '2026-12' });
+    const ls = linhasCustosFixos({ porto: 100 }, { ...base, lancamento: { tipo: 'ano' } });
+    expect(ls.map((l) => [l.inicio, l.fim, l.valorMensal])).toEqual([['2026-01', '2026-11', 8.33], ['2026-12', '2026-12', 8.37]]);
+    expect(Math.round(ls[0].valorMensal * 11 * 100 + ls[1].valorMensal * 100)).toBe(10000);
+    expect(ls[1].id).toBe('porto-festa-de-natal-2026-12');
+  });
+  it('sem campos vazios: os opcionais em falta não vão para a linha', () => {
+    const [a] = linhasCustosFixos({ almada: 1 }, { ...base, projeto: undefined, lancamento: { tipo: 'mes', mes: 3 } });
+    expect('projeto' in a).toBe(false);
+    expect('fornecedor' in a).toBe(false);
+  });
+});
