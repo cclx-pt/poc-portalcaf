@@ -410,3 +410,14 @@ td.mes-escolhido { background: #f2f2f1 !important; font-weight: 700; }
 /* Gráfico à esquerda e tabela à direita (ex.: Custos Fixos); um por baixo do outro em ecrãs estreitos. */
 .grafico-tabela { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; margin-bottom: 16px; align-items: start; }
 @media (max-width: 1100px) { .grafico-tabela { grid-template-columns: minmax(0, 1fr); } }
+
+/* Lista com procura (Escolha): categorias, centros de custo, projetos, fornecedores, contas analíticas */
+.escolha { position: relative; display: block; min-width: 0; }
+.escolha > input { width: 100%; padding-right: 26px; text-align: left; }
+.escolha-seta { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--cinza); font-size: 11px; }
+.escolha-lista { position: absolute; z-index: 30; left: 0; right: 0; min-width: 220px; top: calc(100% + 4px); max-height: 280px; overflow-y: auto; margin: 0; padding: 4px; list-style: none; background: var(--branco); border: 1px solid var(--linha); border-radius: var(--raio-p, 8px); box-shadow: 0 8px 24px rgba(0,0,0,.12); color: var(--preto); font-size: 13px; text-align: left; }
+.escolha-lista li { padding: 7px 10px; border-radius: 6px; cursor: pointer; line-height: 1.3; }
+.escolha-lista li.ativo { background: var(--claro); }
+.escolha-lista li[aria-selected="true"] { font-weight: 600; }
+.escolha-lista li.escolha-criar { border-top: 1px solid var(--linha); margin-top: 2px; }
+.escolha-lista .escolha-nada { color: var(--cinza); cursor: default; }

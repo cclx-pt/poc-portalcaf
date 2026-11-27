@@ -4,6 +4,7 @@ import { Estado, Modal, mensagemErro, useCarregar } from './ui';
 import { auditar, gravarTraducaoJotform, lerTraducaoJotform, listarCategorias, listarLotes } from '../lib/db';
 import { eur, num } from '../lib/format';
 import { recalcularAno } from '../lib/recalcular';
+import { Escolha } from './Escolha';
 import { NOME_ORIGEM, opcoesRegra, ORIGENS_JOTFORM, sugestaoRegra, tradutorJotform, valoresJotform, type LinhaTraducao, type OrigemJotform } from '../lib/traducaoJotform';
 import type { Categoria } from '../lib/types';
 
@@ -133,10 +134,7 @@ export function TraducaoJotform() {
                 <option value="igual">Igual</option><option value="contem">Contém</option>
               </select></label>
             <label className="campo">Categoria CAF (B)
-              <select value={edit.l.codigo} onChange={(e) => setEdit({ ...edit, l: { ...edit.l, codigo: e.target.value } })}>
-                <option value="">Escolha…</option>
-                {categorias.filter((c) => servem(edit.l.origem, c)).map((c) => <option key={c.id} value={c.codigo}>{c.nome}</option>)}
-              </select></label>
+              <Escolha aria-label="Categoria CAF" vazio="Escolha…" valor={edit.l.codigo} opcoes={categorias.filter((c) => servem(edit.l.origem, c)).map((c) => ({ valor: c.codigo!, rotulo: c.nome }))} onChange={(v) => setEdit({ ...edit, l: { ...edit.l, codigo: v } })} /></label>
           </div>
           {edit.l.valor.trim() && <p className="small">Apanha {num(valores.filter((v) => v.origem === edit.l.origem && tradutorJotform({ linhas: [{ ...edit.l, modo: edit.l.modo ?? 'igual', codigo: edit.l.codigo || (categorias.find((c) => servem(edit.l.origem, c))?.codigo ?? '') }] }, categorias)(v.origem, v.valor).fonte === 'regra').reduce((s, v) => s + v.n, 0))} registos de {ano - 1} e {ano}.</p>}
           <div className="acoes" style={{ marginTop: 12 }}>

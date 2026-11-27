@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Escolha } from '../components/Escolha';
 import { useAuth } from '../auth/AuthProvider';
 import { Estado, GraficoBarras, Kpi, useCarregar, useFiltros } from '../components/ui';
 import { SyncEstado } from '../components/SyncEstado';
@@ -125,7 +126,7 @@ export default function EntradasConjunto() {
             <select value={mesAte} onChange={(e) => { const v = Number(e.target.value); setMesAte(v); if (v < mesDe) setMesDe(v); }}>{MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
           </label>
           <label className="campo">Categoria
-            <select value={categoria} onChange={(e) => setCategoria(e.target.value)}><option value="todas">Todas</option>{categorias.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+            <Escolha aria-label="Categoria" style={{ minWidth: 220 }} vazio="Todas" valor={categoria === 'todas' ? '' : categoria} opcoes={categorias.map((c) => ({ valor: c, rotulo: c }))} onChange={(v) => setCategoria(v || 'todas')} />
           </label>
           <label className="campo">Valor mín. (€)<input inputMode="decimal" value={vMin} onChange={(e) => setVMin(e.target.value)} style={{ width: 90 }} /></label>
           <label className="campo">Valor máx. (€)<input inputMode="decimal" value={vMax} onChange={(e) => setVMax(e.target.value)} style={{ width: 90 }} /></label>

@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
+import { Escolha } from '../components/Escolha';
 import { Estado, mensagemErro, useCarregar, useFiltros } from '../components/ui';
+import { useCriarDimensao } from '../components/useCriarDimensao';
+import { opcoesCategorias, opcoesDimensoes } from '../lib/escolha';
 import { distribuir, linhasCustosFixos, montanteDePct, pctDeMontante, pesosMediaAnual, resumoManual, type Lancamento } from '../lib/calculadora';
 import { auditar, gravar, lerConfigAssistencia, listarCategorias, listarComunidades, listarCustosFixos, listarDimensoes, listarLotes } from '../lib/db';
 import { eur, MESES, num, parseNumero, periodo } from '../lib/format';
@@ -100,7 +103,8 @@ export default function Calculadora() {
   };
 
   const catsDespesa = (cats.dados ?? []).filter((c) => c.tipo === 'saida' && c.codigo && c.ativo !== false);
-  const dimsDe = (tp: 'centro' | 'projeto' | 'fornecedor' | 'conta') => (dims.dados ?? []).filter((d) => d.tipo === tp && d.ativo !== false);
+  const criarDim = useCriarDimensao(dims.dados ?? [], dims.recarregar);
+  const dimsDe = (tp: 'centro' | 'projeto' | 'fornecedor' | 'conta') => criarDim.todas.filter((d) => d.tipo === tp && d.ativo !== false);
   const lancamento: Lancamento = grav.tipo === 'mes' ? { tipo: 'mes', mes: grav.mes } : { tipo: 'ano' };
   const novas = linhasCustosFixos(Object.fromEntries(linhas.map((c) => [c.id, valMan[c.id]])), {
     rubrica: grav.rubrica, categoria: grav.categoria, centroCusto: grav.centroCusto, projeto: grav.projeto || undefined, fornecedor: grav.fornecedor || undefined,
@@ -185,28 +189,15 @@ export default function Calculadora() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 10 }}>
           <label className="campo">Nome *<input value={grav.rubrica} placeholder="Festa de Natal" onChange={(e) => setGrav({ ...grav, rubrica: e.target.value })} /></label>
           <label className="campo">Categoria *
-            <select value={grav.categoria} onChange={(e) => setGrav({ ...grav, categoria: e.target.value, contaAnalitica: '' })}>
-              <option value="">Escolha…</option>
-              {catsDespesa.map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
-            </select></label>
+            <Escolha aria-label="Categoria" vazio="Escolha…" valor={grav.categoria} opcoes={opcoesCategorias(catsDespesa)} onChange={(v) => setGrav({ ...grav, categoria: v, contaAnalitica: '' })} /></label>
           <label className="campo">Centro de custo *
-            <select value={grav.centroCusto} onChange={(e) => setGrav({ ...grav, centroCusto: e.target.value })}>
-              <option value="">Escolha…</option>
-              {dimsDe('centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
-            </select></label>
+            <Escolha aria-label="Centro de custo" vazio="Escolha…" valor={grav.centroCusto} opcoes={opcoesDimensoes(dimsDe('centro'))} criar={criarDim.criar('centro')} onChange={(v) => setGrav({ ...grav, centroCusto: v })} /></label>
           <label className="campo">Projeto ou evento *
-            <select value={grav.projeto} onChange={(e) => setGrav({ ...grav, projeto: e.target.value })}>
-              <option value="">Escolha…</option>
-              {dimsDe('projeto').map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
-            </select></label>
+            <Escolha aria-label="Projeto ou evento" vazio="Escolha…" valor={grav.projeto} opcoes={opcoesDimensoes(dimsDe('projeto'))} criar={criarDim.criar('projeto')} onChange={(v) => setGrav({ ...grav, projeto: v })} /></label>
           <label className="campo">Fornecedor
-            <input value={grav.fornecedor} list="calc-fornecedores" onChange={(e) => setGrav({ ...grav, fornecedor: e.target.value })} />
-            <datalist id="calc-fornecedores">{dimsDe('fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist></label>
+            <Escolha aria-label="Fornecedor" vazio="—" textoLivre valor={grav.fornecedor} opcoes={opcoesDimensoes(dimsDe('fornecedor'))} criar={criarDim.criar('fornecedor')} onChange={(v) => setGrav({ ...grav, fornecedor: v })} /></label>
           <label className="campo">Conta analítica
-            <select value={grav.contaAnalitica} onChange={(e) => setGrav({ ...grav, contaAnalitica: e.target.value })}>
-              <option value="">—</option>
-              {dimsDe('conta').filter((d) => !grav.categoria || !d.categoria || grav.categoria.startsWith(d.categoria)).map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
-            </select></label>
+            <Escolha aria-label="Conta analítica" vazio="—" valor={grav.contaAnalitica} opcoes={opcoesDimensoes(dimsDe('conta').filter((d) => !grav.categoria || !d.categoria || grav.categoria.startsWith(d.categoria)))} onChange={(v) => setGrav({ ...grav, contaAnalitica: v })} /></label>
           <label className="campo">Ano *
             <select value={grav.ano} onChange={(e) => setGrav({ ...grav, ano: Number(e.target.value) })}>
               {[ano - 1, ano, ano + 1].map((a) => <option key={a} value={a}>{a}</option>)}

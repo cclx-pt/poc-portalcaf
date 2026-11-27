@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { Modal, mensagemErro, useCarregar } from './ui';
 import { auditar, gravarLotes, listarCategorias, listarComunidades, listarDimensoes, listarLotes } from '../lib/db';
+import { Escolha } from './Escolha';
+import { useCriarDimensao } from './useCriarDimensao';
+import { opcoesCategorias, opcoesDimensoes } from '../lib/escolha';
 import { lerFicheiro } from '../lib/ficheiros';
 import { eur, r2 } from '../lib/format';
 import { juntarIfthenpay, lerPagamentosIfthenpay, registosIfthenpay, type PagamentoIfthenpay } from '../lib/ifthenpay';
@@ -29,7 +32,8 @@ export function ImportarIfthenpay({ onFechar, onFeito }: { onFechar: () => void;
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const entradas = (cats.dados ?? []).filter((c) => c.tipo === 'entrada' && c.ativo !== false);
-  const dimsDe = (t: 'centro' | 'projeto' | 'fornecedor' | 'conta') => (dims.dados ?? []).filter((d) => d.tipo === t && d.ativo !== false);
+  const criarDim = useCriarDimensao(dims.dados ?? [], dims.recarregar);
+  const dimsDe = (t: 'centro' | 'projeto' | 'fornecedor' | 'conta') => criarDim.todas.filter((d) => d.tipo === t && d.ativo !== false);
   const centros = dimsDe('centro');
   const codCat = entradas.find((c) => c.nome === categoria)?.codigo;
   const contas = dimsDe('conta').filter((d) => !codCat || !d.categoria || d.categoria === codCat);
@@ -98,32 +102,19 @@ export function ImportarIfthenpay({ onFechar, onFeito }: { onFechar: () => void;
             </select>
           </label>
           <label className="campo">Categoria *
-            <select value={categoria} onChange={(e) => { setCategoria(e.target.value); setConta(''); }}>
-              <option value="">Escolha…</option>
-              {entradas.map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
-            </select>
+            <Escolha aria-label="Categoria" vazio="Escolha…" valor={categoria} opcoes={opcoesCategorias(entradas)} onChange={(v) => { setCategoria(v); setConta(''); }} />
           </label>
           <label className="campo">Centro de custo *
-            <select value={centroCusto} onChange={(e) => setCentro(e.target.value)}>
-              <option value="">Escolha…</option>
-              {centros.map((d) => <option key={d.id} value={d.codigo ?? d.nome}>{d.codigo ? `${d.codigo} ${d.nome}` : d.nome}</option>)}
-            </select>
+            <Escolha aria-label="Centro de custo" vazio="Escolha…" valor={centroCusto} opcoes={opcoesDimensoes(centros)} criar={criarDim.criar('centro')} onChange={setCentro} />
           </label>
           <label className="campo">Projeto ou evento
-            <select value={projeto} onChange={(e) => setProjeto(e.target.value)}>
-              <option value="">—</option>
-              {dimsDe('projeto').map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
-            </select>
+            <Escolha aria-label="Projeto ou evento" vazio="—" valor={projeto} opcoes={opcoesDimensoes(dimsDe('projeto'))} criar={criarDim.criar('projeto')} onChange={setProjeto} />
           </label>
           <label className="campo">Fornecedor
-            <input value={fornecedor} list="forn-ifthenpay" onChange={(e) => setFornecedor(e.target.value)} />
-            <datalist id="forn-ifthenpay">{dimsDe('fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist>
+            <Escolha aria-label="Fornecedor" vazio="—" textoLivre valor={fornecedor} opcoes={opcoesDimensoes(dimsDe('fornecedor'))} criar={criarDim.criar('fornecedor')} onChange={setFornecedor} />
           </label>
           <label className="campo">Conta analítica
-            <select value={contaAnalitica} onChange={(e) => setConta(e.target.value)}>
-              <option value="">—</option>
-              {contas.map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
-            </select>
+            <Escolha aria-label="Conta analítica" vazio="—" valor={contaAnalitica} opcoes={opcoesDimensoes(contas)} onChange={setConta} />
           </label>
         </div>
       </>}

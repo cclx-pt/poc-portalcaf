@@ -7,6 +7,9 @@ import { Estado, Modal, mensagemErro, useCarregar, useFiltros } from '../compone
 import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { ImportarClassificacaoTesouraria } from '../components/ImportarClassificacaoTesouraria';
 import { auditar, gravar, gravarBancoLote, listarBanco, listarCategorias, listarComunidades, listarContas, listarCustosFixos, listarDimensoes, listarLotes, listarRegrasBanco, lerConfigAssistencia, lerConfigReembolsos } from '../lib/db';
+import { Escolha } from '../components/Escolha';
+import { useCriarDimensao } from '../components/useCriarDimensao';
+import { opcoesCategorias, opcoesDimensoes } from '../lib/escolha';
 import { submissoesDeLotes } from '../lib/reconciliacaoReembolsos';
 import { comunidadePorMbway, listarPessoas } from '../lib/pessoas';
 import { type RegraBanco, REGRAS_INICIAIS, aceitarPropostas, controloMes, proporClassificacao, relatorioExtratos, repartirPorPrevisao, resolverPartes, sugerirPadrao, candidatosReembolso, registosConciliados, consolidacaoMes, type RegistoJotform, temPalavra, validar, podeValidar, faltaCentroCusto, descricaoContem, type DimensaoRelatorio } from '../lib/classificacaoBanco';
@@ -260,10 +263,9 @@ export default function Reconciliacao() {
                 <td><span className={'etiqueta' + (estadoDe(m) === 'validado' ? ' preta' : '')}>{ESTADO[estadoDe(m)]}</span>{m.conciliadoCom && <div className="small muted">Conciliado</div>}</td>
                 <td>
                   {itemizado(m) ? <button className="link small" onClick={() => setDetalhe(m)}>{`Itemizado (${m.partes!.length} linhas)`}</button> :
-                  <select value={m.categoria ?? ''} disabled={!!m.conciliadoCom} onChange={(e) => alterar(m.loteId, m.id, { categoria: e.target.value || undefined, estado: 'proposto', contabilizar: false })}>
-                    <option value="">—</option>
-                    {(cats.dados ?? []).filter((c) => (c.ativo !== false || c.nome === m.categoria) && (c.tipo === 'financeiro' || (m.valor > 0 ? c.tipo === 'entrada' : c.tipo === 'saida'))).map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
-                  </select>}
+                  <Escolha aria-label="Categoria" vazio="—" style={{ minWidth: 200 }} disabled={!!m.conciliadoCom} valor={m.categoria ?? ''}
+                    opcoes={opcoesCategorias((cats.dados ?? []).filter((c) => (c.ativo !== false || c.nome === m.categoria) && (c.tipo === 'financeiro' || (m.valor > 0 ? c.tipo === 'entrada' : c.tipo === 'saida'))))}
+                    onChange={(v) => alterar(m.loteId, m.id, { categoria: v || undefined, estado: 'proposto', contabilizar: false })} />}
                 </td>
                 <td>
                   {m.partes?.length ? <span className="small">{`Repartido (${m.partes.length})`}</span> : (
@@ -380,7 +382,8 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
 }) {
   const [v, setV] = useState<MovBanco>(m);
   const [repartir, setRepartir] = useState(!!m.partes?.length);
-  const dims = (t: Dimensao['tipo']) => dimensoes.filter((d) => d.tipo === t && d.ativo !== false);
+  const criarDim = useCriarDimensao(dimensoes);
+  const dims = (t: Dimensao['tipo']) => criarDim.todas.filter((d) => d.tipo === t && d.ativo !== false);
   const cat = categorias.find((c) => c.nome === v.categoria);
   const partes = v.partes ?? [];
   const somaPartes = r2(partes.reduce((s, p) => s + p.valor, 0));
@@ -443,28 +446,15 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
         }} />}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
         <label className="campo">Categoria
-          <select value={v.categoria ?? ''} onChange={(e) => setV({ ...v, categoria: e.target.value || undefined, contaAnalitica: undefined })}>
-            <option value="">—</option>
-            {categorias.filter((c) => (c.ativo !== false || c.nome === v.categoria) && (c.tipo === 'financeiro' || (m.valor > 0 ? c.tipo === 'entrada' : c.tipo === 'saida'))).map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
-          </select></label>
+          <Escolha aria-label="Categoria" vazio="—" valor={v.categoria ?? ''} opcoes={opcoesCategorias(categorias.filter((c) => (c.ativo !== false || c.nome === v.categoria) && (c.tipo === 'financeiro' || (m.valor > 0 ? c.tipo === 'entrada' : c.tipo === 'saida'))))} onChange={(x) => setV({ ...v, categoria: x || undefined, contaAnalitica: undefined })} /></label>
         <label className="campo">Conta analítica
-          <select value={v.contaAnalitica ?? ''} onChange={(e) => setV({ ...v, contaAnalitica: e.target.value || undefined })}>
-            <option value="">—</option>
-            {dims('conta').filter((d) => !cat?.codigo || !d.categoria || d.categoria === cat.codigo).map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
-          </select></label>
+          <Escolha aria-label="Conta analítica" vazio="—" valor={v.contaAnalitica ?? ''} opcoes={opcoesDimensoes(dims('conta').filter((d) => !cat?.codigo || !d.categoria || d.categoria === cat.codigo))} onChange={(x) => setV({ ...v, contaAnalitica: x || undefined })} /></label>
         <label className="campo">Fornecedor
-          <input value={v.fornecedor ?? ''} list="forn-mov" onChange={(e) => setV({ ...v, fornecedor: e.target.value || undefined })} />
-          <datalist id="forn-mov">{dims('fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist></label>
+          <Escolha aria-label="Fornecedor" vazio="—" textoLivre valor={v.fornecedor ?? ''} opcoes={opcoesDimensoes(dims('fornecedor'))} criar={criarDim.criar('fornecedor')} onChange={(x) => setV({ ...v, fornecedor: x || undefined })} /></label>
         <label className="campo">{semCentro ? <b>Centro de custo * (obrigatório)</b> : 'Centro de custo *'}
-          <select value={v.centroCusto ?? ''} onChange={(e) => setV({ ...v, centroCusto: e.target.value || undefined })}>
-            <option value="">—</option>
-            {dims('centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
-          </select></label>
+          <Escolha aria-label="Centro de custo" vazio="—" aria-invalid={semCentro} valor={v.centroCusto ?? ''} opcoes={opcoesDimensoes(dims('centro'))} criar={criarDim.criar('centro')} onChange={(x) => setV({ ...v, centroCusto: x || undefined })} /></label>
         <label className="campo">Projeto ou evento
-          <select value={v.projeto ?? ''} onChange={(e) => setV({ ...v, projeto: e.target.value || undefined })}>
-            <option value="">—</option>
-            {dims('projeto').map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
-          </select></label>
+          <Escolha aria-label="Projeto ou evento" vazio="—" valor={v.projeto ?? ''} opcoes={opcoesDimensoes(dims('projeto'))} criar={criarDim.criar('projeto')} onChange={(x) => setV({ ...v, projeto: x || undefined })} /></label>
         <label className="campo">Documento<input value={v.documento ?? ''} placeholder="FT 123" onChange={(e) => setV({ ...v, documento: e.target.value || undefined })} /></label>
         {!repartir && <label className="campo">Comunidade
           <select value={v.comunidadeId ?? ''} onChange={(e) => setV({ ...v, comunidadeId: e.target.value || undefined })}>
@@ -487,15 +477,11 @@ function DetalheMovimento({ m, categorias, dimensoes, comunidades, custosFixos, 
           <thead><tr><th>Categoria</th><th>Comunidade</th><th>Centro de custo</th><th>Descrição</th><th>Tipo</th><th className="num">Valor fixo (€) ou %</th><th className="num">Valor (€)</th><th /></tr></thead>
           <tbody>{partes.map((p, i) => (
             <tr key={i}>
-              <td><select value={p.categoria ?? ''} onChange={(e) => mudar(i, { categoria: e.target.value || undefined })} aria-label="Categoria da linha">
-                <option value="">{v.categoria ? `Igual ao movimento (${v.categoria})` : '—'}</option>{opcoesCat.map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
-              </select></td>
+              <td><Escolha aria-label="Categoria da linha" style={{ minWidth: 180 }} vazio={v.categoria ? `Igual ao movimento (${v.categoria})` : '—'} valor={p.categoria ?? ''} opcoes={opcoesCategorias(opcoesCat)} onChange={(x) => mudar(i, { categoria: x || undefined })} /></td>
               <td><select value={p.comunidadeId} onChange={(e) => mudar(i, { comunidadeId: e.target.value })} aria-label="Comunidade da linha">
                 <option value="">—</option>{comunidades.filter((c) => c.ativo !== false).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select></td>
-              <td><select value={p.centroCusto ?? ''} onChange={(e) => mudar(i, { centroCusto: e.target.value || undefined })} aria-label="Centro de custo da linha">
-                <option value="">{v.centroCusto ? `Igual ao movimento (${v.centroCusto})` : '—'}</option>{dims('centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
-              </select></td>
+              <td><Escolha aria-label="Centro de custo da linha" style={{ minWidth: 160 }} vazio={v.centroCusto ? `Igual ao movimento (${v.centroCusto})` : '—'} valor={p.centroCusto ?? ''} opcoes={opcoesDimensoes(dims('centro'))} criar={criarDim.criar('centro')} onChange={(x) => mudar(i, { centroCusto: x || undefined })} /></td>
               <td><input value={p.descricao ?? ''} placeholder="Ex.: lanche do GC" onChange={(e) => mudar(i, { descricao: e.target.value })} aria-label="Descrição da linha" /></td>
               <td><select value={p.pct != null ? 'pct' : 'valor'} aria-label="Tipo da linha" onChange={(e) => mudar(i, e.target.value === 'pct' ? { pct: Math.round((Math.abs(p.valor) / Math.abs(m.valor || 1)) * 10000) / 100 } : { pct: undefined })}>
                 <option value="valor">Valor fixo</option><option value="pct">Percentagem</option>
