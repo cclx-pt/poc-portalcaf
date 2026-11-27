@@ -10,7 +10,10 @@ import type { Categoria, Lote } from './types';
 export type OrigemJotform = 'contribuir' | 'depositos' | 'despesas';
 export const ORIGENS_JOTFORM: OrigemJotform[] = ['contribuir', 'depositos', 'despesas'];
 export const NOME_ORIGEM: Record<OrigemJotform, string> = { contribuir: 'Contribuir', depositos: 'Depósitos de coletas', despesas: 'Reembolsos e despesas' };
-/** Regra direta: no formulário `origem`, se a categoria do Jotform é (ou contém) `valor`, a categoria CAF é `codigo`. */
+/**
+ * Regra direta: no formulário `origem`, se a categoria do Jotform é (ou contém) `valor`, a categoria CAF é `codigo`.
+ * `valor` pode ter várias opções separadas por ";" (ex.: "Retiro;Retiros;B1-Retiro2026"): basta uma.
+ */
 export interface LinhaTraducao { origem: OrigemJotform; valor: string; codigo: string; modo?: 'igual' | 'contem' }
 export interface TraducaoJotform { linhas: LinhaTraducao[]; atualizadoEm?: string; atualizadoPor?: string }
 export const POR_TRADUZIR = 'Por traduzir';
@@ -18,6 +21,9 @@ export const POR_TRADUZIR = 'Por traduzir';
 /** Tipo de categoria de cada formulário: entradas (Contribuir, depósitos) ou gastos (despesas). */
 const tipoDe = (o: OrigemJotform): Categoria['tipo'] => (o === 'despesas' ? 'saida' : 'entrada');
 const chave = (s: string) => norm(s).replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** As opções de uma regra: o texto separado por ";", sem espaços à volta e sem opções vazias. */
+export const opcoesRegra = (valor: string) => valor.split(';').map((s) => s.trim()).filter((s) => chave(s));
 
 export interface Traducao { categoria: string | null; fonte: 'regra' | 'caf' | null; regra?: LinhaTraducao }
 
@@ -28,15 +34,18 @@ export interface Traducao { categoria: string | null; fonte: 'regra' | 'caf' | n
 export function tradutorJotform(t: TraducaoJotform | null | undefined, categorias: Categoria[]) {
   const porCodigo = new Map(categorias.filter((c) => c.codigo).map((c) => [c.codigo!, c]));
   const nomes = new Map(categorias.filter((c) => c.codigo).map((c) => [chave(c.nome), c]));
-  const regras = (t?.linhas ?? []).filter((l) => porCodigo.has(l.codigo) && chave(l.valor));
-  const iguais = new Map(regras.filter((l) => (l.modo ?? 'igual') === 'igual').map((l) => [`${l.origem}|${chave(l.valor)}`, l]));
-  const contem = regras.filter((l) => l.modo === 'contem').sort((a, b) => chave(b.valor).length - chave(a.valor).length);
+  const regras = (t?.linhas ?? []).filter((l) => porCodigo.has(l.codigo) && opcoesRegra(l.valor).length);
+  // Cada opção de uma regra conta como uma regra própria, ligada à regra original.
+  const opcoes = regras.flatMap((l) => opcoesRegra(l.valor).map((o) => ({ l, o: chave(o) })));
+  const iguais = new Map<string, LinhaTraducao>();
+  for (const { l, o } of opcoes) if ((l.modo ?? 'igual') === 'igual' && !iguais.has(`${l.origem}|${o}`)) iguais.set(`${l.origem}|${o}`, l);
+  const contem = opcoes.filter(({ l }) => l.modo === 'contem').sort((a, b) => b.o.length - a.o.length);
   const cache = new Map<string, Traducao>();
   return (origem: OrigemJotform, valor: string): Traducao => {
     const k = `${origem}|${chave(valor)}`;
     if (cache.has(k)) return cache.get(k)!;
     const v = ` ${chave(valor)} `;
-    const regra = iguais.get(k) ?? contem.find((l) => l.origem === origem && v.includes(` ${chave(l.valor)} `));
+    const regra = iguais.get(k) ?? contem.find(({ l, o }) => l.origem === origem && v.includes(` ${o} `))?.l;
     const caf = nomes.get(chave(valor));
     const r: Traducao = regra ? { categoria: porCodigo.get(regra.codigo)!.nome, fonte: 'regra', regra } : caf ? { categoria: caf.nome, fonte: 'caf' } : { categoria: null, fonte: null };
     cache.set(k, r);

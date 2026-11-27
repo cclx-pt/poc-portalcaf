@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { POR_TRADUZIR, sugestaoRegra, traduzirLotes, tradutorJotform, valoresJotform, type TraducaoJotform } from '../../src/lib/traducaoJotform';
+import { opcoesRegra, POR_TRADUZIR, sugestaoRegra, traduzirLotes, tradutorJotform, valoresJotform, type TraducaoJotform } from '../../src/lib/traducaoJotform';
 import { categoriasDoPlano } from '../../src/lib/plano';
 import type { Lote } from '../../src/lib/types';
 
@@ -55,5 +55,26 @@ describe('resultados só com categorias CAF', () => {
     expect(r.meses[2].entradasPorCategoria).toEqual({ 'R1.01 Dízimos': 10, [`${POR_TRADUZIR}: Xpto`]: 5 });
     const [sem] = calcularResumos(base as never);
     expect(Object.keys(sem.meses[2].entradasPorCategoria)).toEqual(['Dizimo', 'Xpto']);
+  });
+});
+
+describe('várias opções numa regra, separadas por ";"', () => {
+  const tabela: TraducaoJotform = { linhas: [
+    { origem: 'despesas', valor: 'Retiro;Retiros; B1-Retiro2026', codigo: '07.01' },
+    { origem: 'contribuir', valor: 'Oferta; Coleta ;', codigo: 'R1.02', modo: 'contem' },
+  ] };
+  const tr = tradutorJotform(tabela, cats);
+  it('"igual": apanha qualquer uma das opções (sem maiúsculas, acentos nem espaços à volta)', () => {
+    for (const v of ['Retiro', 'retiros', 'B1-Retiro2026', 'b1 retiro2026']) expect(tr('despesas', v)).toMatchObject({ categoria: '07.01 Apoio missionário', fonte: 'regra', regra: tabela.linhas[0] });
+    expect(tr('despesas', 'Retiro Jovens').categoria).toBeNull();
+    expect(tr('despesas', 'Retiro;Retiros').categoria).toBeNull();
+  });
+  it('"contém": basta uma das opções aparecer; opções vazias são ignoradas', () => {
+    expect(tr('contribuir', 'Oferta Sede Manhã')).toMatchObject({ categoria: 'R1.02 Ofertas gerais' });
+    expect(tr('contribuir', 'Coleta Almada')).toMatchObject({ categoria: 'R1.02 Ofertas gerais', regra: tabela.linhas[1] });
+    expect(tr('contribuir', 'Dízimo').categoria).toBeNull();
+  });
+  it('as opções de uma regra', () => {
+    expect(opcoesRegra(' Retiro;Retiros; ;B1-Retiro2026 ')).toEqual(['Retiro', 'Retiros', 'B1-Retiro2026']);
   });
 });
