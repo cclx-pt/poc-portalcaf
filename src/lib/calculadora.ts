@@ -3,6 +3,7 @@
  * (percentagens inteiras) e compara com uma distribuição manual.
  */
 import { fecharEm100 } from './resumos';
+import type { CustoFixo, Nivel } from './types';
 
 const cent = (v: number) => Math.round(v * 100);
 
@@ -36,4 +37,37 @@ export function pesosMediaAnual(meses: Record<string, number>[]): Record<string,
   if (!meses.length) return {};
   const ids = [...new Set(meses.flatMap((m) => Object.keys(m)))];
   return fecharEm100(Object.fromEntries(ids.map((c) => [c, meses.reduce((t, m) => t + (m[c] ?? 0), 0) / meses.length])));
+}
+
+export type Lancamento = { tipo: 'mes'; mes: number } | { tipo: 'ano' };
+export interface DadosCustoFixo {
+  rubrica: string; categoria: string; centroCusto: string;
+  projeto?: string; fornecedor?: string; contaAnalitica?: string;
+  nivel: Nivel; ano: number; notas?: string; lancamento: Lancamento;
+}
+const slugRubrica = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const mm = (ano: number, m: number) => `${ano}-${String(m).padStart(2, '0')}`;
+
+/**
+ * Linhas de custos fixos (uma por comunidade com montante) a partir da distribuição: de uma vez num mês, ou dividido
+ * pelos 12 meses do ano (quando o montante não divide certo, os cêntimos que sobram ficam numa linha de dezembro).
+ * Custos locais, com incidência de 100 %. Os campos opcionais vazios não vão para a linha.
+ */
+export function linhasCustosFixos(montantes: Record<string, number>, d: DadosCustoFixo): CustoFixo[] {
+  const extra = Object.fromEntries(Object.entries({ categoria: d.categoria, centroCusto: d.centroCusto, projeto: d.projeto, fornecedor: d.fornecedor, contaAnalitica: d.contaAnalitica }).filter(([, v]) => v));
+  const linha = (comunidadeId: string, valorMensal: number, inicio: string, fim: string): CustoFixo => ({
+    id: `${comunidadeId}-${slugRubrica(d.rubrica)}-${inicio}`, comunidadeId, rubrica: d.rubrica.trim(), valorMensal, incidencia: 100, ambito: 'local',
+    ...extra, ano: d.ano, inicio, fim, nivel: d.nivel, ...(d.notas ? { notas: d.notas } : {}),
+  });
+  const out: CustoFixo[] = [];
+  for (const [c, v] of Object.entries(montantes)) {
+    const total = cent(v);
+    if (total <= 0) continue;
+    if (d.lancamento.tipo === 'mes') { const p = mm(d.ano, d.lancamento.mes); out.push(linha(c, total / 100, p, p)); continue; }
+    const q = Math.floor(total / 12);
+    if (q * 12 === total) { out.push(linha(c, q / 100, mm(d.ano, 1), mm(d.ano, 12))); continue; }
+    out.push(linha(c, q / 100, mm(d.ano, 1), mm(d.ano, 11)));
+    out.push(linha(c, (total - q * 11) / 100, mm(d.ano, 12), mm(d.ano, 12)));
+  }
+  return out;
 }

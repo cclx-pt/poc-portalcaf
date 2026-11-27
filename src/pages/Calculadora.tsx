@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { Estado, useCarregar, useFiltros } from '../components/ui';
-import { distribuir, montanteDePct, pctDeMontante, pesosMediaAnual, resumoManual } from '../lib/calculadora';
-import { lerConfigAssistencia, listarComunidades, listarLotes } from '../lib/db';
+import { Estado, mensagemErro, useCarregar, useFiltros } from '../components/ui';
+import { distribuir, linhasCustosFixos, montanteDePct, pctDeMontante, pesosMediaAnual, resumoManual, type Lancamento } from '../lib/calculadora';
+import { auditar, gravar, lerConfigAssistencia, listarCategorias, listarComunidades, listarCustosFixos, listarDimensoes, listarLotes } from '../lib/db';
 import { eur, MESES, num, parseNumero, periodo } from '../lib/format';
 import { fecharEm100, listarPesos } from '../lib/pesos';
 import { comunidadeAtiva, destinoFusao, propostaPesos } from '../lib/resumos';
+import { NIVEIS, NIVEL_LABEL, type Nivel } from '../lib/types';
 
 /** Lê um valor em euros escrito à portuguesa ("1000", "1.000,50", "1000,5"). */
 function lerEuros(t: string): number {
@@ -17,6 +18,7 @@ function lerEuros(t: string): number {
 const dif = (v: number) => (Math.round(v * 100) === 0 ? eur(0) : `${v > 0 ? '+' : '−'}${eur(Math.abs(v))}`);
 
 type Linha = { pct: string; valor: string };
+interface Gravacao { rubrica: string; categoria: string; centroCusto: string; projeto: string; fornecedor: string; contaAnalitica: string; nivel: Nivel; ano: number; tipo: 'mes' | 'ano'; mes: number }
 
 /**
  * Ferramentas › Calculadora de distribuição (FER-01): reparte um montante pelas comunidades segundo os pesos
@@ -24,7 +26,7 @@ type Linha = { pct: string; valor: string };
  * distribuição manual. Não grava nada.
  */
 export default function Calculadora() {
-  const { acesso } = useAuth();
+  const { acesso, pode } = useAuth();
   const { ano } = useFiltros();
   const coms = useCarregar(listarComunidades, []);
   const gravados = useCarregar(() => listarPesos(ano), [ano]);
@@ -38,6 +40,13 @@ export default function Calculadora() {
   const [totalTxt, setTotalTxt] = useState('1000');
   const [manual, setManual] = useState<Record<string, Linha> | null>(null);
   const total = lerEuros(totalTxt);
+  const podeGravar = pode('custos');
+  const cats = useCarregar(() => (podeGravar ? listarCategorias() : Promise.resolve([])), [podeGravar]);
+  const dims = useCarregar(() => (podeGravar ? listarDimensoes() : Promise.resolve([])), [podeGravar]);
+  const [grav, setGrav] = useState<Gravacao>(() => ({ rubrica: '', categoria: '', centroCusto: '', projeto: '', fornecedor: '', contaAnalitica: '', nivel: 'privado', ano, tipo: 'mes', mes: agora.getMonth() + 1 }));
+  const [ocupado, setOcupado] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [erroGrav, setErroGrav] = useState<string | null>(null);
 
   const comunidades = (coms.dados ?? []).filter((c) => !c.especial);
   const destino = useMemo(() => destinoFusao(coms.dados ?? []), [coms.dados]);
@@ -89,6 +98,31 @@ export default function Calculadora() {
     setTotalTxt(t);
     if (manual) { const novo = lerEuros(t); setManual(Object.fromEntries(Object.entries(manual).map(([c, l]) => [c, { pct: l.pct, valor: num(montanteDePct(novo, Number(l.pct.replace(',', '.')) || 0), 2) }]))); }
   };
+
+  const catsDespesa = (cats.dados ?? []).filter((c) => c.tipo === 'saida' && c.codigo && c.ativo !== false);
+  const dimsDe = (tp: 'centro' | 'projeto' | 'fornecedor' | 'conta') => (dims.dados ?? []).filter((d) => d.tipo === tp && d.ativo !== false);
+  const lancamento: Lancamento = grav.tipo === 'mes' ? { tipo: 'mes', mes: grav.mes } : { tipo: 'ano' };
+  const novas = linhasCustosFixos(Object.fromEntries(linhas.map((c) => [c.id, valMan[c.id]])), {
+    rubrica: grav.rubrica, categoria: grav.categoria, centroCusto: grav.centroCusto, projeto: grav.projeto || undefined, fornecedor: grav.fornecedor || undefined,
+    contaAnalitica: grav.contaAnalitica || undefined, nivel: grav.nivel, ano: grav.ano, lancamento,
+    notas: `Calculadora de distribuição: ${eur(total)} (${fonte === 'anual' ? `média anual ${ano}` : `pesos de ${MESES[Number(fonte) - 1]} ${ano}`})`,
+  });
+  const faltaGrav = [!grav.rubrica.trim() && 'o nome', !grav.categoria && 'a categoria', !grav.centroCusto && 'o centro de custo', !grav.projeto && 'o projeto ou evento',
+    Math.round(resumo.porDistribuir * 100) !== 0 && 'distribuir o montante todo (Por distribuir a 0,00 €)', !novas.length && 'pelo menos uma comunidade com montante'].filter(Boolean) as string[];
+
+  async function gravarCustos() {
+    setErroGrav(null); setMsg(null);
+    if (faltaGrav.length) return;
+    setOcupado(true);
+    try {
+      const existentes = new Set((await listarCustosFixos(acesso!)).map((c) => c.id));
+      const repetidas = novas.filter((l) => existentes.has(l.id));
+      if (repetidas.length && !confirm(`Já existem ${repetidas.length} linhas de custos fixos "${grav.rubrica.trim()}" para estes meses (${repetidas.map((l) => comunidades.find((c) => c.id === l.comunidadeId)?.nome ?? l.comunidadeId).join(', ')}). Substituí-las?`)) return;
+      for (const l of novas) await gravar('custos_fixos', l);
+      await auditar(acesso!.email, 'custos fixos pela calculadora', `${grav.rubrica.trim()} · ${eur(resumo.montante)} · ${grav.tipo === 'mes' ? MESES[grav.mes - 1] : 'dividido pelos 12 meses'} de ${grav.ano}: ${novas.length} linhas (${novas.map((l) => `${l.comunidadeId} ${l.valorMensal}`).join(', ')})`);
+      setMsg(`Gravadas ${novas.length} linhas em Custos fixos (${grav.rubrica.trim()}, ${grav.ano}). Recalcule os dados (Configuração ou Peso das comunidades) para atualizar os resultados.`);
+    } catch (e) { setErroGrav(mensagemErro(e)); } finally { setOcupado(false); }
+  }
 
   return (
     <div>
@@ -143,6 +177,57 @@ export default function Calculadora() {
           </tr></tfoot>
         </table></div>
         <p className="small muted">As % são inteiras. Ao mudar a % manual o montante acompanha, e ao mudar o montante a % é recalculada. Diferença = manual menos inicial; a negrito, valores abaixo da distribuição inicial e totais que não fecham.</p>
+      </div>}
+
+      {pronto && podeGravar && <div className="sec card">
+        <h2>Gravar como custos fixos</h2>
+        <p className="small muted" style={{ marginTop: 0 }}>Grava uma linha em Custos fixos para cada comunidade com montante na distribuição manual (custo local, incidência 100 %). A comunidade Geral não entra.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 10 }}>
+          <label className="campo">Nome *<input value={grav.rubrica} placeholder="Festa de Natal" onChange={(e) => setGrav({ ...grav, rubrica: e.target.value })} /></label>
+          <label className="campo">Categoria *
+            <select value={grav.categoria} onChange={(e) => setGrav({ ...grav, categoria: e.target.value, contaAnalitica: '' })}>
+              <option value="">Escolha…</option>
+              {catsDespesa.map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+            </select></label>
+          <label className="campo">Centro de custo *
+            <select value={grav.centroCusto} onChange={(e) => setGrav({ ...grav, centroCusto: e.target.value })}>
+              <option value="">Escolha…</option>
+              {dimsDe('centro').map((d) => <option key={d.id} value={d.codigo}>{`${d.codigo} ${d.nome}`}</option>)}
+            </select></label>
+          <label className="campo">Projeto ou evento *
+            <select value={grav.projeto} onChange={(e) => setGrav({ ...grav, projeto: e.target.value })}>
+              <option value="">Escolha…</option>
+              {dimsDe('projeto').map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
+            </select></label>
+          <label className="campo">Fornecedor
+            <input value={grav.fornecedor} list="calc-fornecedores" onChange={(e) => setGrav({ ...grav, fornecedor: e.target.value })} />
+            <datalist id="calc-fornecedores">{dimsDe('fornecedor').map((d) => <option key={d.id} value={d.nome} />)}</datalist></label>
+          <label className="campo">Conta analítica
+            <select value={grav.contaAnalitica} onChange={(e) => setGrav({ ...grav, contaAnalitica: e.target.value })}>
+              <option value="">—</option>
+              {dimsDe('conta').filter((d) => !grav.categoria || !d.categoria || grav.categoria.startsWith(d.categoria)).map((d) => <option key={d.id} value={d.nome}>{d.nome}</option>)}
+            </select></label>
+          <label className="campo">Ano *
+            <select value={grav.ano} onChange={(e) => setGrav({ ...grav, ano: Number(e.target.value) })}>
+              {[ano - 1, ano, ano + 1].map((a) => <option key={a} value={a}>{a}</option>)}
+            </select></label>
+          <label className="campo">Lançamento
+            <select value={grav.tipo} onChange={(e) => setGrav({ ...grav, tipo: e.target.value as 'mes' | 'ano' })}>
+              <option value="mes">De uma vez num mês</option>
+              <option value="ano">Dividido pelos 12 meses</option>
+            </select></label>
+          {grav.tipo === 'mes' && <label className="campo">Mês
+            <select value={grav.mes} onChange={(e) => setGrav({ ...grav, mes: Number(e.target.value) })}>
+              {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select></label>}
+          <label className="campo">Nível de privacidade
+            <select value={grav.nivel} onChange={(e) => setGrav({ ...grav, nivel: e.target.value as Nivel })}>{NIVEIS.map((n) => <option key={n} value={n}>{NIVEL_LABEL[n]}</option>)}</select></label>
+        </div>
+        {novas.length > 0 && <p className="small">{`Vai gravar ${novas.length} ${novas.length === 1 ? 'linha' : 'linhas'}: `}{novas.map((l) => `${comunidades.find((c) => c.id === l.comunidadeId)?.nome ?? l.comunidadeId} ${eur(l.valorMensal)}${l.inicio === l.fim ? ` em ${MESES[Number(l.inicio.slice(5)) - 1]}` : ` por mês (${MESES[Number(l.inicio.slice(5)) - 1]} a ${MESES[Number((l.fim ?? '').slice(5)) - 1]})`}`).join(' · ')}</p>}
+        {faltaGrav.length > 0 && <p className="small muted">{`Para gravar, falta: ${faltaGrav.join(', ')}.`}</p>}
+        {erroGrav && <div className="aviso" role="alert">{erroGrav}</div>}
+        {msg && <div className="ok-box" role="status">{msg}</div>}
+        <div className="acoes"><button disabled={ocupado || faltaGrav.length > 0} onClick={() => void gravarCustos()}>{ocupado ? 'A gravar…' : `Gravar em Custos fixos`}</button></div>
       </div>}
     </div>
   );
