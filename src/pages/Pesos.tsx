@@ -4,7 +4,7 @@ import { Estado, mensagemErro, useCarregar, useFiltros, useFocarErro } from '../
 import { useAvisoSaida } from '../components/SaidaSemGravar';
 import { auditar, lerConfigAssistencia, listarComunidades, listarLotes } from '../lib/db';
 import { MESES, MESES_CURTOS, num } from '../lib/format';
-import { fecharEm100, gravarPesosMes, gravarPesosVarios, listarPesos, NOME_METODO, pesosValidos, somaPesos, textoPeso, textoProposta, type MetodoPeso, type PesosMes, type VistaPesos } from '../lib/pesos';
+import { fecharEm100, folhaPesosGravados, gravarPesosMes, gravarPesosVarios, listarPesos, NOME_METODO, pesosValidos, somaPesos, textoPeso, textoProposta, type MetodoPeso, type PesosMes, type VistaPesos } from '../lib/pesos';
 import { recalcularAno } from '../lib/recalcular';
 import { comunidadeAtiva, destinoFusao, propostaPesos } from '../lib/resumos';
 import type { Comunidade } from '../lib/types';
@@ -72,6 +72,34 @@ export default function Pesos() {
   function novoRegisto(m: number, pesos: Record<string, number>, met: MetodoPeso, manual: boolean, prop = propostaDe(m)): PesosMes {
     const agora = new Date().toISOString();
     return { id: periodoDe(ano, m), ano, mes: m, metodo: met, pesos, proposta: prop, manual, calculadoEm: agora, gravadoPor: acesso!.email, gravadoEm: agora };
+  }
+
+  /** Descarrega "Pesos gravados por mês" em Excel: folha em % (inteiras, soma 100) e folha em pessoas. */
+  async function descarregarExcel() {
+    setErro(null);
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      for (const [vistaFolha, nomeFolha, fmt] of [['pct', 'Pesos (%)', '0"%"'], ['pessoas', 'Pessoas', '0.0']] as const) {
+        const f = folhaPesosGravados(gravados.dados ?? [], comunidades, vistaFolha);
+        const ws = wb.addWorksheet(nomeFolha);
+        ws.addRow([`Peso das comunidades ${ano}: ${vistaFolha === 'pct' ? '% do peso gravado de cada comunidade' : 'jovens e adultos por celebração (12 meses, método do mês)'}`]).font = { bold: true, name: 'Arial', size: 12 };
+        ws.addRow(f.cabecalho).font = { bold: true, name: 'Arial' };
+        for (const l of f.linhas) ws.addRow(l).font = { name: 'Arial' };
+        if (f.total) ws.addRow(f.total).font = { bold: true, name: 'Arial' };
+        ws.addRow(f.metodo).font = { italic: true, name: 'Arial' };
+        ws.addRow([]);
+        ws.addRow(['Vazio: mês sem pesos gravados (usa a média automática dos 12 meses). À mão: peso alterado pelo administrador.']).font = { italic: true, name: 'Arial', size: 9 };
+        ws.columns.forEach((c, i) => { c.width = i ? 9 : 22; if (i) { c.numFmt = fmt; c.alignment = { horizontal: 'right' }; } });
+        ws.views = [{ state: 'frozen', xSplit: 1, ySplit: 2 }];
+      }
+      const buf = await wb.xlsx.writeBuffer();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      a.download = `pesos-comunidades-${ano}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) { setErro(mensagemErro(e)); }
   }
 
   async function gravarMes(): Promise<boolean> {
@@ -160,6 +188,7 @@ export default function Pesos() {
                   <button key={k} role="tab" aria-selected={vista === k} className={vista === k ? 'ativa' : ''} onClick={() => setVista(k)}>{rot}</button>
                 ))}
               </div>
+              <button className="sec" disabled={!(gravados.dados ?? []).length} title={(gravados.dados ?? []).length ? undefined : `Sem pesos gravados em ${ano}`} onClick={() => void descarregarExcel()}>Descarregar Excel</button>
             </div>
           </div>
           <div className="tabela"><table>

@@ -5,6 +5,7 @@
  */
 import { collection, doc, getDocs, query, setDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
+import { MESES_CURTOS } from './format';
 import { fecharEm100 } from './resumos';
 import type { MetodoPeso } from './resumos';
 
@@ -55,6 +56,27 @@ export function textoProposta(prop: PesosMes['proposta'] | null | undefined, met
 export const somaPesos = (p: Record<string, number>) => Math.round(Object.values(p).reduce((t, v) => t + (Number(v) || 0), 0) * 100) / 100;
 /** Os pesos de um mês são válidos quando são percentagens inteiras, nenhum é negativo e somam 100 %. */
 export const pesosValidos = (p: Record<string, number>) => Object.values(p).every((v) => Number.isInteger(v) && v >= 0) && somaPesos(p) === 100;
+
+type Celula = string | number | null;
+/** Dados da folha Excel "Pesos gravados por mês": % inteiras (soma 100) ou pessoas com uma casa decimal; null sem valor. */
+export function folhaPesosGravados(gravados: PesosMes[], comunidades: { id: string; nome: string }[], vista: VistaPesos) {
+  const porMes = new Map(gravados.map((g) => [g.mes, g]));
+  const meses = Array.from({ length: 12 }, (_, i) => porMes.get(i + 1));
+  const pct = meses.map((g) => (g ? fecharEm100(g.pesos) : null));
+  const valor = (i: number, c: string): number | null => {
+    const g = meses[i];
+    if (!g) return null;
+    if (vista === 'pct') return c in g.pesos ? pct[i]![c] : null;
+    const v = g.proposta?.[g.metodo]?.[c]?.valor;
+    return v == null || !Number.isFinite(v) ? null : Math.round(v * 10) / 10;
+  };
+  const linhas: Celula[][] = comunidades.map((c) => [c.nome, ...meses.map((_, i) => valor(i, c.id))]);
+  const total: Celula[] | null = vista === 'pct'
+    ? ['Total', ...meses.map((_, i) => { const vs = linhas.map((l) => l[i + 1]).filter((v): v is number => typeof v === 'number'); return vs.length ? vs.reduce((a, b) => a + b, 0) : null; })]
+    : null;
+  const metodo: Celula[] = ['Método', ...meses.map((g) => (g ? (g.manual ? 'À mão' : NOME_METODO[g.metodo]) : 'Auto'))];
+  return { cabecalho: ['Comunidade', ...MESES_CURTOS] as string[], linhas, total, metodo };
+}
 
 /** Pesos por mês no formato do cálculo dos resumos (AAAA-MM → comunidade → %). */
 export const pesosParaCalculo = (ps: PesosMes[]) => Object.fromEntries(ps.map((x) => [x.id, x.pesos]));
