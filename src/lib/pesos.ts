@@ -5,9 +5,11 @@
  */
 import { collection, doc, getDocs, query, setDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
+import { fecharEm100 } from './resumos';
 import type { MetodoPeso } from './resumos';
 
 export type { MetodoPeso };
+export { fecharEm100 };
 export const NOME_METODO: Record<MetodoPeso, string> = { media: 'Média', mediana: 'Mediana' };
 
 export interface PropostaComunidade { valor: number; pct: number }
@@ -51,17 +53,8 @@ export function textoProposta(prop: PesosMes['proposta'] | null | undefined, met
 
 /** Soma dos pesos (para validar 100 %). */
 export const somaPesos = (p: Record<string, number>) => Math.round(Object.values(p).reduce((t, v) => t + (Number(v) || 0), 0) * 100) / 100;
-/** Os pesos de um mês são válidos quando somam 100 % (com tolerância de arredondamento) e nenhum é negativo. */
-export const pesosValidos = (p: Record<string, number>) => Math.abs(somaPesos(p) - 100) <= 0.05 && Object.values(p).every((v) => v >= 0);
-
-/** Ajusta a última casa decimal para a soma dar exatamente 100 (o arredondamento vai para o maior peso). */
-export function fecharEm100(p: Record<string, number>): Record<string, number> {
-  const out = { ...p };
-  const dif = Math.round((100 - somaPesos(out)) * 100) / 100;
-  const maior = Object.entries(out).sort((a, b) => b[1] - a[1])[0]?.[0];
-  if (maior && dif && Math.abs(dif) < 1) out[maior] = Math.round((out[maior] + dif) * 100) / 100;
-  return out;
-}
+/** Os pesos de um mês são válidos quando são percentagens inteiras, nenhum é negativo e somam 100 %. */
+export const pesosValidos = (p: Record<string, number>) => Object.values(p).every((v) => Number.isInteger(v) && v >= 0) && somaPesos(p) === 100;
 
 /** Pesos por mês no formato do cálculo dos resumos (AAAA-MM → comunidade → %). */
 export const pesosParaCalculo = (ps: PesosMes[]) => Object.fromEntries(ps.map((x) => [x.id, x.pesos]));

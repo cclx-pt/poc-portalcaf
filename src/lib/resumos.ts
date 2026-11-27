@@ -86,6 +86,23 @@ function assistencia12mPorData(assistencia: Lote[], assistenciaAnterior: Lote[],
 }
 
 export type MetodoPeso = 'media' | 'mediana';
+
+/**
+ * Arredonda os pesos a percentagens inteiras que somam exatamente 100 (método dos maiores restos).
+ * Em caso de empate nos restos, o ponto vai primeiro para o maior peso. Sem pesos (soma 0) fica tudo a 0.
+ */
+export function fecharEm100(p: Record<string, number>): Record<string, number> {
+  const ents = Object.entries(p).map(([c, v]) => [c, Math.max(0, Number(v) || 0)] as const);
+  const soma = ents.reduce((t, [, v]) => t + v, 0);
+  if (!soma) return Object.fromEntries(ents.map(([c]) => [c, 0]));
+  const escala = ents.map(([c, v]) => ({ c, v: (v / soma) * 100 }));
+  const out = Object.fromEntries(escala.map(({ c, v }) => [c, Math.floor(v + 1e-9)]));
+  let falta = 100 - Object.values(out).reduce((t, v) => t + v, 0);
+  const ordem = [...escala].sort((a, b) => (b.v - Math.floor(b.v + 1e-9)) - (a.v - Math.floor(a.v + 1e-9)) || b.v - a.v);
+  for (const { c } of ordem) { if (falta <= 0) break; out[c] += 1; falta -= 1; }
+  return out;
+}
+
 const mediana = (xs: number[]) => {
   const o = [...xs].sort((a, b) => a - b); const n = o.length;
   return n % 2 ? o[(n - 1) / 2] : (o[n / 2 - 1] + o[n / 2]) / 2;
@@ -97,12 +114,12 @@ export function pesos12m(assistencia: Lote[], assistenciaAnterior: Lote[], ano: 
   return new Map([...por].filter(([, v]) => v.length).map(([c, v]) => [c, r2(metodo === 'mediana' ? mediana(v) : v.reduce((t, x) => t + x, 0) / v.length)]));
 }
 
-/** Proposta de pesos de um mês, pelos dois métodos: valor (pessoas) e percentagem (0 a 100) de cada comunidade elegível. */
+/** Proposta de pesos de um mês, pelos dois métodos: valor (pessoas) e percentagem inteira (0 a 100, soma 100) de cada comunidade elegível. */
 export function propostaPesos(assistencia: Lote[], assistenciaAnterior: Lote[], ano: number, mes: number, elegiveis: string[], eventoCelebracao?: string | null, juntar: (comunidadeId: string) => string = (c) => c) {
   const por = (metodo: MetodoPeso) => {
     const w = pesos12m(assistencia, assistenciaAnterior, ano, mes, eventoCelebracao, juntar, metodo);
-    const soma = elegiveis.reduce((t, c) => t + (w.get(c) ?? 0), 0);
-    return Object.fromEntries(elegiveis.map((c) => [c, { valor: w.get(c) ?? 0, pct: soma ? Math.round(((w.get(c) ?? 0) / soma) * 10000) / 100 : 0 }]));
+    const pct = fecharEm100(Object.fromEntries(elegiveis.map((c) => [c, w.get(c) ?? 0])));
+    return Object.fromEntries(elegiveis.map((c) => [c, { valor: w.get(c) ?? 0, pct: pct[c] }]));
   };
   return { media: por('media'), mediana: por('mediana') };
 }

@@ -28,6 +28,9 @@ describe('Administração › Peso das comunidades (ADM-05)', () => {
   it('mostra os pesos gravados por mês e a simulação pela média e pela mediana', async () => {
     const { default: Pesos } = await import('../../src/pages/Pesos');
     const html = renderToString(<MemoryRouter><Pesos /></MemoryRouter>).replace(/<!-- -->/g, '');
+    // percentagens sempre inteiras: nada como "66,67%" nem "+0,5 p.p."
+    expect(html).not.toMatch(/\d,\d+\s*%/);
+    expect(html).not.toMatch(/\d,\d+ p\.p\./);
     for (const t of ['Peso das comunidades 2026', 'Recalcular pesos de assistência', 'Recalcular dados e distribuições', 'Média 12m', 'Mediana 12m', 'Usar a média', 'Usar a mediana', 'À mão', '40%', 'Pessoas', 'Gravado', 'Mediana']) expect(html).toContain(t);
   });
 });
