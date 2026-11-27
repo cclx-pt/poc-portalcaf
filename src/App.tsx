@@ -27,6 +27,7 @@ import Utilizadores from './pages/Utilizadores';
 import Auditoria from './pages/Auditoria';
 import Pedidos from './pages/Pedidos';
 import Pesos from './pages/Pesos';
+import Calculadora from './pages/Calculadora';
 import Pessoas from './pages/Pessoas';
 import { lazy, Suspense, type ReactElement } from 'react';
 
@@ -87,6 +88,7 @@ export default function App() {
             <Route path="orcamento" element={<Se nivel="privado"><Orcamento /></Se>} />
             <Route path="fecho" element={<Se acao="publicar"><Fecho /></Se>} />
             <Route path="exportacao" element={<Se acao="exportar"><Exportacao /></Se>} />
+            <Route path="ferramentas/calculadora" element={<Se nivel="privado"><Calculadora /></Se>} />
             <Route path="configuracao" element={<Se acao="configurar"><Configuracao /></Se>} />
             <Route path="utilizadores" element={<Se acao="utilizadores"><Utilizadores /></Se>} />
             <Route path="auditoria" element={<Se acao="auditoria"><Auditoria /></Se>} />
