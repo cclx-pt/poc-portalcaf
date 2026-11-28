@@ -14,7 +14,7 @@ import { renomearCategoriaNosDados } from '../lib/renomearCategoriaDb';
 import { opcoesCategorias, opcoesDimensoes } from '../lib/escolha';
 import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarDimensoes, listarRegrasBanco, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
 import { COMUNIDADES, CONTAS, JOTFORM_FORMS } from '../lib/seed';
-import { categoriasDoPlano, dimensoesDoPlano } from '../lib/plano';
+import { categoriasDoPlano, dimensoesDoPlano, nomeRubrica, novaCategoria, proximoCodigo, RUBRICAS_PLANO, rubricasDoTipo } from '../lib/plano';
 import { REGRAS_INICIAIS, type RegraBanco } from '../lib/classificacaoBanco';
 import { NIVEIS, NIVEL_LABEL, type Categoria, type Comunidade, type Conta, type Dimensao, type Nivel } from '../lib/types';
 import { formatarIban, ibanValido, limparIban } from '../lib/iban';
@@ -52,6 +52,8 @@ export default function Configuracao() {
   const criarDim = useCriarDimensao(dims.dados ?? [], dims.recarregar);
   const regras = useCarregar(listarRegrasBanco, []);
   const [regra, setRegra] = useState<RegraBanco | null>(null);
+  const [novaRub, setNovaRub] = useState('');
+  const [novoTexto, setNovoTexto] = useState('');
   const [sugerir, setSugerir] = useState(false);
   const [contaExt, setContaExt] = useState<Conta | null>(null);
   const [tipoDim, setTipoDim] = useState<Dimensao['tipo']>('centro');
@@ -250,7 +252,13 @@ export default function Configuracao() {
         if (edit.novo && (dims.dados ?? []).some((d) => d.id === v.id)) throw new Error('Já existe.');
         await gravar('dimensoes', v);
       } else {
-        const v = { ...edit.v, id: edit.novo ? (edit.v.codigo ? `plano-${edit.v.codigo.replace('.', '-').toLowerCase()}` : `${edit.v.tipo}-${slug(edit.v.nome)}`) : edit.v.id };
+        // Nova categoria: tipo → rubrica → código seguinte (não se escolhe) → texto do nome.
+        if (edit.novo && !novaRub) throw new Error('Escolha a rubrica.');
+        if (edit.novo && !novoTexto.trim()) throw new Error('Escreva o nome.');
+        const v: Categoria = edit.novo
+          ? { ...novaCategoria(novaRub, novoTexto, cats.dados ?? []), nivel: edit.v.nivel, ambito: edit.v.ambito, sinonimos: edit.v.sinonimos, snc: edit.v.snc }
+          : { ...edit.v };
+        if (edit.novo && (cats.dados ?? []).some((c) => c.nome.toLowerCase() === v.nome.toLowerCase())) throw new Error('Já existe uma categoria com este nome.');
         v.sinonimos = (v.sinonimos ?? []).map((x) => x.trim()).filter(Boolean);
         if (!v.nome.trim()) throw new Error('Indique o nome.');
         if (edit.novo && (cats.dados ?? []).some((c) => c.id === v.id)) throw new Error('Já existe esta categoria.');
@@ -387,7 +395,7 @@ export default function Configuracao() {
             <select value={filtroCat} onChange={(e) => setFiltroCat(e.target.value as typeof filtroCat)} aria-label="Filtrar categorias">
               <option value="todas">Todas</option><option value="saida">Despesas</option><option value="entrada">Receitas</option><option value="financeiro">Financeiro</option>
             </select>
-            <button onClick={() => setEdit({ tipo: 'categoria', novo: true, v: { id: '', codigo: '', nome: '', tipo: 'saida', atividade: '', nivel: 'privado', snc: '', origem: 'portal', ativo: true, ambito: 'local', sinonimos: [] } })}>Nova categoria</button>
+            <button onClick={() => { setNovaRub(rubricasDoTipo('saida')[0].codigo); setNovoTexto(''); setEdit({ tipo: 'categoria', novo: true, v: { id: '', codigo: '', nome: '', tipo: 'saida', atividade: '', nivel: 'privado', snc: '', origem: 'portal', ativo: true, ambito: 'local', sinonimos: [] } }); }}>Nova categoria</button>
             <button className="sec" onClick={() => void semCorrespondencia()} disabled={ocupado} title="Mostra as categorias do Jotform que não correspondem a nenhuma categoria nem sinónimo">Ver categorias do Jotform sem correspondência</button>
           </div>
         </div>
@@ -612,15 +620,35 @@ export default function Configuracao() {
                 {edit.v.iban && <span className="small">{ibanValido(edit.v.iban) ? '✓ IBAN válido' : 'IBAN inválido'}</span>}</label>
               <label className="campo" style={{ gridColumn: '1 / -1' }}>Nota<input value={edit.v.etiqueta ?? ''} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, etiqueta: e.target.value } })} /></label>
             </>}
-            {edit.tipo === 'categoria' && <>
-              <label className="campo">Código<input value={edit.v.codigo ?? ''} disabled={!edit.novo} placeholder="02.03" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, codigo: e.target.value } })} /></label>
-              <label className="campo">Nome (com o código)<input value={edit.v.nome} placeholder="02.03 Comunicações" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, nome: e.target.value } })} /></label>
-              <label className="campo">Tipo
-                <select value={edit.v.tipo} disabled={!edit.novo} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, tipo: e.target.value as Categoria['tipo'] } })}>
-                  <option value="saida">Despesa</option><option value="entrada">Receita</option><option value="financeiro">Financeiro</option>
+            {edit.tipo === 'categoria' && edit.novo && <>
+              <div className="campo" style={{ gridColumn: '1 / -1' }}>Tipo *
+                <div className="abas" role="radiogroup" aria-label="Tipo" style={{ marginTop: 4 }}>
+                  {(['saida', 'entrada', 'financeiro'] as const).map((tp) => (
+                    <button key={tp} type="button" role="radio" aria-checked={edit.v.tipo === tp} className={edit.v.tipo === tp ? 'ativa' : ''}
+                      onClick={() => { setEdit({ ...edit, v: { ...edit.v, tipo: tp } }); setNovaRub(rubricasDoTipo(tp)[0]?.codigo ?? ''); }}>{TIPO_CAT[tp]}</button>
+                  ))}
+                </div>
+              </div>
+              <label className="campo">Rubrica *
+                <select value={novaRub} onChange={(e) => setNovaRub(e.target.value)}>
+                  {rubricasDoTipo(edit.v.tipo).map((r) => <option key={r.codigo} value={r.codigo}>{nomeRubrica(r)}</option>)}
                 </select></label>
+              <label className="campo">Código (próximo livre)<input value={novaRub ? proximoCodigo(novaRub, cats.dados ?? []) : ''} readOnly aria-readonly="true" /></label>
+              <label className="campo" style={{ gridColumn: '1 / -1' }}>Nome *
+                <span className="linha" style={{ gap: 0, alignItems: 'stretch' }}>
+                  <span className="etiqueta" style={{ display: 'flex', alignItems: 'center', borderTopRightRadius: 0, borderBottomRightRadius: 0 }}>{novaRub ? proximoCodigo(novaRub, cats.dados ?? []) : ''}</span>
+                  <input value={novoTexto} placeholder="Equipamento de som" style={{ flex: 1 }} onChange={(e) => setNovoTexto(e.target.value)} aria-label="Nome (sem o código)" />
+                </span></label>
+              <p className="small muted" style={{ gridColumn: '1 / -1', margin: 0 }}>{`Vai gravar: ${novaRub ? proximoCodigo(novaRub, cats.dados ?? []) : ''} ${novoTexto.replace(/\s+/g, ' ').trim() || '…'} · ${TIPO_CAT[edit.v.tipo]} · ${novaRub ? nomeRubrica(RUBRICAS_PLANO.find((r) => r.codigo === novaRub)!) : ''}`}</p>
+            </>}
+            {edit.tipo === 'categoria' && <>
+              {!edit.novo && <>
+              <label className="campo">Código<input value={edit.v.codigo ?? ''} disabled /></label>
+              <label className="campo">Nome (com o código)<input value={edit.v.nome} placeholder="02.03 Comunicações" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, nome: e.target.value } })} /></label>
+              <label className="campo">Tipo<input value={TIPO_CAT[edit.v.tipo]} disabled /></label>
               <label className="campo">Rubrica<input value={edit.v.rubrica ?? ''} list="rubricas-plano" placeholder="02 Instalações" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, rubrica: e.target.value } })} />
                 <datalist id="rubricas-plano">{rubricas.map((r) => <option key={r} value={r} />)}</datalist></label>
+              </>}
               <label className="campo">Nível de privacidade
                 <select value={edit.v.nivel} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, nivel: e.target.value as Nivel } })}>{NIVEIS.map((n) => <option key={n} value={n}>{NIVEL_LABEL[n]}</option>)}</select></label>
               <label className="campo">Âmbito
