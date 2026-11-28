@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { Rodape } from '../components/ui';
 import { ECRA_LOGIN } from '../lib/ecras';
 import { verificarAcesso } from '../lib/acessos';
+import { destinoDoLink, urlComDestino } from '../lib/linkLogin';
 
 const BASE = import.meta.env.BASE_URL;
 const CHAVE_EMAIL = 'caf-portal:email-login';
@@ -31,7 +32,8 @@ export const urlRegresso = () => `${window.location.origin}${BASE}`;
 export async function enviarLinkAcesso(email: string): Promise<'enviado' | 'nao-registado'> {
   const endereco = email.trim().toLowerCase();
   if (await verificarAcesso(endereco) === 'nao-registado') return 'nao-registado';
-  await sendSignInLinkToEmail(auth, endereco, { url: urlRegresso(), handleCodeInApp: true });
+  // O link volta à página de onde foi pedido (ex.: #/presencas), mesmo que o email se abra noutro browser.
+  await sendSignInLinkToEmail(auth, endereco, { url: urlComDestino(urlRegresso(), window.location.hash), handleCodeInApp: true });
   window.localStorage.setItem(CHAVE_EMAIL, endereco);
   window.localStorage.setItem(CHAVE_DESTINO, window.location.hash);
   return 'enviado';
@@ -51,11 +53,14 @@ export default function Login() {
   }
 
   async function concluirLink(endereco: string) {
+    const destino = destinoDoLink(window.location.href, window.localStorage.getItem(CHAVE_DESTINO));
     await signInWithEmailLink(auth, endereco, window.location.href);
     window.localStorage.removeItem(CHAVE_EMAIL);
-    const destino = window.localStorage.getItem(CHAVE_DESTINO) ?? '';
     window.localStorage.removeItem(CHAVE_DESTINO);
-    window.history.replaceState(null, '', `${urlRegresso()}${destino.startsWith('#/') ? destino : ''}`);
+    // Tira o código do link do endereço e vai para a página pedida. O HashRouter só muda de página com o evento
+    // popstate (o replaceState sozinho deixava-o na raiz, por isso o link abria sempre o portal).
+    window.history.replaceState(null, '', `${urlRegresso()}${destino}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
   }
 
   // Ao abrir o link recebido por email, conclui o login.
