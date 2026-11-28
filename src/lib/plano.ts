@@ -109,3 +109,25 @@ export function dimensoesDoPlano(): Dimensao[] {
     ...CONTAS_ANALITICAS.map(([categoria, nome]): Dimensao => ({ id: `conta-${slug(nome)}`, tipo: 'conta', nome, categoria, ativo: true })),
   ];
 }
+
+// ---------- Nova categoria (Configuração ADM-01.1): tipo → rubrica → código seguinte → nome ----------
+
+/** Rubricas do plano de um tipo (Despesa: 01 a 09; Receita: R1 a R3; Financeiro: F1 a F3). */
+export const rubricasDoTipo = (tipo: Categoria['tipo']) => RUBRICAS_PLANO.filter((r) => TIPO[r.grupo] === tipo);
+
+/** Código seguinte ao maior já usado na rubrica, contando as categorias inativas (ex.: 02.09; sem nenhuma, 02.01). */
+export function proximoCodigo(rubrica: string, categorias: Pick<Categoria, 'codigo'>[]): string {
+  const usados = categorias.map((c) => c.codigo ?? '').filter((c) => c.startsWith(`${rubrica}.`)).map((c) => Number(c.slice(rubrica.length + 1))).filter(Number.isFinite);
+  return `${rubrica}.${String(Math.max(0, ...usados) + 1).padStart(2, '0')}`;
+}
+
+/** Nova categoria a partir da rubrica e do texto do nome: o código seguinte, o tipo e a rubrica vêm do plano. */
+export function novaCategoria(rubrica: string, texto: string, categorias: Pick<Categoria, 'codigo'>[]): Categoria {
+  const r = RUBRICAS_PLANO.find((x) => x.codigo === rubrica);
+  if (!r) throw new Error('Escolha a rubrica.');
+  const codigo = proximoCodigo(rubrica, categorias);
+  return {
+    id: `plano-${codigo.replace('.', '-').toLowerCase()}`, codigo, nome: `${codigo} ${texto.replace(/\s+/g, ' ').trim()}`, tipo: TIPO[r.grupo], atividade: r.nome,
+    nivel: 'privado', snc: '', origem: 'portal', ativo: true, rubrica: nomeRubrica(r), ambito: 'local', sinonimos: [],
+  };
+}
