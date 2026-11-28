@@ -82,3 +82,10 @@ describe('várias opções numa regra, separadas por ";"', () => {
     expect(opcoesRegra(' Retiro;Retiros; ;B1-Retiro2026 ')).toEqual(['Retiro', 'Retiros', 'B1-Retiro2026']);
   });
 });
+
+describe('categoria com nome mudado', () => {
+  it('um valor com o nome antigo de uma categoria CAF passa ao nome atual', () => {
+    const cs = cats.map((c) => (c.nome === 'R1.02 Ofertas gerais' ? { ...c, nome: 'R1.02 Ofertas', nomesAnteriores: ['R1.02 Ofertas gerais'] } : c));
+    expect(tradutorJotform({ linhas: [] }, cs)('contribuir', 'R1.02 Ofertas gerais')).toMatchObject({ categoria: 'R1.02 Ofertas', fonte: 'caf' });
+  });
+});

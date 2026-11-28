@@ -33,7 +33,8 @@ export interface Traducao { categoria: string | null; fonte: 'regra' | 'caf' | n
  */
 export function tradutorJotform(t: TraducaoJotform | null | undefined, categorias: Categoria[]) {
   const porCodigo = new Map(categorias.filter((c) => c.codigo).map((c) => [c.codigo!, c]));
-  const nomes = new Map(categorias.filter((c) => c.codigo).map((c) => [chave(c.nome), c]));
+  // Também os nomes antigos de uma categoria (mudou de nome em Configuração) dão a categoria atual.
+  const nomes = new Map(categorias.filter((c) => c.codigo).flatMap((c) => [c.nome, ...(c.nomesAnteriores ?? [])].map((n) => [chave(n), c] as const)));
   const regras = (t?.linhas ?? []).filter((l) => porCodigo.has(l.codigo) && opcoesRegra(l.valor).length);
   // Cada opção de uma regra conta como uma regra própria, ligada à regra original.
   const opcoes = regras.flatMap((l) => opcoesRegra(l.valor).map((o) => ({ l, o: chave(o) })));

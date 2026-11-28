@@ -71,6 +71,8 @@ export interface Categoria {
   codigo?: string;
   /** Outros nomes que correspondem a esta categoria (ex.: categorias do Jotform). */
   sinonimos?: string[];
+  /** Nomes que a categoria já teve: os registos antigos com esses nomes contam nesta categoria. */
+  nomesAnteriores?: string[];
   atividade: string;
   nivel: Nivel;
   snc?: string;

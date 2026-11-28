@@ -9,6 +9,8 @@ import { CampoData, Estado, Modal, mensagemErro, useCarregar, useMarcarAba } fro
 import { SugestaoRegras } from '../components/SugestaoRegras';
 import { Escolha } from '../components/Escolha';
 import { useCriarDimensao } from '../components/useCriarDimensao';
+import { validarNovoNome } from '../lib/renomearCategoria';
+import { renomearCategoriaNosDados } from '../lib/renomearCategoriaDb';
 import { opcoesCategorias, opcoesDimensoes } from '../lib/escolha';
 import { apagar, auditar, gravar, gravarSegredoJotform, lerSegredoJotform, listarCategorias, listarComunidades, listarContas, listarDimensoes, listarRegrasBanco, listarResumos, listarLotes, lerConfigAssistencia, gravarConfigAssistencia, listarExcecoes, gravarExcecao, apagarExcecao } from '../lib/db';
 import { COMUNIDADES, CONTAS, JOTFORM_FORMS } from '../lib/seed';
@@ -255,6 +257,17 @@ export default function Configuracao() {
         const antes = (cats.dados ?? []).find((c) => c.id === v.id);
         v.rubrica = v.rubrica || rubricaInicial(v.nome, v.tipo);
         v.ambito = v.ambito ?? 'local';
+        // Nome mudado: troca-o nos dados (meses abertos, custos fixos, regras, orçamentos); o antigo fica em nomesAnteriores.
+        if (antes && v.nome.replace(/\s+/g, ' ').trim() !== antes.nome) {
+          v.nome = v.nome.replace(/\s+/g, ' ').trim();
+          const erroNome = validarNovoNome(antes, v.nome, cats.dados ?? []);
+          if (erroNome) throw new Error(erroNome);
+          if (!confirm(`Mudar o nome de "${antes.nome}" para "${v.nome}"?\n\nO nome novo passa para os movimentos dos meses abertos, custos fixos, regras dos extratos e orçamentos. Os meses fechados não mudam, mas passam a contar no nome novo. Depois os resumos são recalculados.`)) return;
+          const r = await renomearCategoriaNosDados(antes.nome, v.nome);
+          v.nomesAnteriores = [...new Set([...(antes.nomesAnteriores ?? []), antes.nome])].filter((n) => n !== v.nome);
+          await auditar(acesso!.email, 'mudar nome de categoria', `${antes.nome} → ${v.nome}: ${r.lotesBanco} extratos (meses abertos), ${r.lotesFechados} de meses fechados mantidos, ${r.custos} custos fixos, ${r.regras} regras, ${r.orcamentos} orçamentos`);
+          recalcularDepois = true;
+        }
         await gravar('categorias', v);
         if (!antes || antes.rubrica !== v.rubrica || (antes.ambito ?? 'local') !== v.ambito || antes.nivel !== v.nivel) recalcularDepois = true;
       }
@@ -601,7 +614,7 @@ export default function Configuracao() {
             </>}
             {edit.tipo === 'categoria' && <>
               <label className="campo">Código<input value={edit.v.codigo ?? ''} disabled={!edit.novo} placeholder="02.03" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, codigo: e.target.value } })} /></label>
-              <label className="campo">Nome (com o código)<input value={edit.v.nome} disabled={!edit.novo} placeholder="02.03 Comunicações" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, nome: e.target.value } })} /></label>
+              <label className="campo">Nome (com o código)<input value={edit.v.nome} placeholder="02.03 Comunicações" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, nome: e.target.value } })} /></label>
               <label className="campo">Tipo
                 <select value={edit.v.tipo} disabled={!edit.novo} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, tipo: e.target.value as Categoria['tipo'] } })}>
                   <option value="saida">Despesa</option><option value="entrada">Receita</option><option value="financeiro">Financeiro</option>
@@ -617,7 +630,7 @@ export default function Configuracao() {
                 </select></label>
               <label className="campo" style={{ gridColumn: '1 / -1' }}>Sinónimos (separados por ponto e vírgula)<input value={(edit.v.sinonimos ?? []).join('; ')} placeholder="Dízimos; Dízimo" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, sinonimos: e.target.value.split(';') } })} /></label>
               <label className="campo">Conta SNC-ESNL<input value={edit.v.snc ?? ''} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, snc: e.target.value } })} /></label>
-              {!edit.novo && <p className="muted" style={{ gridColumn: '1 / -1' }}>O código, o nome e o tipo não mudam depois de criados, porque os movimentos classificados usam o nome.</p>}
+              {!edit.novo && <p className="muted" style={{ gridColumn: '1 / -1' }}>{`O código e o tipo não mudam depois de criados. O nome pode mudar (sempre a começar pelo código): passa para os movimentos dos meses abertos, custos fixos, regras e orçamentos; os meses fechados ficam como estão mas contam no nome novo.${edit.v.nomesAnteriores?.length ? ` Nomes anteriores: ${edit.v.nomesAnteriores.join('; ')}.` : ''}`}</p>}
             </>}
             {edit.tipo === 'dimensao' && <>
               {edit.v.tipo === 'centro' && <label className="campo">Código<input value={edit.v.codigo ?? ''} disabled={!edit.novo} placeholder="CC16" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, codigo: e.target.value } })} /></label>}

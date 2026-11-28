@@ -392,3 +392,18 @@ describe('Peso das comunidades (ADM-05): média, mediana e pesos gravados', () =
     expect(mes(rs, 'almada', 3).adultosMedia12m).toBe(200); // a média continua a ser mostrada
   });
 });
+
+describe('categoria com nome mudado', () => {
+  it('movimentos e custos fixos com o nome antigo contam na categoria com o nome novo', async () => {
+    const { categoriasDoPlano } = await import('../../src/lib/plano');
+    const cats = categoriasDoPlano().map((c) => (c.nome === '02.03 Comunicações' ? { ...c, nome: '02.03 Telecomunicações', nomesAnteriores: ['02.03 Comunicações'] } : c));
+    const banco = [{ id: 'b', contaId: 'cgd', ano: 2026, mes: 3, periodo: '2026-03', atualizadoEm: '', atualizadoPor: '', registos: [
+      { id: 'net', data: '2026-03-10', descricao: 'MEO', valor: -45, categoria: '02.03 Comunicações', comunidadeId: 'almada', contabilizar: true },
+    ] }];
+    const custosFixos: CustoFixo[] = [{ id: 'cf', comunidadeId: 'almada', rubrica: 'Internet', valorMensal: 10, categoria: '02.03 Comunicações', ano: 2026, inicio: '2026-03', fim: '2026-03', nivel: 'privado' }];
+    const m = mes(calcularResumos(base({ categorias: cats, banco, custosFixos })), 'almada', 3);
+    expect(m.despesasPorCategoria['02.03 Telecomunicações']).toBe(45);
+    expect(m.despesasPorCategoria['02.03 Comunicações']).toBeUndefined();
+    expect(m.rubricas.saida['02 Instalações'].local).toBe(55);
+  });
+});
