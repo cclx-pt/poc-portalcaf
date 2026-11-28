@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { mensagemErro, useFiltros } from '../components/ui';
 import { auditar, listarBanco, listarCategorias, listarComunidades, listarContas, listarResumos } from '../lib/db';
+import { mapaNomesCategorias } from '../lib/renomearCategoria';
 import { listarLotesCaf } from '../lib/lotesCaf';
 import { MESES, periodo, r2 } from '../lib/format';
 
@@ -24,6 +25,9 @@ export default function Exportacao() {
       ]);
       const nomeC = new Map(coms.map((c) => [c.id, c.nome]));
       const nomeConta = new Map(contas.map((c) => [c.id, c.nome + (c.tipo === 'investimentos' ? ' (Conta investimentos)' : '')]));
+      // Nomes antigos de categorias (mudaram de nome em Configuração) saem com o nome atual.
+      const nomes = mapaNomesCategorias(cats);
+      const atual = (n?: string) => (n ? nomes.get(n) ?? n : n);
       const snc = new Map(cats.map((c) => [`${c.tipo}|${c.nome}`, c.snc ?? '']));
       const ExcelJS = (await import('exceljs')).default;
       const wb = new ExcelJS.Workbook();
@@ -44,7 +48,7 @@ export default function Exportacao() {
       }
       for (const l of sel(banco)) for (const m of l.registos) ws.addRow({
         data: m.data, origem: 'Extrato bancário', conta: nomeConta.get(l.contaId) ?? l.contaId, id: m.id, descricao: m.descricao,
-        comunidade: m.comunidadeId ? nomeC.get(m.comunidadeId) ?? m.comunidadeId : '', categoria: m.categoria ?? '', snc: m.categoria ? snc.get(`${m.valor > 0 ? 'entrada' : 'saida'}|${m.categoria}`) ?? '' : '',
+        comunidade: m.comunidadeId ? nomeC.get(m.comunidadeId) ?? m.comunidadeId : '', categoria: atual(m.categoria) ?? '', snc: m.categoria ? snc.get(`${m.valor > 0 ? 'entrada' : 'saida'}|${atual(m.categoria)}`) ?? '' : '',
         debito: m.valor < 0 ? -m.valor : null, credito: m.valor > 0 ? m.valor : null, ref: m.conciliadoCom ?? '',
         estado: m.conciliadoCom ? 'Conciliado com Jotform' : m.contabilizar ? 'Contabilizado' : 'Por classificar',
       });

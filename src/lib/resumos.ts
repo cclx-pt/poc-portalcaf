@@ -2,6 +2,7 @@ import { tradutorJotform, traduzirLotes, type OrigemJotform, type TraducaoJotfor
 import { MESES, periodo, r2 } from './format';
 import { OUTROS_FUNCIONAMENTO, classificador } from './rubricas';
 import { pedacosDe } from './classificacaoBanco';
+import { mapaNomesCategorias } from './renomearCategoria';
 import { contaParaMedia } from './domingos';
 import type { BancoLote, Categoria, Comunidade, CustoFixo, Lote, ParteRubrica, Publico, PublicoMes, PublicoSite, Resumo, ResumoMes } from './types';
 
@@ -244,13 +245,18 @@ export function calcularResumos(d0: DadosCalculo): Resumo[] {
   // O portal só trabalha com categorias CAF: as do Jotform são traduzidas antes de qualquer cálculo.
   const tr = d0.traducaoJotform !== undefined ? tradutorJotform(d0.traducaoJotform, d0.categorias ?? []) : null;
   const caf = (ls: Lote[], o: OrigemJotform) => (tr ? traduzirLotes(ls, o, tr) : ls);
+  const nomes = mapaNomesCategorias(d0.categorias ?? []);
+  const nomeAtual = (n: string) => nomes.get(n) ?? n;
   const d: DadosCalculo = {
     ...d0,
     contribuir: lotesComFusao(caf(d0.contribuir, 'contribuir'), destino), depositos: lotesComFusao(caf(d0.depositos, 'depositos'), destino),
     despesas: lotesComFusao(caf(d0.despesas, 'despesas'), destino), assistencia: lotesComFusao(d0.assistencia, destino),
+    // Categorias com o nome mudado: os registos com um nome antigo (ex.: meses fechados) contam no nome atual.
+    custosFixos: d0.custosFixos.map((c) => (c.categoria && nomeAtual(c.categoria) !== c.categoria ? { ...c, categoria: nomeAtual(c.categoria) } : c)),
     banco: d0.banco.map((b) => ({ ...b, registos: b.registos.map((r) => ({
       ...r, ...(r.comunidadeId ? { comunidadeId: destino(r.comunidadeId, r.data) } : {}),
-      ...(r.partes?.length ? { partes: r.partes.map((p) => ({ ...p, comunidadeId: destino(p.comunidadeId, r.data) })) } : {}),
+      ...(r.categoria ? { categoria: nomeAtual(r.categoria) } : {}),
+      ...(r.partes?.length ? { partes: r.partes.map((p) => ({ ...p, comunidadeId: destino(p.comunidadeId, r.data), ...(p.categoria ? { categoria: nomeAtual(p.categoria) } : {}) })) } : {}),
     })) })),
   };
   const regra = d.regraFechados !== false;
